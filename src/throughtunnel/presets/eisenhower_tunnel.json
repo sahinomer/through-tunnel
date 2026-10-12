@@ -364,6 +364,18 @@
    0.0
   ]
  },
+ "gnss": {
+  "enabled": true,
+  "rate_hz": 1.0,
+  "position_sigma_m": 2.5,
+  "position_tau_s": 30.0,
+  "white_sigma_m": 0.5,
+  "speed_sigma_mps": 0.2,
+  "loss_window_m": 30.0,
+  "reacquisition_delay_s": 3.0,
+  "reacquisition_jitter_s": 2.0,
+  "seed": null
+ },
  "seed": 2,
  "sample_rate_hz": 100.0
 }

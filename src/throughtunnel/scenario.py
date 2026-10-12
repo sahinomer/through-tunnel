@@ -27,11 +27,12 @@ import numpy as np
 from numpy.typing import ArrayLike
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from throughtunnel.observations import NavigationEvent, RouteMap
+from throughtunnel.observations import GnssStream, NavigationEvent, Observations, RouteMap
 from throughtunnel.randomness import rng_stream
 from throughtunnel.road import RoadConfig, RoadPath
 from throughtunnel.routing.base import RawRoute
 from throughtunnel.sensors.errors import ImuErrorConfig, ImuErrorRealization, apply_imu_errors
+from throughtunnel.sensors.gnss import GnssConfig, GnssEvents, gnss_timestamps, simulate_gnss
 from throughtunnel.sensors.imu import ImuConfig, ImuStream, ideal_imu, imu_timestamps
 from throughtunnel.vehicle.config import DriverConfig
 from throughtunnel.vehicle.longitudinal import LongitudinalTrajectory, simulate_longitudinal
@@ -85,6 +86,7 @@ class ScenarioConfig(BaseModel):
     driver: DriverConfig = Field(default_factory=DriverConfig)
     imu: ImuConfig = Field(default_factory=ImuConfig)
     tunnel: TunnelConfig | None = Field(None, description="None = no tunnel (GPS on the whole route)")
+    gnss: GnssConfig = Field(default_factory=GnssConfig)
     seed: int = Field(0, ge=0)
     sample_rate_hz: float = Field(100.0, ge=10.0, le=1000.0, description="Simulation and output rate")
 
@@ -141,6 +143,13 @@ class SimulationResult:
     imu_errors: ImuErrorRealization
     route_map: RouteMap
     sections: SectionTruth | None
+    gnss: GnssStream
+    gnss_ideal: GnssStream
+    gnss_events: GnssEvents
+
+    def observations(self) -> Observations:
+        """The only data an estimator may use (D15): measured IMU, measured GPS, the route map."""
+        return Observations(imu=self.imu, gnss=self.gnss, route=self.route_map)
 
 
 def build_path(config: ScenarioConfig) -> RoadPath:
@@ -155,6 +164,8 @@ def run_scenario(config: ScenarioConfig, path: RoadPath | None = None) -> Simula
     truth = build_ground_truth(motion, path)
     imu, ideal, errors = simulate_imu(motion, path, config.imu, config.seed)
     route_map = build_route_map(config)
+    sections = section_truth(route_map, path, motion) if config.tunnel is not None else None
+    gnss, gnss_ideal, gnss_events = simulate_gps(motion, path, sections, config.gnss, config.imu, config.seed)
     return SimulationResult(
         config=config,
         path=path,
@@ -165,8 +176,42 @@ def run_scenario(config: ScenarioConfig, path: RoadPath | None = None) -> Simula
         imu_ideal=ideal,
         imu_errors=errors,
         route_map=route_map,
-        sections=section_truth(route_map, path, motion) if config.tunnel is not None else None,
+        sections=sections,
+        gnss=gnss,
+        gnss_ideal=gnss_ideal,
+        gnss_events=gnss_events,
     )
+
+
+def gnss_events(
+    sections: SectionTruth | None, motion: LongitudinalTrajectory, config: GnssConfig, seed: int
+) -> GnssEvents:
+    """Random (seeded) GPS loss point before B and reacquisition time after C."""
+    if sections is None:
+        return GnssEvents(loss_s=math.inf, loss_t=math.inf, reacquire_t=math.inf)
+    s = config.seed if config.seed is not None else seed
+    u_loss, u_reacq = rng_stream(s, "gnss.availability").uniform(size=2)
+    loss_s = max(sections.entrance_s - u_loss * config.loss_window_m, float(motion.s[0]))
+    loss_t = float(np.interp(loss_s, motion.s, motion.t))
+    reacquire = sections.exit_t + config.reacquisition_delay_s + u_reacq * config.reacquisition_jitter_s
+    return GnssEvents(
+        loss_s=loss_s, loss_t=loss_t, reacquire_t=reacquire if math.isfinite(reacquire) else math.inf
+    )
+
+
+def simulate_gps(
+    motion: LongitudinalTrajectory,
+    path: RoadPath,
+    sections: SectionTruth | None,
+    config: GnssConfig,
+    imu: ImuConfig,
+    seed: int,
+) -> tuple[GnssStream, GnssStream, GnssEvents]:
+    """Phone GPS fixes (measured, ideal) and the hidden availability events."""
+    events = gnss_events(sections, motion, config, seed)
+    kinematics = build_ground_truth(motion.at(gnss_timestamps(float(motion.t[-1]), config.rate_hz)), path)
+    measured, ideal = simulate_gnss(kinematics, imu.mount.lever_arm_m, events, config, seed)
+    return measured, ideal, events
 
 
 def build_route_map(config: ScenarioConfig) -> RouteMap:
@@ -265,11 +310,34 @@ def simulate_imu(
     return measured, ideal, errors
 
 
-def with_imu_config(result: SimulationResult, imu: ImuConfig) -> SimulationResult:
-    """Re-run only the sensor model (mounting, rate, errors); the vehicle motion is unchanged."""
-    config = result.config.model_copy(update={"imu": imu})
+def with_sensor_config(
+    result: SimulationResult, imu: ImuConfig | None = None, gnss: GnssConfig | None = None
+) -> SimulationResult:
+    """Re-run only the phone sensor models; the vehicle motion is unchanged.
+
+    GPS is re-simulated too when the IMU config changes, because the lever arm (phone position) is
+    also the GPS antenna position.
+    """
+    imu = imu or result.config.imu
+    gnss = gnss or result.config.gnss
+    config = result.config.model_copy(update={"imu": imu, "gnss": gnss})
     measured, ideal, errors = simulate_imu(result.motion, result.path, imu, config.seed)
-    return replace(result, config=config, imu=measured, imu_ideal=ideal, imu_errors=errors)
+    g, g_ideal, g_events = simulate_gps(result.motion, result.path, result.sections, gnss, imu, config.seed)
+    return replace(
+        result,
+        config=config,
+        imu=measured,
+        imu_ideal=ideal,
+        imu_errors=errors,
+        gnss=g,
+        gnss_ideal=g_ideal,
+        gnss_events=g_events,
+    )
+
+
+def with_imu_config(result: SimulationResult, imu: ImuConfig) -> SimulationResult:
+    """Re-run only the sensor models with a new IMU config (mounting, rate, errors)."""
+    return with_sensor_config(result, imu=imu)
 
 
 # ---------------------------------------------------------------------- persistence
