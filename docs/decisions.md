@@ -45,7 +45,28 @@ implementation and accepted at a later review.
 | D23 | Evaluation: along-track, cross-track and total error; error over time and distance; error at the tunnel exit; announcement timing error; GPS recovery behaviour/time; repeated seeds; method comparisons; uncertainty calibration where available. Reproducible, truth isolated from inputs, measurable rather than "visually convincing". | active | review 4 |
 | D24 | Backlog experiments (not initial): road grade, stop-and-go traffic, map uncertainty, vehicle-speed availability. | active | review 4 |
 
-## Proposed (awaiting review)
+## Proposals PD1–PD8: adopted (review 5, by delegation)
+
+At review 5 the user delegated the open choices ("I trust your engineering judgment"). PD1–PD8 below
+are therefore **active**, implemented as described, except where a note says otherwise:
+* PD5: the "declared" mount is used only by `dr_raw` (labelled as an assumption); all other
+  estimators estimate it.
+* PD6: estimators have no access to the error configuration. Tuning-mismatch experiments are still
+  open (R7).
+
+## Implementation decisions of the positioning phase (impl, open to review)
+
+| ID | Decision | Rationale |
+|---|---|---|
+| D25 | GPS defaults: Gauss-Markov 2.5 m / 30 s + 0.5 m white per axis, speed noise 0.2 m/s, bearing noise = speed noise / speed, 1 Hz; loss starts at U(0, 30 m) before B; fixes return 3 s + U(0, 2 s) after C | Typical phone GPS in open sky; PD4 randomisation |
+| D26 | Navigation exit default: middle of B–C, announced 300 m before and at the exit | Two typical navigation prompts |
+| D27 | Estimator output 20 Hz; recovery = error < 10 m for ≥ 5 s after C | Open decisions 4 and 6 of the review |
+| D28 | A–D selection by four map clicks via OSRM multi-waypoint routing. B/C = snapped waypoints located on the route; routes that reverse direction are rejected | D11 ("simple selection UI"); U-turns are not drivable in the vehicle model |
+| D29 | Presets built by trimming longer OSRM routes through the real tunnels (portals = B, C), not by routing between clicked end points | Avoids snapping to the opposite carriageway |
+| D30 | Estimator progression for comparisons: raw → calibrated → GPS-blended → route-constrained, plus a naive reference | Each step adds one technique, so its effect is measurable (D18, D22) |
+| D31 | Main results vary the drive *and* the sensor errors; same-drive runs isolate sensor effects | Single-drive comparisons were misleading (results.md §3) |
+
+## Proposed (historical text, adopted above)
 
 | ID | Proposal | Why |
 |---|---|---|

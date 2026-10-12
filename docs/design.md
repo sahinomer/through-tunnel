@@ -33,8 +33,8 @@ RouteProvider ──► RawRoute ──► RoadPath ──► SpeedProfile ─�
   true phone mounting (a test guards this). A recorded-phone loader will produce the same type, so
   positioning code written against `ImuStream` works on both. Positioning code will never import
   `GroundTruth`, and a test will enforce that import boundary once that package exists.
-  **Known gap:** `ImuStream` is currently defined in `sensors/imu.py`, which imports `GroundTruth`, so
-  that test cannot pass until the observation types move to a neutral module (roadmap P1, PD1).
+  *Resolved (P1):* the observation types live in the neutral module `throughtunnel/observations.py`.
+  A subprocess test checks that importing positioning code loads no simulator module.
 
 ## 2. Technology decisions
 
@@ -273,6 +273,38 @@ bit-identical. Each IMU axis gets its own plot row, because gravity moves betwee
 Each row has a minimum y-span (1 m/s², 0.1 rad/s) so physically negligible variations are not blown up
 by autoscaling, e.g. the ~1e-5 m/s² change of normal gravity along a 3 km route.
 
+### 6.3 Phone GPS (`sensors/gnss.py`)
+
+Android-`Location`-style fixes (D16), not raw GNSS. Defaults are in decision D25.
+* **Timing and position:** 1 Hz fixes of the **phone** position (reference point + lever arm).
+* **Errors:**
+  * position: per-axis first-order Gauss-Markov (2.5 m, 30 s) + 0.5 m white;
+  * speed: 0.2 m/s white noise; bearing noise = speed noise / speed;
+  * consistent accuracy fields (68 % radius).
+* **Availability:**
+  * the loss starts at a seeded random point up to 30 m before B, so the loss time does not reveal
+    the exact entrance (PD4);
+  * no fixes in B–C;
+  * fixes return 3 s + U(0, 2 s) after the true crossing of C.
+* **Not modelled:** degradation ramp before the entrance, outliers, poor first fixes, latency (R4).
+* **Validated:**
+  * ideal fixes equal the phone position, and the course over ground is checked by differentiating
+    the phone position (in turns it differs from the vehicle heading by the lever-arm term);
+  * error σ, time correlation and 68 % coverage;
+  * availability around B–C;
+  * independence from IMU errors.
+
+### 6.4 Route structure A–D (`scenario.py`)
+
+* **Definition:** a scenario has a route A→D and a `TunnelConfig`: B and C and the navigation exit as
+  distances along the *map* route (the original OSRM polyline), plus announcement lead distances.
+* **What the estimator gets:** `route_map` contains this map knowledge.
+* **Hidden truth:** `SectionTruth` projects the map points onto the smoothed true path (same ENU frame)
+  and gives the true crossing times of B, C and every announcement point. It is used for GPS
+  availability and evaluation only.
+* **Checks:** scenario warnings cover the B–C length (0.5–5 km), an approach shorter than 30 s, a short
+  recovery, and U-turns. `run_scenario` refuses turns tighter than 3 m radius (not drivable).
+
 ## 7. Reproducibility
 
 * A `ScenarioConfig` contains the **route geometry as fetched** (not just the endpoints), every
@@ -285,7 +317,7 @@ by autoscaling, e.g. the ~1e-5 m/s² change of normal gravity along a 3 km route
 * Presets live inside the package (`throughtunnel/presets/*.json`), so the app and the tests run
   offline.
 
-## 8. Validation (`uv run pytest`, 96 tests, no network)
+## 8. Validation (`uv run pytest`, 136 tests, no network)
 
 | Property | Test |
 |---|---|
@@ -311,6 +343,11 @@ by autoscaling, e.g. the ~1e-5 m/s² change of normal gravity along a 3 km route
 | IMU randomness | sources independent (toggling accel noise leaves gyro and bias unchanged); doubling N doubles the same residual; same seed → identical; sensor seed changes errors but not drive or ideal; scenario seed drives errors by default |
 | Persistence | v2 files migrate to an ideal IMU at the simulation rate; configs built in code are not migrated; rate and error settings round-trip |
 | UI construction | the page builds in NiceGUI's in-process user simulation (this caught a control-ordering bug) |
+| A–D structure | route map = original polyline; B/C located on the true path within 1 m of the map point at the true crossing time; ordered crossing times; warnings; U-turn rejection |
+| GPS | see §6.3 |
+| Observation boundary | importing positioning loads no simulator module (subprocess); observation types have no truth fields |
+| Positioning | causality of every estimator (perturb the future, past unchanged); runner order and tie rule; zero-error dead reckoning < 1 m; forward-bias error = analytic vector integral (1 %); gyro-bias heading error linear (5 %); calibration removes > 95 % / > 80 % of bias errors; tilted mount recovered < 1°; gyro-bias calibration < 0.02 °/s on the hardest approach; GPS blending improves the hand-over state; route estimators stay on the route; on-time announcements with perfect data |
+| Evaluation | along/cross sign conventions on shifted truth; recovery-time definition |
 | App logic | playback clock (play/pause/seek/end/restart), figure decimation and cursor, browser track payload, IMU figure ranges |
 
 **Evidence note.** The table above is enforced by tests. These figures are *one-off measurements*
@@ -343,9 +380,8 @@ console errors.
 * No side-slip: the velocity is always along body-x. Kinematic constraint, no tyre model.
 * No suspension, so no body roll or pitch under acceleration.
 * The driver behaves reasonably (comfort limits above) and never stops.
-* The entire selected route is the GPS-denied section, and the tunnel presets run portal to portal
-  (D10). **Superseded by D11** (A–D scenario with approach, tunnel and recovery sections), which is not
-  implemented yet (roadmap P2/P3).
+* The GPS-denied section is the user-selected B–C of an A–D route (D11; implemented). Earlier the
+  whole route was GPS-denied (D10, superseded).
 * Gravity is WGS84 normal gravity on the ellipsoid surface. There is no height correction, no gravity
   anomalies and no deflection of the vertical.
 * The phone is rigidly mounted. There is no holder vibration, no engine/road vibration and no
@@ -362,12 +398,8 @@ console errors.
   onto the opposite carriageway and produced detours, which is why the presets are portal-to-portal.
   A self-hosted OSRM, or via-points along the motorway, would allow approach sections with GPS before
   and after the tunnel.
-* **Tunnel extent is not marked yet.** The earlier idea of deriving it from OSM `tunnel=yes` ways is
-  **superseded** (D12). The tunnel will be the user-selected section B–C of an A–D route (D11,
-  roadmap P2).
-* **The 0.5–5 km length check applies to the whole route.** Under D11 it must apply to B–C (roadmap P2).
-* **Ground truth refers to the vehicle reference point (rear axle).** Phone-position truth, needed for
-  GPS and evaluation, is not yet available (PD2, roadmap P4).
+* *Resolved:* the tunnel is the user-selected section B–C (D11/D12), the 0.5–5 km check applies to
+  B–C, and phone-position truth is available (`GroundTruth.point_enu`, `truth_at`).
 * **Lateral limit is soft** (≤ 5–6% overshoot at sharp corners). That is acceptable for "reasonable
   driver" realism, but it is not a hard guarantee.
 * **Single vehicle, no traffic.** No stop-and-go or lane changes. The `DriverConfig` and scenario

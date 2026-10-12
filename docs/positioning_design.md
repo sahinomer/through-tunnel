@@ -1,8 +1,28 @@
-# Positioning design (PROPOSED, awaiting review)
+# Positioning design
 
-Status: **not implemented.** This is the proposed minimal architecture and first baseline for the
-positioning phase. Decisions referenced as Dxx / PDx are in [decisions.md](decisions.md); task IDs in
-[roadmap.md](roadmap.md).
+Status: **initial version implemented** (2026-10-12; PD1–PD8 adopted). Results:
+[results.md](results.md). Decisions referenced as Dxx / PDx are in [decisions.md](decisions.md); task
+IDs in [roadmap.md](roadmap.md). This document was written as a proposal. Deviations and additions in
+the implementation:
+
+* **Code:**
+  * `throughtunnel/observations.py`: types;
+  * `positioning/base.py`, `runner.py`: contract, runner, Announcer;
+  * `positioning/alignment.py`: mount alignment and calibration;
+  * `positioning/dead_reckoning.py`, `route_constrained.py`: estimators;
+  * `evaluation/`: metrics, Monte Carlo, report.
+* **Gyro bias** is estimated by a weighted regression of the accumulated gyro-minus-GPS heading over
+  contiguous stretches, not from approach end points. The end-point version had a heavy tail on routes
+  with slow turns.
+* **Levelling** subtracts the GPS-predicted vehicle acceleration before averaging gravity (iterated
+  with the yaw solution).
+* **GPS blending** (added): `dr_filtered` blends GPS speed (5 s) and bearing (10 s) into the
+  IMU-propagated state, instead of resetting to every fix. The route estimator blends speed the same
+  way.
+* **Estimators:** `dr_raw` (declared aligned mount, no calibration), `dr_calibrated`, `dr_filtered`,
+  `route_imu`, `route_hold` (naive reference).
+* **Not yet:** covariance outputs (so no NEES/coverage), probabilistic estimators, map matching beyond
+  projection, recovery gating.
 
 ## 1. Information flow
 

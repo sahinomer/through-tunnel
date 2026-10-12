@@ -1,6 +1,6 @@
 # Roadmap and task tracking
 
-Last reviewed: 2026-10-12, before the positioning phase. This file tracks status, remaining work and open
+Last reviewed: 2026-10-12, after the first positioning phase (see §0); §1 is the pre-positioning review. This file tracks status, remaining work and open
 decisions. Decisions live in [decisions.md](decisions.md), and the proposed positioning architecture in
 [positioning_design.md](positioning_design.md). The earlier [readiness_review.md](readiness_review.md) is
 kept for history; its items are mapped to the tasks below.
@@ -11,7 +11,52 @@ Legend:
 * `[ ]` to do
 * *(decision)* waiting for a decision
 
+## 0. Update after the first positioning phase (2026-10-12)
+
+The user delegated the open choices (PD1–PD8 adopted, see decisions.md). Implemented and tested
+(136 tests):
+
+* **Observation boundary** (`observations.py`) + import-boundary test.
+* **A–D scenarios**: schema v4; presets with approach and recovery; four-click selection in the UI;
+  U-turn selections rejected.
+* **Phone GPS**: time-correlated errors, randomised loss before B, delayed reacquisition.
+* **Estimator contract, causal runner, shared announcer.**
+* **Mount alignment and calibration component.**
+* **Five estimators** (raw, calibrated and GPS-blended dead reckoning; route-constrained with
+  filtered IMU speed; naive last-GPS-speed reference).
+* **Evaluation and Monte-Carlo report**: `python -m throughtunnel.evaluation.report`.
+* **UI**: tunnel band, GPS track, estimate overlays with toggles, errors tab.
+
+Initial results: [results.md](results.md). The best estimator (route + filtered IMU speed) ends the
+tunnel at 16–34 m median error and announces the exit 0.1–0.6 s late (median), under the simplifying
+assumptions.
+
+**Findings raised for attention** (per the user's request to flag findings that affect credibility):
+
+1. **Flat-road assumption.** The calibrated estimators depend on approach-phase levelling cancelling
+   the accelerometer bias. A grade change between approach and tunnel breaks this: 3 % gives
+   0.29 m/s², which is ~1 km after 90 s. Until R1 is done, the IMU-based numbers are optimistic.
+   **Recommended next.**
+2. **The naive speed-hold looks good or bad depending on the drive.** Single-drive comparisons
+   mislead, so results must vary the drive (now `--vary-drive`).
+3. **Map ≈ truth geometry** (R3): route-constrained results are optimistic until map errors are modelled.
+
+Problems found and fixed during this phase:
+* The A–D click flow crashed the vehicle simulation on a U-turn selection.
+* The gyro-bias end-point estimator produced a 470 m tail.
+* A tab handler error appeared on every page load.
+
+**Next (suggested order):**
+1. R1 road grade (+ grade-aware levelling, or at least the sensitivity analysis).
+2. R3 map errors.
+3. A8 probabilistic estimator with covariance (then NEES/coverage in A11).
+4. R2 stop-and-go.
+5. Split `page.py` (P9).
+6. F2/F3 write-up.
+
 ## 1. Verified status (checked against code and tests, not just documentation)
+
+*Pre-positioning review (kept as history; statuses below in §2 are current).*
 
 ### 1.1 Implemented and validated
 
@@ -89,35 +134,33 @@ Legend:
 ### Phase P: essential prerequisites for initial positioning
 | ID | Task | Depends | Status |
 |---|---|---|---|
-| P1 | Neutral observation module (`ImuStream` moved, `GnssFix/GnssStream`, `RouteMap`, `NavigationEvent`, `Observations`) + subprocess import-boundary test (PD1) | – | [ ] |
-| P2 | A–D scenario model: four points; OSRM multi-waypoint route; B/C distances on the map polyline and on the truth path; navigation event (distance after B, lead); validation (B–C 0.5–5 km, approach long enough, U-turn/detour); schema v4 + legacy migration (PD7); update tests and presets | P1 | [ ] |
-| P3 | A–D map UI: 4 sequential clicks, B–C thick translucent grey under the route, A–D and event markers, event/lead sliders, distinguishable phases (D13) | P2 | [ ] |
-| P4 | Phone-position truth at arbitrary times (reference point + lever arm, exact via `motion.at`) (PD2) | – | [ ] |
-| P5 | GPS phone-location simulation, essential subset (D16, PD4): ~1 Hz fixes with correlated error, speed/bearing/accuracy; availability A–B on, B–C off, after C + delay; randomised loss point; ideal kept; seeds; GPS display (fixes on the map, a GPS plot); tests | P1, P2, P4 | [ ] |
-| P6 | Observations builder: `SimulationResult` → `Observations` (measured IMU and GPS, `RouteMap` from the **original polyline**). Leakage tests | P1, P2, P5 | [ ] |
-| P7 | Estimator base class, `StateEstimate`, `EstimateTrack`, causal runner + causality test | P6 | [ ] |
-| P8 | Evaluation core: truth at estimate times, along/cross/total error vs time and distance, error at C (PD3) + tests | P4, P7 | [ ] |
-| P9 | Visualisation of estimates: split `page.py` into components; multi-track browser player; per-estimator toggles; error plot tab | P7, P8 | [ ] |
-
+| P1 | Neutral observation module (`ImuStream` moved, `GnssFix/GnssStream`, `RouteMap`, `NavigationEvent`, `Observations`) + subprocess import-boundary test (PD1) | – | [x] |
+| P2 | A–D scenario model: four points; OSRM multi-waypoint route; B/C distances on the map polyline and on the truth path; navigation event (distance after B, lead); validation (B–C 0.5–5 km, approach long enough, U-turn/detour); schema v4 + legacy migration (PD7); update tests and presets | P1 | [x] |
+| P3 | A–D map UI: 4 sequential clicks, B–C thick translucent grey under the route, A–D and event markers, event/lead sliders, distinguishable phases (D13) | P2 | [x] |
+| P4 | Phone-position truth at arbitrary times (reference point + lever arm, exact via `motion.at`) (PD2) | – | [x] |
+| P5 | GPS phone-location simulation, essential subset (D16, PD4): ~1 Hz fixes with correlated error, speed/bearing/accuracy; availability A–B on, B–C off, after C + delay; randomised loss point; ideal kept; seeds; GPS display (fixes on the map, a GPS plot); tests | P1, P2, P4 | [x] essential subset |
+| P6 | Observations builder: `SimulationResult` → `Observations` (measured IMU and GPS, `RouteMap` from the **original polyline**). Leakage tests | P1, P2, P5 | [x] |
+| P7 | Estimator base class, `StateEstimate`, `EstimateTrack`, causal runner + causality test | P6 | [x] |
+| P8 | Evaluation core: truth at estimate times, along/cross/total error vs time and distance, error at C (PD3) + tests | P4, P7 | [x] |
+| P9 | Visualisation of estimates: split `page.py` into components; multi-track browser player; per-estimator toggles; error plot tab | P7, P8 | [~] overlays, toggles, errors tab done; `page.py` **not** split (~1000 lines) |
 ### Phase A: positioning algorithms and comparison experiments
 | ID | Task | Depends | Status |
 |---|---|---|---|
-| A1 | Mount alignment component: levelling from gravity + yaw misalignment (declared or estimated, PD5); observability check | P7 | [ ] *(decision PD5)* |
-| A2 | **B0 baseline**: GPS-reset + 2-D vehicle dead reckoning (positioning_design §4) + validation (zero-error, single-source analytic growth) | A1, P8 | [ ] |
-| A3 | Error-accumulation study: single error sources vs the analytic budget; summary in docs | A2 | [ ] |
-| A4 | Causal preprocessing components (low-pass, decimation); B0 on preprocessed inputs; comparison | A2 | [ ] |
-| A5 | Approach-phase calibration against GPS: forward bias/levelling, gyro bias (causal) | A2 | [ ] |
-| A6 | Route-constrained estimator (along-track dead reckoning on the route map) + naive reference "last GPS speed along the route" | A2, P6 | [ ] |
+| A1 | Mount alignment component: levelling from gravity + yaw misalignment (declared or estimated, PD5); observability check | P7 | [x] estimated; *declared* only in `dr_raw` |
+| A2 | **B0 baseline**: GPS-reset + 2-D vehicle dead reckoning (positioning_design §4) + validation (zero-error, single-source analytic growth) | A1, P8 | [x] |
+| A3 | Error-accumulation study: single error sources vs the analytic budget; summary in docs | A2 | [~] analytic single-source tests + results.md §3; no separate study |
+| A4 | Causal preprocessing components (low-pass, decimation); B0 on preprocessed inputs; comparison | A2 | [~] GPS blending (causal complementary filter) done; IMU low-pass not needed so far (white noise negligible) |
+| A5 | Approach-phase calibration against GPS: forward bias/levelling, gyro bias (causal) | A2 | [x] levelling with GPS-predicted acceleration; gyro bias by weighted regression |
+| A6 | Route-constrained estimator (along-track dead reckoning on the route map) + naive reference "last GPS speed along the route" | A2, P6 | [x] |
 | A7 | Yaw-rate vs map-curvature matching (along-track correction in curved tunnels) | A6 | [ ] |
 | A8 | Probabilistic estimator (e.g. EKF on the route; particle filter if justified) with covariance. Only after A2–A6 are measured (D22) | A6 | [ ] |
-| A9 | Exit announcement: shared Announcer (PD8) + timing-error evaluation (D14) | P8, A2 | [ ] |
-| A10 | GPS recovery handling (reacquisition, outlier gating, convergence) + recovery metrics | P5, A2 | [ ] |
-| A11 | Experiment runner: N estimators × Monte-Carlo seeds on identical observations (D19); tables; uncertainty calibration (NEES/coverage) | P8 | [ ] |
-
+| A9 | Exit announcement: shared Announcer (PD8) + timing-error evaluation (D14) | P8, A2 | [~] shared Announcer + timing evaluation; threshold crossing only |
+| A10 | GPS recovery handling (reacquisition, outlier gating, convergence) + recovery metrics | P5, A2 | [~] recovery = reset to first fix + recovery metric; no gating (needs R4) |
+| A11 | Experiment runner: N estimators × Monte-Carlo seeds on identical observations (D19); tables; uncertainty calibration (NEES/coverage) | P8 | [~] Monte Carlo + `evaluation.report`; no covariance yet, so no NEES |
 ### Phase R: realism and robustness experiments (backlog)
 | ID | Task | Status |
 |---|---|---|
-| R1 | Road grade: elevation profile, pitch in truth and IMU; grade sensitivity of the estimators (D24) | [ ] |
+| R1 | Road grade: elevation profile, pitch in truth and IMU; grade sensitivity of the estimators (D24) | [ ] **raised: most important caveat of the current results (results.md §3.1)** |
 | R2 | Stop-and-go / slow traffic inside the tunnel (D24) | [ ] |
 | R3 | Map uncertainty: scale error, lateral offsets, local distortions of the estimator's map (D21, D24) | [ ] |
 | R4 | GPS detail: entrance degradation ramp, dropouts, multipath outliers, reacquisition transients, latency (D16) | [ ] |
@@ -130,10 +173,10 @@ Legend:
 ### Phase F: final evaluation and deliverables
 | ID | Task | Status |
 |---|---|---|
-| F1 | Final scenario suite and Monte-Carlo evaluation; result tables and plots | [ ] |
+| F1 | Final scenario suite and Monte-Carlo evaluation; result tables and plots | [~] initial results in results.md |
 | F2 | Write-up: approach, assumptions, what was simulated and how, results, limitations, next steps with real devices | [ ] |
 | F3 | AI-usage note (from the correction log in §5) | [ ] |
-| F4 | README: run the simulator, reproduce the results | [~] (simulator part done) |
+| F4 | README: run the simulator, reproduce the results | [~] simulator + positioning usage |
 | F5 | Optional screen recording | [ ] |
 | F6 | Data export / reproducibility bundle | [ ] |
 | F7 | Optional: recorded-phone loader and a small real-data trial | [ ] |
@@ -198,3 +241,17 @@ Places where AI-generated work had to be corrected, found by measurement, tests 
 * A UI control-ordering crash (axis label built before the sensor controls existed) was found by
   driving the browser. It is now caught by a page-construction test.
 * This review: the claim "every accuracy number is enforced by a test" was overstated (§1.2).
+* Positioning phase:
+  * The A–D map flow crashed on a selection where OSRM turned back at a waypoint (0.01 m radius,
+    vehicle stopped). Found by driving the UI; now rejected with guidance.
+  * The gyro-bias calibration from approach end points had a heavy tail (up to 0.08 °/s, 470 m
+    cross-track). Found in Monte Carlo; replaced by a weighted regression.
+  * Several of my test expectations were physically wrong and were corrected by independent checks:
+    * ½·b·t² is the along-track error only on a straight road; the exact vector integral is now
+      tested.
+    * The GPS course over ground differs from the vehicle heading in turns when the phone has a lever
+      arm.
+    * Cross-track error of route-constrained estimates on curves includes along-track error
+      geometry.
+  * A first ranking of estimators on a single drive was misleading (the naive method won on Seattle);
+    caught by varying the drive.

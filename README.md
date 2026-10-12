@@ -4,17 +4,22 @@ A vehicle and smartphone-sensor simulator for **GPS-denied positioning research*
 road (OpenStreetMap) treated as a tunnel; the simulator produces physically consistent ground truth and
 what the accelerometer and gyroscope of a phone mounted in the car would measure.
 
-**Status: vehicle simulation and smartphone IMU (accelerometer and gyroscope) complete.** The IMU has a
-configurable sample rate, white noise and constant bias, and the ideal readings are kept for comparison.
-GPS simulation, A–D scenarios (approach → simulated tunnel → recovery) and positioning are planned; see
-[docs/roadmap.md](docs/roadmap.md).
+**Status: end-to-end pipeline working.**
+* **Simulation:** A–D scenarios (approach with GPS → simulated tunnel → recovery), vehicle, phone IMU
+  (rate, mounting, noise, bias) and phone GPS.
+* **Positioning:** five position estimators fed causally with only the phone observations and the
+  route map.
+* **Evaluation:** against the hidden ground truth, incl. exit-announcement timing and Monte-Carlo
+  reports.
+* **Results:** first numbers in [docs/results.md](docs/results.md); caveats such as the flat road
+  apply. Remaining work: [docs/roadmap.md](docs/roadmap.md).
 
 Documentation:
 * [docs/design.md](docs/design.md): simulator design as implemented.
 * [docs/decisions.md](docs/decisions.md): decision log.
 * [docs/roadmap.md](docs/roadmap.md): status, tasks, open decisions.
-* [docs/positioning_design.md](docs/positioning_design.md): proposed positioning architecture and
-  baseline.
+* [docs/positioning_design.md](docs/positioning_design.md): positioning architecture and estimators.
+* [docs/results.md](docs/results.md): initial positioning results.
 
 ![Simulator UI](docs/img/ui.jpg)
 
@@ -33,11 +38,21 @@ Options: `uv run throughtunnel --port 8090 --host 0.0.0.0 --no-browser`.
 ## Using the simulator
 
 1. **Pick a scenario.** Either choose a preset (*Seattle SR 99 Tunnel*, *Eisenhower Tunnel*, *Synthetic demo
-   track*), or click a start point and a destination on the map. The route is computed with OSRM on
-   OpenStreetMap data and snapped to the road network, and the scenario is generated immediately.
-   The map shows the raw OSM polyline (grey, dashed) and the smoothed drivable path (blue). The panel
-   shows the route length (highlighted when outside the 0.5–5 km tunnel range), how far the path
-   deviates from the map polyline, the minimum turn radius, and any warnings.
+   route*), or click four points on the map:
+   * **A** start;
+   * **B** tunnel entrance;
+   * **C** tunnel exit;
+   * **D** end.
+
+   The route A→B→C→D is computed with OSRM on OpenStreetMap data; B–C becomes a *simulated* tunnel
+   (ideally 0.5–5 km). Place the points along one driving direction: routes that turn back are
+   rejected. The map shows:
+   * the raw OSM polyline (grey dashed) and the smoothed driven path (blue);
+   * the tunnel as a wide grey band;
+   * A–D and the navigation-exit markers;
+   * the GPS fixes as a dotted line with a gap in the tunnel.
+
+   The panel shows the lengths, the GPS outage, the smoothing deviation and any warnings.
 2. **Play it back.** Use play/pause, restart, playback speed (0.5×–20×), and seek with the slider or by
    clicking a plot. The vehicle (yellow) moves along the road with a heading tick, the travelled trail
    is drawn in orange, and the readouts and plot cursor follow the simulation time.
@@ -55,7 +70,17 @@ Options: `uv run throughtunnel --port 8090 --host 0.0.0.0 --no-browser`.
    realisation on the same drive. The panel shows the resulting per-sample σ and the bias actually
    applied. The *Phone IMU* tab plots measured (light) against ideal (dark) readings for each phone
    axis, and the readouts show both.
-6. **Reproduce it.** *Save scenario* downloads a JSON file with the route geometry *as fetched*, every
+6. **Compare position estimators.** After every generation, all estimators run on the same phone
+   observations:
+   * **Map:** each has a coloured track and a moving marker (toggle them in the *Positioning* card).
+   * **Summary table:** error at the tunnel exit, max/RMS in the tunnel, recovery time after C, and
+     exit-announcement timing.
+   * **Positioning errors tab:** total, along-track and cross-track error over time.
+   * **Live readout:** each estimator's current error.
+
+   *Tunnel & navigation exit* moves the exit to announce and the announcement lead. The GPS controls
+   are in *IMU sample rate & errors*.
+7. **Reproduce it.** *Save scenario* downloads a JSON file with the route geometry *as fetched*, every
    parameter (phone mounting, IMU rate and errors included) and the seeds. *Load scenario* replays it
    bit-for-bit, offline.
 
@@ -78,6 +103,17 @@ result.path.diagnostics              # road-geometry processing report
 from throughtunnel.scenario import with_imu_config
 from throughtunnel.sensors import MOUNT_PRESETS, ImuConfig
 dash = with_imu_config(result, ImuConfig(mount=MOUNT_PRESETS["dash_portrait"]))  # same drive, new mount
+
+# Positioning: estimators see only result.observations() (measured IMU, GPS fixes, route map).
+from throughtunnel.evaluation.experiment import compare_estimators
+for ev in compare_estimators(result).evaluations:
+    print(ev.label, ev.summary["exit_total_m"], ev.announcement_time_error_s)
+```
+
+Monte-Carlo comparison of all estimators on the presets (as in docs/results.md):
+
+```bash
+uv run python -m throughtunnel.evaluation.report --seeds 20 --vary-drive
 ```
 
 To simulate your own road, build a `ScenarioConfig(route=RawRoute(...))` or use
@@ -91,7 +127,10 @@ src/throughtunnel/
   routing/              RawRoute model, OSRM provider, synthetic test roads
   road.py               map polyline -> smooth arc-length path (+ diagnostics)
   vehicle/              driver config, speed planning, longitudinal dynamics, ground truth
-  sensors/              phone mounting, IMU measurement model, ImuStream observation type
+  sensors/              phone mounting, IMU and GPS measurement models
+  observations.py       what a phone app may see: ImuStream, GnssStream, RouteMap (truth boundary)
+  positioning/          estimator contract, causal runner, alignment, estimators
+  evaluation/           errors vs. truth, Monte Carlo, report
   scenario.py           ScenarioConfig, run_scenario, seeds, JSON persistence, presets
   presets/              bundled scenarios (route geometry cached -> work offline)
   app/                  NiceGUI front-end (depends on the core, never the reverse)
@@ -150,10 +189,10 @@ complete model of real driving; road grade, stop-and-go traffic and map errors a
 - **M2: smartphone sensors** (done). Ideal accelerometer and gyroscope, phone mounting, IMU plots.
 - **M3: sensor imperfections** (done). Separate IMU rate, white noise and constant bias with
   toggles/sliders, ideal vs. measured, independent seeded streams.
-- **Next:** A–D scenarios (four map points: start, tunnel entrance, tunnel exit, end), phone-style GPS
-  simulation, the observation/estimator interfaces with a causal runner, the evaluation core, then a
-  GPS-initialised dead-reckoning baseline. The full, tracked plan, with the open decisions, is in
-  [docs/roadmap.md](docs/roadmap.md).
+- **Positioning phase 1** (done). A–D scenarios, phone GPS, causal estimator framework, five
+  estimators, evaluation, Monte-Carlo report, UI overlays.
+- **Next:** road grade (the most important open caveat), map errors, a probabilistic estimator with
+  covariance, stop-and-go, then the write-up. Tracked in [docs/roadmap.md](docs/roadmap.md).
 
 ## Data and services
 
