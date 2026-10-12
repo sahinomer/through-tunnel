@@ -33,11 +33,11 @@ import numpy as np
 from numpy.typing import NDArray
 from pydantic import BaseModel, ConfigDict, Field
 
+from throughtunnel.sensors.errors import STANDARD_GRAVITY, ImuErrorConfig
 from throughtunnel.sensors.mounting import PhoneMount
 from throughtunnel.vehicle.truth import GroundTruth
 
 OMEGA_EARTH = 7.292115e-5  # WGS84 Earth rotation rate [rad/s]
-STANDARD_GRAVITY = 9.80665  # [m/s^2]
 # WGS84 normal gravity (Somigliana): equatorial gravity and the k constant.
 _GAMMA_E = 9.7803253359
 _K_SOMIGLIANA = 0.00193185265241
@@ -60,6 +60,16 @@ class ImuConfig(BaseModel):
         "wgs84", description="'wgs84': normal gravity at the latitude; 'standard': 9.80665 m/s^2"
     )
     earth_rotation: bool = Field(False, description="Include Earth rate (gyro) and Coriolis (accel)")
+    rate_hz: float = Field(
+        200.0, ge=10.0, le=2000.0, description="Phone sensor sample rate, constant during a run"
+    )
+    errors: ImuErrorConfig = Field(default_factory=ImuErrorConfig)
+
+
+def imu_timestamps(t_end: float, rate_hz: float) -> NDArray[np.float64]:
+    """Sample times k / rate_hz covering [0, t_end] (a sensor clock started with the run)."""
+    n = int(np.floor(t_end * rate_hz + 1e-9)) + 1
+    return np.arange(n) / rate_hz
 
 
 @dataclass(frozen=True)

@@ -1,5 +1,5 @@
 {
- "schema_version": 2,
+ "schema_version": 3,
  "name": "Seattle SR 99 Tunnel (northbound, 3.0 km)",
  "description": "State Route 99 bored tunnel under downtown Seattle, portal to portal. Gentle S-shaped alignment. Posted limit 45 mph. Geometry: OSM via OSRM.",
  "route": {
@@ -560,7 +560,25 @@
    ]
   },
   "gravity_model": "wgs84",
-  "earth_rotation": false
+  "earth_rotation": false,
+  "rate_hz": 200.0,
+  "errors": {
+   "accel": {
+    "noise_enabled": true,
+    "noise_density": 0.0017651969999999998,
+    "bias_enabled": true,
+    "bias_magnitude": 0.0980665,
+    "bias_vector": null
+   },
+   "gyro": {
+    "noise_enabled": true,
+    "noise_density": 0.0001221730476396031,
+    "bias_enabled": true,
+    "bias_magnitude": 0.0017453292519943296,
+    "bias_vector": null
+   },
+   "seed": null
+  }
  },
  "seed": 1,
  "sample_rate_hz": 100.0

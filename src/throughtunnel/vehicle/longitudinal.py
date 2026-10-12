@@ -18,7 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-from numpy.typing import NDArray
+from numpy.typing import ArrayLike, NDArray
 
 from throughtunnel.vehicle.config import DriverConfig
 from throughtunnel.vehicle.speed_profile import SpeedProfile
@@ -33,6 +33,27 @@ class LongitudinalTrajectory:
     v: NDArray[np.float64]
     a: NDArray[np.float64]
     jerk: NDArray[np.float64]  # jerk applied on [t_k, t_k + dt)
+
+    def at(self, times: ArrayLike) -> LongitudinalTrajectory:
+        """Exact state at arbitrary times within the run.
+
+        The jerk is constant between samples, so s, v, a are exact cubic/quadratic/linear
+        polynomials there. This gives physically consistent values at any timestamp (e.g. a phone
+        IMU sampling faster than the simulation) instead of duplicated or interpolated samples.
+        """
+        t = np.asarray(times, dtype=float)
+        if t.size and (t.min() < self.t[0] - 1e-12 or t.max() > self.t[-1] + 1e-9):
+            raise ValueError("requested times are outside the simulated interval")
+        k = np.clip(np.searchsorted(self.t, t, side="right") - 1, 0, len(self.t) - 1)
+        tau = t - self.t[k]
+        s0, v0, a0, j = self.s[k], self.v[k], self.a[k], self.jerk[k]
+        return LongitudinalTrajectory(
+            t=t,
+            s=s0 + v0 * tau + a0 * tau**2 / 2.0 + j * tau**3 / 6.0,
+            v=v0 + a0 * tau + j * tau**2 / 2.0,
+            a=a0 + j * tau,
+            jerk=j,
+        )
 
 
 def simulate_longitudinal(

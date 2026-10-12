@@ -13,23 +13,26 @@ seed (``rng_stream(seed, "driver")``), so adding a new random consumer later
 from __future__ import annotations
 
 import json
-import zlib
 from dataclasses import dataclass, replace
 from importlib import resources
 from pathlib import Path
 
-import numpy as np
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from throughtunnel.randomness import rng_stream
 from throughtunnel.road import RoadConfig, RoadPath
 from throughtunnel.routing.base import RawRoute
-from throughtunnel.sensors.imu import ImuConfig, ImuStream, ideal_imu
+from throughtunnel.sensors.errors import ImuErrorConfig, ImuErrorRealization, apply_imu_errors
+from throughtunnel.sensors.imu import ImuConfig, ImuStream, ideal_imu, imu_timestamps
 from throughtunnel.vehicle.config import DriverConfig
-from throughtunnel.vehicle.longitudinal import simulate_longitudinal
+from throughtunnel.vehicle.longitudinal import LongitudinalTrajectory, simulate_longitudinal
 from throughtunnel.vehicle.speed_profile import SpeedProfile, plan_speed_profile
 from throughtunnel.vehicle.truth import GroundTruth, build_ground_truth
 
-SCHEMA_VERSION = 2  # v2: added `imu` (phone mounting, gravity model); v1 files load with defaults
+# v2: added `imu` (phone mounting, gravity model).
+# v3: added `imu.rate_hz` and `imu.errors`. Older files are migrated to what they meant: IMU sampled at
+#     the simulation rate, ideal sensors.
+SCHEMA_VERSION = 3
 
 
 class ScenarioConfig(BaseModel):
@@ -45,6 +48,18 @@ class ScenarioConfig(BaseModel):
     seed: int = Field(0, ge=0)
     sample_rate_hz: float = Field(100.0, ge=10.0, le=1000.0, description="Simulation and output rate")
 
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate(cls, data: object) -> object:
+        # Only files that declare an older version are migrated (every saved file records it);
+        # configs built in code without a version are current.
+        if isinstance(data, dict) and data.get("schema_version", SCHEMA_VERSION) < 3:
+            imu = dict(data.get("imu") or {})
+            imu.setdefault("rate_hz", data.get("sample_rate_hz", 100.0))
+            imu.setdefault("errors", ImuErrorConfig.ideal().model_dump())
+            data = {**data, "imu": imu}
+        return data
+
     @field_validator("schema_version")
     @classmethod
     def _upgrade_schema(cls, v: int) -> int:
@@ -55,18 +70,21 @@ class ScenarioConfig(BaseModel):
 
 @dataclass(frozen=True)
 class SimulationResult:
-    """Everything the simulator produced. ``truth`` is hidden state; ``imu`` is an observation."""
+    """Everything the simulator produced.
+
+    Observation (what a positioning algorithm may see): ``imu``, the measured phone IMU stream.
+    Hidden simulator state (for display, debugging and evaluation only): everything else, including
+    ``imu_ideal`` (error-free readings) and ``imu_errors`` (the bias/noise actually applied).
+    """
 
     config: ScenarioConfig
     path: RoadPath
     profile: SpeedProfile
+    motion: LongitudinalTrajectory
     truth: GroundTruth
     imu: ImuStream
-
-
-def rng_stream(seed: int, name: str) -> np.random.Generator:
-    """Independent, reproducible random stream for one named consumer."""
-    return np.random.default_rng(np.random.SeedSequence([seed, zlib.crc32(name.encode())]))
+    imu_ideal: ImuStream
+    imu_errors: ImuErrorRealization
 
 
 def build_path(config: ScenarioConfig) -> RoadPath:
@@ -79,14 +97,40 @@ def run_scenario(config: ScenarioConfig, path: RoadPath | None = None) -> Simula
     profile = plan_speed_profile(path, config.driver, rng_stream(config.seed, "driver"))
     motion = simulate_longitudinal(profile, path.length_m, config.driver, dt=1.0 / config.sample_rate_hz)
     truth = build_ground_truth(motion, path)
-    imu = ideal_imu(truth, config.imu)
-    return SimulationResult(config=config, path=path, profile=profile, truth=truth, imu=imu)
+    imu, ideal, errors = simulate_imu(motion, path, config.imu, config.seed)
+    return SimulationResult(
+        config=config,
+        path=path,
+        profile=profile,
+        motion=motion,
+        truth=truth,
+        imu=imu,
+        imu_ideal=ideal,
+        imu_errors=errors,
+    )
+
+
+def simulate_imu(
+    motion: LongitudinalTrajectory, path: RoadPath, config: ImuConfig, seed: int
+) -> tuple[ImuStream, ImuStream, ImuErrorRealization]:
+    """Phone IMU at its own sample rate: (measured, ideal, applied errors).
+
+    The vehicle state is evaluated *exactly* at the IMU timestamps (piecewise-constant jerk between
+    simulation steps), so a sensor faster than the simulation gets genuinely new samples.
+    """
+    t_imu = imu_timestamps(float(motion.t[-1]), config.rate_hz)
+    kinematics = build_ground_truth(motion.at(t_imu), path)
+    ideal = ideal_imu(kinematics, config)
+    accel, gyro, errors = apply_imu_errors(ideal.accel, ideal.gyro, config.rate_hz, config.errors, seed)
+    measured = replace(ideal, accel=accel, gyro=gyro, source="simulated:measured")
+    return measured, ideal, errors
 
 
 def with_imu_config(result: SimulationResult, imu: ImuConfig) -> SimulationResult:
-    """Re-run only the sensor model (e.g. a new phone mounting); the vehicle motion is unchanged."""
+    """Re-run only the sensor model (mounting, rate, errors); the vehicle motion is unchanged."""
     config = result.config.model_copy(update={"imu": imu})
-    return replace(result, config=config, imu=ideal_imu(result.truth, imu))
+    measured, ideal, errors = simulate_imu(result.motion, result.path, imu, config.seed)
+    return replace(result, config=config, imu=measured, imu_ideal=ideal, imu_errors=errors)
 
 
 # ---------------------------------------------------------------------- persistence

@@ -1,4 +1,9 @@
-"""Smartphone IMU physics: gravity, motion, mounting rotation, lever arm, Earth rotation."""
+"""Smartphone IMU physics: gravity, motion, mounting rotation, lever arm, Earth rotation.
+
+These tests validate the *ideal* sensor model, so they use error-free sensors sampled at the
+simulation rate (one IMU sample per ground-truth sample). Sample-rate handling and sensor errors are
+covered in test_imu_rate_and_errors.py.
+"""
 
 from dataclasses import fields
 
@@ -9,6 +14,7 @@ from helpers import stationary_truth
 from throughtunnel.geodesy import LocalFrame
 from throughtunnel.routing.synthetic import Straight, synthetic_route
 from throughtunnel.scenario import ScenarioConfig, load_preset, run_scenario, with_imu_config
+from throughtunnel.sensors.errors import ImuErrorConfig
 from throughtunnel.sensors.imu import OMEGA_EARTH, ImuConfig, ImuStream, ideal_imu, normal_gravity
 from throughtunnel.sensors.mounting import MOUNT_PRESETS, PhoneMount, describe_phone_axes, euler_zyx
 from throughtunnel.vehicle.config import KMH, DriverConfig
@@ -16,9 +22,16 @@ from throughtunnel.vehicle.config import KMH, DriverConfig
 TILTED = PhoneMount(label="test", yaw_deg=37.0, pitch_deg=-22.0, roll_deg=71.0, lever_arm_m=(1.6, 0.35, 0.8))
 
 
+def ideal_at_sim_rate(**kwargs) -> ImuConfig:
+    """Error-free IMU sampled at the 100 Hz simulation rate (aligned mount unless overridden)."""
+    return ImuConfig(rate_hz=100.0, errors=ImuErrorConfig.ideal(), **kwargs)
+
+
 @pytest.fixture(scope="module")
 def demo():
-    return run_scenario(load_preset("synthetic_demo_track"))
+    cfg = load_preset("synthetic_demo_track")
+    assert cfg.sample_rate_hz == 100.0
+    return run_scenario(cfg.model_copy(update={"imu": ideal_at_sim_rate()}))
 
 
 def central_diff(y: np.ndarray, dt: float) -> np.ndarray:
@@ -101,17 +114,19 @@ def test_aligned_phone_measures_vehicle_motion(demo):
 
 
 def test_flat_portrait_axis_mapping(demo):
-    imu = with_imu_config(demo, ImuConfig(mount=MOUNT_PRESETS["flat_portrait"])).imu
+    imu = with_imu_config(demo, ideal_at_sim_rate(mount=MOUNT_PRESETS["flat_portrait"])).imu
     assert np.allclose(imu.accel[:, 1], demo.truth.accel_long, atol=1e-12)  # y = forward
     assert np.allclose(imu.accel[:, 0], -demo.truth.accel_lat, atol=1e-12)  # x = right
     assert np.allclose(imu.gyro[:, 2], demo.truth.yaw_rate, atol=1e-15)
 
 
 def test_mounting_changes_sensor_axes_but_not_vehicle_motion():
-    cfg = load_preset("synthetic_demo_track")
+    cfg = load_preset("synthetic_demo_track").model_copy(update={"imu": ideal_at_sim_rate()})
     a = run_scenario(cfg)
     b = run_scenario(
-        cfg.model_copy(update={"imu": ImuConfig(mount=TILTED.model_copy(update={"lever_arm_m": (0, 0, 0)}))})
+        cfg.model_copy(
+            update={"imu": ideal_at_sim_rate(mount=TILTED.model_copy(update={"lever_arm_m": (0, 0, 0)}))}
+        )
     )
     for name, col in a.truth.scalar_columns().items():
         assert np.array_equal(col, b.truth.scalar_columns()[name]), name
@@ -128,7 +143,7 @@ def test_imu_matches_numerical_differentiation_of_phone_pose(demo):
     """End-to-end check independent of the closed-form model: differentiate the phone's actual
     trajectory (vehicle pose + lever arm) and orientation, then compare with the IMU output."""
     tr = demo.truth
-    imu = with_imu_config(demo, ImuConfig(mount=TILTED)).imu
+    imu = with_imu_config(demo, ideal_at_sim_rate(mount=TILTED)).imu
     dt = 1.0 / tr.sample_rate_hz
     c_nb = tr.rotation_enu_from_body()
     r_bs = TILTED.rotation_body_from_phone()
@@ -157,7 +172,7 @@ def test_lever_arm_in_steady_turn():
     driver = DriverConfig(
         cruise_speed_kmh=v / KMH, speed_variability_kmh=0.0, initial_speed_kmh=v / KMH, max_lateral_accel=5.0
     )
-    imu_cfg = ImuConfig(mount=PhoneMount(lever_arm_m=(2.0, 0.0, 0.0)))
+    imu_cfg = ideal_at_sim_rate(mount=PhoneMount(lever_arm_m=(2.0, 0.0, 0.0)))
     cfg = ScenarioConfig(
         route=route, driver=driver, imu=imu_cfg, road=RoadConfig(smoothing_wavelength_m=60.0)
     )
@@ -187,7 +202,7 @@ def test_coriolis_and_eotvos_when_driving_east():
     driver = DriverConfig(
         cruise_speed_kmh=v / KMH, speed_variability_kmh=0.0, initial_speed_kmh=v / KMH, max_speed_kmh=150
     )
-    res = run_scenario(ScenarioConfig(route=route, driver=driver, imu=ImuConfig(earth_rotation=True)))
+    res = run_scenario(ScenarioConfig(route=route, driver=driver, imu=ideal_at_sim_rate(earth_rotation=True)))
     phi = np.radians(res.truth.lat)
     # Driving east: Coriolis pushes to the right of travel in the north. A left-pointing (north) y axis
     # reads +2Ωv sinφ. The vertical part (Eötvös effect) makes the car "lighter" by 2Ωv cosφ.
@@ -210,6 +225,7 @@ def test_imu_stream_carries_no_ground_truth(demo):
     assert {f.name for f in fields(ImuStream)} == {"t", "accel", "gyro", "frame", "source", "metadata"}
     assert demo.imu.metadata == {}
     assert demo.imu.frame == "android"
+    assert demo.imu.source == "simulated:measured"
 
 
 def test_imu_is_deterministic(demo):
