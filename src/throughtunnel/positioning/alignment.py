@@ -14,8 +14,12 @@ Method (per GPS interval of ~1 s, using the mean phone specific force f̄ and an
    predicted from GPS and gyro, (a_long = Δv_GPS/Δt, a_lat = v·ω_up), onto the phone's horizontal
    specific force (2-D Procrustes, means removed). ω_up = up·ω does not depend on θ. θ is observable
    only if the approach contains speed changes or turns ("excitation"); otherwise ``ready`` stays False.
-3. Gyro bias about up: integrated gyro heading change minus GPS bearing change, summed over contiguous
-   intervals. The sum telescopes, so only the bearing noise at the ends matters.
+3. Gyro bias about up: within each contiguous stretch of fast-enough GPS intervals, the accumulated
+   difference "integrated gyro heading - GPS bearing" grows as b·t plus the bearing noise of the latest
+   fix. b is the weighted least-squares slope (weights = 1 / reported bearing accuracy², one free offset
+   per stretch). An earlier version used only the end points of the approach: on routes with a slow
+   turn, where the bearing is noisy, it left up to 0.08 °/s of bias, i.e. hundreds of metres of
+   cross-track error after 150 s.
 """
 
 from __future__ import annotations
@@ -31,7 +35,7 @@ from throughtunnel.observations import GnssFix
 MIN_INTERVALS = 20  # ~20 s of GPS
 MIN_EXCITATION = 0.05  # rms predicted vehicle acceleration [m/s^2] needed to observe the yaw angle
 MIN_CORRELATION = 0.6  # agreement between predicted and measured horizontal acceleration
-MIN_SPEED_FOR_BEARING = 3.0  # [m/s]
+MIN_SPEED_FOR_BEARING = 5.0  # [m/s]; GPS bearing noise grows as 1/speed
 
 
 @dataclass(frozen=True)
@@ -88,6 +92,8 @@ class MountAlignmentEstimator:
                     fix.speed_mps,
                     yaw0,
                     yaw1,
+                    fix.t,
+                    max(math.radians(fix.bearing_accuracy_deg), 1e-4),
                 )
             )
         self._prev = fix
@@ -140,11 +146,13 @@ class MountAlignmentEstimator:
         yaw0 = np.array([r[5] for r in self._rows])
         yaw1 = np.array([r[6] for r in self._rows])
         good = (v0 > MIN_SPEED_FOR_BEARING) & (v1 > MIN_SPEED_FOR_BEARING)
-        bias = 0.0
-        if good.sum() >= 3:
-            d_gps = np.angle(np.exp(1j * (yaw1 - yaw0)))
-            d_gyro = (w @ up) * dt
-            bias = float(np.sum((d_gyro - d_gps)[good]) / np.sum(dt[good]))
+        bias = _gyro_bias_regression(
+            r=(w @ up) * dt - np.angle(np.exp(1j * (yaw1 - yaw0))),
+            dt=dt,
+            t_end=np.array([r[7] for r in self._rows]),
+            sigma=np.array([r[8] for r in self._rows]),
+            good=good,
+        )
         ready = len(self._rows) >= MIN_INTERVALS and excitation >= MIN_EXCITATION and corr >= MIN_CORRELATION
         return Alignment(
             up=up,
@@ -156,6 +164,33 @@ class MountAlignmentEstimator:
             excitation=excitation,
             correlation=corr,
         )
+
+
+def _gyro_bias_regression(r, dt, t_end, sigma, good) -> float:
+    """Weighted slope of the accumulated gyro-minus-GPS heading over contiguous stretches."""
+    num = den = 0.0
+    run: list[int] = []
+
+    def close(idx: list[int]) -> tuple[float, float]:
+        if len(idx) < 3:
+            return 0.0, 0.0
+        acc = np.cumsum(r[idx])
+        time = np.cumsum(dt[idx])
+        wts = 1.0 / sigma[idx] ** 2
+        tm, am = np.average(time, weights=wts), np.average(acc, weights=wts)
+        return float(np.sum(wts * (time - tm) * (acc - am))), float(np.sum(wts * (time - tm) ** 2))
+
+    for k in range(len(r)):
+        contiguous = run and abs((t_end[k] - dt[k]) - t_end[run[-1]]) < 1e-6
+        if good[k] and (not run or contiguous):
+            run.append(k)
+            continue
+        n, d = close(run)
+        num, den = num + n, den + d
+        run = [k] if good[k] else []
+    n, d = close(run)
+    num, den = num + n, den + d
+    return num / den if den > 0 else 0.0
 
 
 def _unit(v) -> NDArray[np.float64]:

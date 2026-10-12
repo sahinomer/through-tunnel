@@ -27,15 +27,19 @@ def compare_estimators(result: SimulationResult, names: Sequence[str] | None = N
 
 
 def monte_carlo(
-    config: ScenarioConfig, seeds: Iterable[int], names: Sequence[str] | None = None
+    config: ScenarioConfig, seeds: Iterable[int], names: Sequence[str] | None = None, vary_drive: bool = False
 ) -> dict[str, list[TrackEvaluation]]:
-    """Same drive (scenario seed fixed), different IMU and GPS error realisations per seed."""
+    """Different IMU and GPS error realisations per seed; with ``vary_drive`` also a different drive
+    (speed profile) per seed. Within one run all estimators see identical observations."""
     base = run_scenario(config)
     out: dict[str, list[TrackEvaluation]] = {}
     for seed in seeds:
         imu = config.imu.model_copy(update={"errors": config.imu.errors.model_copy(update={"seed": seed})})
         gnss = config.gnss.model_copy(update={"seed": seed})
-        res = with_sensor_config(base, imu=imu, gnss=gnss)
+        if vary_drive:
+            res = run_scenario(config.model_copy(update={"seed": 1000 + seed, "imu": imu, "gnss": gnss}))
+        else:
+            res = with_sensor_config(base, imu=imu, gnss=gnss)
         for ev in compare_estimators(res, names).evaluations:
             out.setdefault(ev.name, []).append(ev)
     return out

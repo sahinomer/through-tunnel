@@ -14,6 +14,13 @@ not integrated. Two configurations:
   valid only for an aligned mount (an explicit assumption, not knowledge of the true mounting).
 * ``estimate``: axes and gyro bias from ``MountAlignmentEstimator`` using approach-phase GPS. The
   levelling absorbs the horizontal accelerometer bias.
+
+Optional GPS blending (``blend_speed_tau_s`` / ``blend_heading_tau_s``): once the IMU is calibrated,
+speed and heading are not reset to each (noisy) fix but pulled towards it with a first-order,
+causal complementary filter, x += (dt_fix / tau) * (x_gps - x). Between fixes the calibrated IMU
+carries them. This averages GPS speed/bearing noise over ~tau seconds, so the state handed over to
+pure dead reckoning at the tunnel entrance is better than a single fix. Position is still reset to
+each fix: GPS position errors are time-correlated, so averaging them gains little.
 """
 
 from __future__ import annotations
@@ -33,6 +40,9 @@ class DeadReckoningConfig:
     alignment: Literal["assume_aligned", "estimate"] = "estimate"
     calibrate_gyro_bias: bool = True
     gnss_timeout_s: float = 1.5  # no fix for this long -> dead-reckoning mode
+    blend_speed_tau_s: float | None = None  # None: reset speed to every fix
+    blend_heading_tau_s: float | None = None  # None: reset heading to every fix
+    min_speed_for_bearing: float = 5.0  # GPS bearing is ignored below this speed when blending
 
 
 class VehicleDeadReckoning(Estimator):
@@ -51,9 +61,24 @@ class VehicleDeadReckoning(Estimator):
 
     # ------------------------------------------------------------------ observations
     def on_gnss(self, fix: GnssFix) -> None:
+        cfg = self.config
+        blending = (
+            self._initialised and self._axes is not None and fix.t - self._last_fix_t <= cfg.gnss_timeout_s
+        )
         self._e, self._n = self.fix_enu(fix)
-        self._v = fix.speed_mps
-        self._psi = self.bearing_to_yaw(fix.bearing_deg)
+        yaw_gps = self.bearing_to_yaw(fix.bearing_deg)
+        if blending and cfg.blend_speed_tau_s:
+            self._v += min(1.0, (fix.t - self._last_fix_t) / cfg.blend_speed_tau_s) * (
+                fix.speed_mps - self._v
+            )
+        else:
+            self._v = fix.speed_mps
+        if blending and cfg.blend_heading_tau_s:
+            if fix.speed_mps >= cfg.min_speed_for_bearing:
+                gain = min(1.0, (fix.t - self._last_fix_t) / cfg.blend_heading_tau_s)
+                self._psi += gain * math.remainder(yaw_gps - self._psi, 2.0 * math.pi)
+        else:
+            self._psi = yaw_gps
         self._last_fix_t = fix.t
         self._t = fix.t
         self._initialised = True
@@ -122,3 +147,19 @@ class CalibratedDeadReckoning(VehicleDeadReckoning):
 
     def __init__(self, route: RouteMap) -> None:
         super().__init__(route, DeadReckoningConfig(alignment="estimate", calibrate_gyro_bias=True))
+
+
+class FilteredDeadReckoning(VehicleDeadReckoning):
+    name = "dr_filtered"
+    label = "DR calibrated + GPS-blended speed/heading"
+
+    def __init__(self, route: RouteMap) -> None:
+        super().__init__(
+            route,
+            DeadReckoningConfig(
+                alignment="estimate",
+                calibrate_gyro_bias=True,
+                blend_speed_tau_s=5.0,
+                blend_heading_tau_s=10.0,
+            ),
+        )

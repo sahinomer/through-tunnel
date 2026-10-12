@@ -5,7 +5,8 @@ heading come from the map. This removes cross-track error and heading drift enti
 along-track error (speed error integrated over time) and the map's own deviation from the road.
 
 * ``RouteImuDeadReckoning``: speed is integrated from the calibrated forward accelerometer, using the
-  same alignment component as the calibrated vehicle dead reckoning.
+  same alignment component as the calibrated vehicle dead reckoning. While GPS is available the speed
+  is blended towards the GPS speed (complementary filter, 5 s), as in ``dr_filtered``.
 * ``RouteSpeedHold``: the naive reference. Keep the last GPS speed. Inertial methods must beat this.
 
 While GPS is available, d is the projection of each fix onto the route (searched near the previous
@@ -22,6 +23,7 @@ from throughtunnel.positioning.alignment import Alignment, MountAlignmentEstimat
 from throughtunnel.positioning.base import Estimator, StateEstimate
 
 GNSS_TIMEOUT_S = 1.5
+BLEND_SPEED_TAU_S = 5.0
 SEARCH_BACK_M = 50.0
 SEARCH_AHEAD_M = 200.0
 
@@ -48,7 +50,13 @@ class RouteConstrained(Estimator):
             self._d = self.route.project_enu(
                 e, n, lo_m=self._d - SEARCH_BACK_M, hi_m=self._d + SEARCH_AHEAD_M
             )[0]
-        self._v = fix.speed_mps
+        blending = (
+            self.use_imu_speed and self._axes is not None and fix.t - self._last_fix_t <= GNSS_TIMEOUT_S
+        )
+        if blending:
+            self._v += min(1.0, (fix.t - self._last_fix_t) / BLEND_SPEED_TAU_S) * (fix.speed_mps - self._v)
+        else:
+            self._v = fix.speed_mps
         self._last_fix_t = fix.t
         self._t = fix.t
         self._aligner.add_fix(fix)
@@ -91,7 +99,7 @@ class RouteConstrained(Estimator):
 
 class RouteImuDeadReckoning(RouteConstrained):
     name = "route_imu"
-    label = "Route + GPS-calibrated IMU speed"
+    label = "Route + filtered IMU speed"
     use_imu_speed = True
 
 

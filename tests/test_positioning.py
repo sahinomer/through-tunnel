@@ -11,7 +11,7 @@ from throughtunnel.observations import GnssStream, ImuStream, Observations
 from throughtunnel.positioning import ESTIMATORS, Estimator, StateEstimate, run_estimator
 from throughtunnel.positioning.dead_reckoning import CalibratedDeadReckoning, RawDeadReckoning
 from throughtunnel.positioning.runner import EstimateTrack
-from throughtunnel.scenario import load_preset, run_scenario, truth_at
+from throughtunnel.scenario import load_preset, run_scenario, truth_at, with_sensor_config
 from throughtunnel.sensors.errors import ImuErrorConfig
 from throughtunnel.sensors.gnss import GnssConfig
 from throughtunnel.sensors.mounting import MOUNT_PRESETS
@@ -233,3 +233,42 @@ def test_empty_gnss_means_no_estimate(demo):
     empty = GnssStream(*(np.array([]) for _ in range(8)))
     track = run_estimator(ESTIMATORS["dr_calibrated"](obs.route), Observations(obs.imu, empty, obs.route))
     assert len(track) == 0  # never initialised: positioning needs GPS before the tunnel
+
+
+# ------------------------------------------------------------------ calibration accuracy and GPS blending
+def handover_state(cls, res):
+    """Estimator speed/heading error at the last output before GPS loss."""
+    est = cls(res.route_map)
+    track = run_estimator(est, res.observations())
+    k = int(np.flatnonzero(track.t < res.gnss_events.loss_t)[-1])
+    tr = truth_at(res, [track.t[k]])
+    return est, track.speed[k] - tr.speed[0], math.remainder(track.heading[k] - tr.yaw[0], 2 * math.pi)
+
+
+def test_gyro_bias_calibration_survives_a_slow_turn_in_the_approach():
+    """Seattle's approach has a slow 90-degree turn (noisy GPS bearings). Regression version: bias
+    error stays below 0.02 deg/s (the end-point version left up to 0.08 deg/s)."""
+    cfg = load_preset("seattle_sr99_tunnel")
+    base = run_scenario(cfg)
+    up_true = cfg.imu.mount.rotation_body_from_phone().T @ [0.0, 0.0, 1.0]
+    for seed in (3, 12, 14):  # the worst seeds of the earlier version
+        imu = cfg.imu.model_copy(update={"errors": cfg.imu.errors.model_copy(update={"seed": seed})})
+        res = with_sensor_config(base, imu=imu, gnss=cfg.gnss.model_copy(update={"seed": seed}))
+        est, _, _ = handover_state(CalibratedDeadReckoning, res)
+        true_bias = float(up_true @ res.imu_errors.gyro.bias)
+        assert abs(math.degrees(est.alignment.gyro_bias_up - true_bias)) < 0.02
+
+
+def test_gps_blending_improves_the_handover_state():
+    from throughtunnel.positioning.dead_reckoning import FilteredDeadReckoning
+
+    cfg = load_preset("synthetic_demo_track")
+    base = run_scenario(cfg)
+    hard, blended = [], []
+    for seed in range(8):
+        res = with_sensor_config(base, gnss=cfg.gnss.model_copy(update={"seed": seed}))
+        hard.append(handover_state(CalibratedDeadReckoning, res)[1:])
+        blended.append(handover_state(FilteredDeadReckoning, res)[1:])
+    hard, blended = np.abs(np.array(hard)), np.abs(np.array(blended))
+    assert blended[:, 0].mean() < 0.6 * hard[:, 0].mean()  # speed
+    assert blended[:, 1].mean() < 0.8 * hard[:, 1].mean()  # heading

@@ -17,6 +17,7 @@ from throughtunnel.scenario import SimulationResult
 ESTIMATOR_COLORS = {
     "dr_raw": "#d81b60",
     "dr_calibrated": "#1e88e5",
+    "dr_filtered": "#fb8c00",
     "route_imu": "#43a047",
     "route_hold": "#8e24aa",
 }
