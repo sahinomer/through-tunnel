@@ -50,6 +50,8 @@ TUNNEL_MIN_LENGTH_M = 500.0
 TUNNEL_MAX_LENGTH_M = 5000.0
 MIN_APPROACH_S = 30.0  # GPS time before B that the estimator needs to initialise (warning threshold)
 MIN_RECOVERY_M = 200.0
+MIN_DRIVABLE_RADIUS_M = 3.0  # tighter turns are not drivable in one go (car turning radius ~5 m)
+U_TURN_DEG = 150.0
 
 
 class TunnelConfig(BaseModel):
@@ -159,6 +161,11 @@ def build_path(config: ScenarioConfig) -> RoadPath:
 def run_scenario(config: ScenarioConfig, path: RoadPath | None = None) -> SimulationResult:
     """Simulate the scenario. ``path`` may be passed to reuse an already processed road."""
     path = path or build_path(config)
+    if path.diagnostics.min_radius_m < MIN_DRIVABLE_RADIUS_M:
+        raise ValueError(
+            f"the road geometry contains a turn of radius {path.diagnostics.min_radius_m:.1f} m, which a car "
+            "cannot drive; usually the route makes a U-turn at a selected point"
+        )
     profile = plan_speed_profile(path, config.driver, rng_stream(config.seed, "driver"))
     motion = simulate_longitudinal(profile, path.length_m, config.driver, dt=1.0 / config.sample_rate_hz)
     truth = build_ground_truth(motion, path)
@@ -271,9 +278,14 @@ def scenario_warnings(result: SimulationResult) -> list[str]:
         )
     if rm.length_m - rm.tunnel_exit_m < MIN_RECOVERY_M:
         out.append(f"The recovery section C–D is only {rm.length_m - rm.tunnel_exit_m:.0f} m long.")
-    if _max_turn_deg(rm) > 150.0:
+    if has_u_turn(rm):
         out.append("The route doubles back (U-turn) at some point; check the selected points.")
     return out
+
+
+def has_u_turn(route_map: RouteMap) -> bool:
+    """True if the route reverses direction somewhere (typically OSRM turning back at a waypoint)."""
+    return _max_turn_deg(route_map) > U_TURN_DEG
 
 
 def _max_turn_deg(route_map: RouteMap) -> float:

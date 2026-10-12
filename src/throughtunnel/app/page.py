@@ -44,6 +44,7 @@ from throughtunnel.scenario import (
     ScenarioConfig,
     SimulationResult,
     TunnelConfig,
+    has_u_turn,
     list_presets,
     load_preset,
     run_scenario,
@@ -662,6 +663,16 @@ class SimulatorPage:
             ui.notify("Tunnel exit C must come after entrance B along the route.", type="negative")
             self._clear_selection()
             return
+        if has_u_turn(rm):
+            ui.notify(
+                "The route turns back at one of the points (snapped to the opposite carriageway or a dead "
+                "end). Place the points along one driving direction, on the side of the road you drive on.",
+                type="negative",
+                multi_line=True,
+                timeout=10000,
+            )
+            self._clear_selection()
+            return
         self._clear_selection()
         self.preset_select.set_value(None)
         self.scenario_name = "Custom route"
@@ -898,7 +909,9 @@ class SimulatorPage:
             return
         tr, t = self.result.truth, self.playback.t
         if force or self._tick_count % PLOT_CURSOR_EVERY == 0:
-            self._visible_plot().run_plot_method("relayout", cursor_relayout(t))
+            plot = self._visible_plot()
+            if plot is not None:
+                plot.run_plot_method("relayout", cursor_relayout(t))
         if force or self._tick_count % SLIDER_EVERY == 0 or not self.playback.playing:
             self.progress.value = round(t, 1)
         self.time_label.text = f"{t:6.1f} / {tr.duration_s:.1f} s"
@@ -924,12 +937,15 @@ class SimulatorPage:
             f"<div class='font-mono text-sm'>{' &nbsp; '.join(parts)}</div>"
         )
 
-    def _visible_plot(self) -> ui.plotly:
-        return {"imu": self.imu_plot, "errors": self.err_plot}.get(self.tabs.value, self.plot)
+    def _visible_plot(self) -> ui.plotly | None:
+        name = {"imu": "imu_plot", "errors": "err_plot"}.get(self.tabs.value, "plot")
+        return getattr(self, name, None)  # None while the page is still being built
 
     def _on_tab(self, _: events.ValueChangeEventArguments) -> None:
         plot = self._visible_plot()
-        if self.result is not None and isinstance(plot.figure, go.Figure) and plot.figure.layout.shapes:
+        if plot is None or self.result is None:
+            return
+        if isinstance(plot.figure, go.Figure) and plot.figure.layout.shapes:
             plot.figure.update_shapes(x0=self.playback.t, x1=self.playback.t, selector=CURSOR_SHAPE_INDEX)
             plot.update()
 

@@ -146,3 +146,16 @@ def test_osrm_waypoints_are_kept():
     route = parse_osrm_response(data)
     assert route.metadata["waypoints"][1] == {"lat": 50.0, "lon": 10.001}
     assert route.metadata["leg_distances_m"] == [71.0, 129.0]
+
+
+def test_u_turn_routes_are_rejected():
+    from throughtunnel.routing.synthetic import Corner
+
+    route = synthetic_route([Straight(800.0), Corner(179.0), Straight(800.0)], "u-turn", 50.0)
+    cfg = ScenarioConfig(route=route, tunnel=TunnelConfig(entrance_m=200.0, exit_m=1400.0))
+    from throughtunnel.scenario import build_route_map, has_u_turn
+
+    assert has_u_turn(build_route_map(cfg))
+    with pytest.raises(ValueError, match="U-turn"):
+        run_scenario(cfg)
+    assert not has_u_turn(build_route_map(load_preset("seattle_sr99_tunnel")))
