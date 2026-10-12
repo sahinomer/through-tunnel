@@ -1,0 +1,39 @@
+[project]
+name = "throughtunnel"
+version = "0.1.0"
+description = "Vehicle and smartphone sensor simulator for GPS-denied (tunnel) positioning research"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "httpx>=0.28.1",
+    "nicegui>=3.18.0",
+    "numpy>=2.5.4",
+    "plotly>=7.1.0",
+    "pydantic>=2.14.1",
+    "scipy>=1.18.1",
+]
+
+[project.scripts]
+throughtunnel = "throughtunnel.app.main:run"
+
+[build-system]
+requires = ["uv_build>=0.10,<0.11"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 110
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "NPY", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.17.0",
+]

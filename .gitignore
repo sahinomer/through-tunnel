@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+build/
+dist/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# NiceGUI runtime storage
+.nicegui/
+
+# IDE
+.idea/
+.vscode/
+
+# Local scratch output
+out/
+
+# Case-study brief (third-party document, kept out of the repository)
+docs/*.pdf
