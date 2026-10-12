@@ -96,6 +96,16 @@ class GroundTruth:
     def sample_rate_hz(self) -> float:
         return 1.0 / float(self.t[1] - self.t[0])
 
+    @property
+    def vel_enu(self) -> NDArray[np.float64]:
+        """(N, 3) velocity of the reference point in ENU [m/s] (no side-slip: along the heading)."""
+        return np.column_stack([self.speed * np.cos(self.yaw), self.speed * np.sin(self.yaw), self.z * 0.0])
+
+    @property
+    def alpha_body(self) -> NDArray[np.float64]:
+        """(N, 3) angular acceleration of the body w.r.t. ENU, body axes [rad/s^2]."""
+        return np.column_stack([self.roll * 0.0, self.pitch * 0.0, self.yaw_accel])
+
     def rotation_enu_from_body(self) -> NDArray[np.float64]:
         """(N, 3, 3) rotation matrices C such that v_enu = C @ v_body (yaw-only on a flat road)."""
         c, s = np.cos(self.yaw), np.sin(self.yaw)

@@ -1,5 +1,5 @@
 {
- "schema_version": 1,
+ "schema_version": 2,
  "name": "Eisenhower Tunnel, I-70 (westbound, 2.7 km)",
  "description": "Eisenhower Memorial Tunnel, Colorado, portal to portal. Nearly straight with a slight bend. Posted limit 50 mph; the real ~1.6% grade is ignored (flat-road model).",
  "route": {
@@ -178,6 +178,21 @@
   "curve_preview_m": 15.0,
   "speed_tracking_gain": 0.8,
   "accel_response_rate": 4.0
+ },
+ "imu": {
+  "mount": {
+   "label": "aligned",
+   "yaw_deg": 0.0,
+   "pitch_deg": 0.0,
+   "roll_deg": 0.0,
+   "lever_arm_m": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "gravity_model": "wgs84",
+  "earth_rotation": false
  },
  "seed": 2,
  "sample_rate_hz": 100.0

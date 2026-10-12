@@ -1,5 +1,5 @@
 {
- "schema_version": 1,
+ "schema_version": 2,
  "name": "Synthetic demo track (2.3 km)",
  "description": "Analytic straights and arcs (R = 60-500 m, both directions) sampled every 15 m like a map polyline. Placed at 0°N 0°E so it is clearly not a real road.",
  "route": {
@@ -676,6 +676,21 @@
   "curve_preview_m": 15.0,
   "speed_tracking_gain": 0.8,
   "accel_response_rate": 4.0
+ },
+ "imu": {
+  "mount": {
+   "label": "aligned",
+   "yaw_deg": 0.0,
+   "pitch_deg": 0.0,
+   "roll_deg": 0.0,
+   "lever_arm_m": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "gravity_model": "wgs84",
+  "earth_rotation": false
  },
  "seed": 3,
  "sample_rate_hz": 100.0
