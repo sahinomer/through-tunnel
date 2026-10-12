@@ -178,6 +178,33 @@ class RouteMap:
         lat, lon, _ = self.frame.to_geodetic(np.array([e, n, 0.0]))
         return float(lat), float(lon)
 
+    def project_enu(
+        self, east: float, north: float, lo_m: float = 0.0, hi_m: float | None = None
+    ) -> tuple[float, float]:
+        """Closest point on the route (optionally searched only within [lo_m, hi_m] along it).
+
+        Returns (distance along the route [m], signed lateral offset [m], + = left of travel).
+        """
+        xy, d = self.enu, self.distance_m
+        a = xy[:-1]
+        ab = xy[1:] - a
+        seg_len2 = np.maximum((ab**2).sum(axis=1), 1e-12)
+        ap = np.array([east, north]) - a
+        frac = np.clip((ap * ab).sum(axis=1) / seg_len2, 0.0, 1.0)
+        dist2 = ((ap - frac[:, None] * ab) ** 2).sum(axis=1)
+        hi = self.length_m if hi_m is None else hi_m
+        valid = (d[1:] >= lo_m) & (d[:-1] <= hi)
+        dist2 = np.where(valid, dist2, np.inf)
+        k = int(np.argmin(dist2))
+        along = float(d[k] + frac[k] * np.sqrt(seg_len2[k]))
+        cross = ab[k, 0] * ap[k, 1] - ab[k, 1] * ap[k, 0]
+        return min(max(along, lo_m), hi), float(math.copysign(math.sqrt(dist2[k]), cross))
+
+    def locate(self, lat: float, lon: float, lo_m: float = 0.0, hi_m: float | None = None) -> float:
+        """Distance along the route of the point closest to (lat, lon)."""
+        e, n, _ = self.frame.to_enu(lat, lon)
+        return self.project_enu(float(e), float(n), lo_m, hi_m)[0]
+
     def heading_at(self, distance_m: float) -> float:
         """ENU yaw (CCW from east) of the polyline segment containing ``distance_m``."""
         d = self.distance_m

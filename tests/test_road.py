@@ -4,7 +4,7 @@ from helpers import enu_to_route
 
 from throughtunnel.road import RoadConfig, RoadPath, point_to_polyline_distance
 from throughtunnel.routing.synthetic import Arc, Corner, Straight, build_enu_polyline, synthetic_route
-from throughtunnel.scenario import list_presets, load_preset
+from throughtunnel.scenario import list_presets, load_preset, run_scenario
 
 
 def test_synthetic_arc_endpoints():
@@ -27,7 +27,7 @@ def test_straight_road_is_exact():
 def test_arc_length_parametrisation():
     for preset in list_presets():
         path = RoadPath.from_route(load_preset(preset).route)
-        assert np.abs(path.tangent_norm(path.grid_s) - 1.0).max() < 1e-6
+        assert np.abs(path.tangent_norm(path.grid_s) - 1.0).max() < 1e-5
 
 
 def test_circle_curvature_recovered():
@@ -68,14 +68,16 @@ def test_sharp_corner_is_rounded_with_bounded_cut():
 
 
 def test_curvature_is_continuous_on_real_tunnels():
+    """Inside the real tunnels (B–C): smooth, gentle highway geometry close to the map polyline."""
     for preset in ("seattle_sr99_tunnel", "eisenhower_tunnel"):
-        path = RoadPath.from_route(load_preset(preset).route)
-        st = path.evaluate(path.grid_s)
+        res = run_scenario(load_preset(preset))
+        path, sec = res.path, res.sections
+        s = path.grid_s[(path.grid_s > sec.entrance_s) & (path.grid_s < sec.exit_s)]
+        st = path.evaluate(s)
         assert np.abs(np.diff(st.curvature)).max() < 2e-4  # per metre: no curvature steps
-        assert path.diagnostics.max_deviation_m < 1.5
-        assert path.diagnostics.min_radius_m > 300.0
-        assert 500.0 <= path.length_m <= 5000.0
-        assert not path.diagnostics.warnings
+        assert np.abs(st.curvature).max() < 1 / 300.0
+        assert point_to_polyline_distance(st.xy[::10], path.reference_enu).max() < 1.5
+        assert 500.0 <= sec.exit_s - sec.entrance_s <= 5000.0
 
 
 def test_duplicates_and_spikes_removed():

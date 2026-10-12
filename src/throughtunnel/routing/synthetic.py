@@ -117,20 +117,41 @@ def s_curve_road(radius_m: float = 150.0, angle_deg: float = 60.0, spacing_m: fl
     )
 
 
+def segment_length(seg: Segment) -> float:
+    match seg:
+        case Straight(length_m=length):
+            return length
+        case Arc(radius_m=r, angle_deg=ang):
+            return r * abs(np.radians(ang))
+    return 0.0
+
+
+# Synthetic A–D demo route: approach with turns (GPS available; also excites the phone-mount
+# alignment), a curvy "tunnel" with left and right curves of different radii, and a recovery section.
+DEMO_APPROACH: tuple[Segment, ...] = (
+    Straight(300.0),
+    Arc(250.0, 35.0),
+    Straight(250.0),
+    Arc(150.0, -60.0),
+    Straight(300.0),
+    Arc(400.0, 20.0),
+    Straight(300.0),
+)
+DEMO_TUNNEL: tuple[Segment, ...] = (
+    Arc(600.0, -25.0),
+    Straight(450.0),
+    Arc(300.0, 45.0),
+    Straight(350.0),
+    Arc(200.0, -60.0),
+    Straight(450.0),
+)
+DEMO_RECOVERY: tuple[Segment, ...] = (Straight(300.0), Arc(250.0, 40.0), Straight(350.0))
+DEMO_TUNNEL_ENTRANCE_M = sum(segment_length(s) for s in DEMO_APPROACH)
+DEMO_TUNNEL_EXIT_M = DEMO_TUNNEL_ENTRANCE_M + sum(segment_length(s) for s in DEMO_TUNNEL)
+
+
 def demo_track_road() -> RawRoute:
-    """A ~2.4 km mixed course used for demos: gentle and tight curves in both directions."""
+    """~4.4 km synthetic A–D route (1.6 km approach, 2.0 km tunnel, 0.8 km recovery)."""
     return synthetic_route(
-        [
-            Straight(400.0),
-            Arc(300.0, 40.0),
-            Straight(250.0),
-            Arc(120.0, -90.0),
-            Straight(300.0),
-            Arc(60.0, 75.0),
-            Straight(350.0),
-            Arc(500.0, -25.0),
-            Straight(300.0),
-        ],
-        "demo-track",
-        vertex_spacing_m=15.0,
+        [*DEMO_APPROACH, *DEMO_TUNNEL, *DEMO_RECOVERY], "demo-track", vertex_spacing_m=15.0
     )

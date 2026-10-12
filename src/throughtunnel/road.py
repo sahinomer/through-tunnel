@@ -51,8 +51,6 @@ from scipy.sparse.linalg import spsolve
 from throughtunnel.geodesy import LocalFrame
 from throughtunnel.routing.base import RawRoute
 
-TUNNEL_MIN_LENGTH_M = 500.0
-TUNNEL_MAX_LENGTH_M = 5000.0
 MIN_ROAD_LENGTH_M = 20.0
 
 
@@ -171,6 +169,22 @@ class RoadPath:
         yaw_ref = np.interp(s_arr, self.grid_s, self._grid_yaw)
         yaw = yaw_wrapped + 2.0 * np.pi * np.round((yaw_ref - yaw_wrapped) / (2.0 * np.pi))
         return PathState(s=s_arr, xy=xy, yaw=yaw, curvature=kappa, curvature_rate=dkappa)
+
+    def project(self, east: float, north: float, s_lo: float = 0.0, s_hi: float | None = None) -> float:
+        """Arc length of the path point closest to (east, north), searched within [s_lo, s_hi]."""
+        hi = self.length_m if s_hi is None else min(s_hi, self.length_m)
+        mask = (self.grid_s >= s_lo - 1e-9) & (self.grid_s <= hi + 1e-9)
+        grid = self.grid_s[mask]
+        xy = self._spline(grid)
+        s = float(grid[int(np.argmin((xy[:, 0] - east) ** 2 + (xy[:, 1] - north) ** 2))])
+        for _ in range(8):  # Newton on d/ds |r(s) - p|^2 / 2 = (r - p) . r'
+            r, d1, d2 = self._spline(s), self._spline(s, 1), self._spline(s, 2)
+            diff = r - np.array([east, north])
+            step = float(diff @ d1) / max(float(d1 @ d1 + diff @ d2), 1e-9)
+            s = min(max(s - step, s_lo), hi)
+            if abs(step) < 1e-9:
+                break
+        return s
 
     def tangent_norm(self, s: ArrayLike) -> NDArray[np.float64]:
         """|dr/ds| — equals 1 for a perfect arc-length parametrisation."""
@@ -362,11 +376,7 @@ def _diagnostics(
     max_kappa = float(np.abs(kappa).max())
     min_radius = 1.0 / max_kappa if max_kappa > 0 else math.inf
 
-    warnings = []
-    if not TUNNEL_MIN_LENGTH_M <= length <= TUNNEL_MAX_LENGTH_M:
-        warnings.append(
-            f"Route length {length / 1000:.2f} km is outside the 0.5-5 km tunnel range of the case study."
-        )
+    warnings = []  # tunnel-section checks live in scenario.py (the road knows nothing about tunnels)
     if max_dev > cfg.max_corner_cut_m + cfg.smoothing_corridor_m + 0.5:
         warnings.append(f"Smoothed path deviates up to {max_dev:.1f} m from the map polyline.")
     if min_radius < 8.0:

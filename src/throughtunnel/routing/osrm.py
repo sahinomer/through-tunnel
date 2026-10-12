@@ -26,7 +26,14 @@ class OsrmRouteProvider:
     timeout_s: float = 20.0
 
     def route(self, start: LatLon, end: LatLon) -> RawRoute:
-        coords = f"{start.lon:.7f},{start.lat:.7f};{end.lon:.7f},{end.lat:.7f}"
+        return self.route_via([start, end])
+
+    def route_via(self, points: list[LatLon]) -> RawRoute:
+        """Route through all points in order (e.g. A, B, C, D). Snapped points are in metadata."""
+        if len(points) < 2:
+            raise RoutingError("need at least two points")
+        start, end = points[0], points[-1]
+        coords = ";".join(f"{p.lon:.7f},{p.lat:.7f}" for p in points)
         url = f"{self.base_url.rstrip('/')}/route/v1/{self.profile}/{coords}"
         params = {"overview": "full", "geometries": "geojson", "steps": "true"}
         try:
@@ -48,6 +55,7 @@ def parse_osrm_response(
         )
     route = data["routes"][0]
     coordinates = [(lat, lon) for lon, lat in route["geometry"]["coordinates"]]
+    snapped = [{"lat": w["location"][1], "lon": w["location"][0]} for w in data.get("waypoints", [])]
 
     # Keep intersection classes (e.g. 'tunnel', 'motorway', 'toll') and road names:
     # cheap to store now, useful later for marking tunnel sections without refetching.
@@ -74,5 +82,7 @@ def parse_osrm_response(
             "fetched_utc": datetime.now(UTC).isoformat(timespec="seconds"),
             "road_names": road_names,
             "intersections": intersections,
+            "waypoints": snapped,
+            "leg_distances_m": [leg.get("distance") for leg in route.get("legs", [])],
         },
     )

@@ -32,9 +32,11 @@ from throughtunnel.app.plots import (
     imu_figure,
 )
 from throughtunnel.app.track import playback_track
-from throughtunnel.road import TUNNEL_MAX_LENGTH_M, TUNNEL_MIN_LENGTH_M, RoadConfig
+from throughtunnel.road import RoadConfig
 from throughtunnel.routing import LatLon, OsrmRouteProvider, RawRoute, RoutingError
 from throughtunnel.scenario import (
+    TUNNEL_MAX_LENGTH_M,
+    TUNNEL_MIN_LENGTH_M,
     ScenarioConfig,
     SimulationResult,
     list_presets,

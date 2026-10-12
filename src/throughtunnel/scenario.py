@@ -8,17 +8,26 @@ function of it.
 Randomness: each consumer gets its own named stream derived from the scenario
 seed (``rng_stream(seed, "driver")``), so adding a new random consumer later
 (e.g. sensor noise) never changes the realisation of existing ones.
+
+Route structure (D11): a route runs from A (start) to D (end). The GPS-denied tunnel is the section B–C,
+given as distances along the *map* route (the original polyline the navigation app knows). The
+navigation exit to announce is a point inside B–C (D14). Where the true (smoothed) path crosses these
+map points, and when, is hidden simulator state (``SectionTruth``).
 """
 
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, replace
 from importlib import resources
 from pathlib import Path
 
+import numpy as np
+from numpy.typing import ArrayLike
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from throughtunnel.observations import NavigationEvent, RouteMap
 from throughtunnel.randomness import rng_stream
 from throughtunnel.road import RoadConfig, RoadPath
 from throughtunnel.routing.base import RawRoute
@@ -32,7 +41,37 @@ from throughtunnel.vehicle.truth import GroundTruth, build_ground_truth
 # v2: added `imu` (phone mounting, gravity model).
 # v3: added `imu.rate_hz` and `imu.errors`. Older files are migrated to what they meant: IMU sampled at
 #     the simulation rate, ideal sensors.
-SCHEMA_VERSION = 3
+# v4: added `tunnel` (A-D route structure). Older files meant "the whole route is GPS-denied" (D10) and
+#     are migrated to a tunnel covering the whole route (PD7).
+SCHEMA_VERSION = 4
+
+TUNNEL_MIN_LENGTH_M = 500.0
+TUNNEL_MAX_LENGTH_M = 5000.0
+MIN_APPROACH_S = 30.0  # GPS time before B that the estimator needs to initialise (warning threshold)
+MIN_RECOVERY_M = 200.0
+
+
+class TunnelConfig(BaseModel):
+    """GPS-denied section B–C and the navigation exit inside it, as distances along the map route from A."""
+
+    model_config = ConfigDict(frozen=True)
+
+    entrance_m: float = Field(ge=0.0, description="Point B: tunnel entrance")
+    exit_m: float = Field(gt=0.0, description="Point C: tunnel exit (clipped to the route length)")
+    exit_event_m: float | None = Field(
+        None, description="Navigation exit to announce (inside B–C); None = middle of the tunnel"
+    )
+    announce_leads_m: tuple[float, ...] = Field(
+        (300.0, 0.0), description="Announce this far before the navigation exit"
+    )
+
+    @model_validator(mode="after")
+    def _ordered(self) -> TunnelConfig:
+        if not self.entrance_m < self.exit_m:
+            raise ValueError("tunnel entrance must come before the tunnel exit")
+        if self.exit_event_m is not None and not self.entrance_m <= self.exit_event_m <= self.exit_m:
+            raise ValueError("the navigation exit must lie inside the tunnel")
+        return self
 
 
 class ScenarioConfig(BaseModel):
@@ -45,6 +84,7 @@ class ScenarioConfig(BaseModel):
     road: RoadConfig = Field(default_factory=RoadConfig)
     driver: DriverConfig = Field(default_factory=DriverConfig)
     imu: ImuConfig = Field(default_factory=ImuConfig)
+    tunnel: TunnelConfig | None = Field(None, description="None = no tunnel (GPS on the whole route)")
     seed: int = Field(0, ge=0)
     sample_rate_hz: float = Field(100.0, ge=10.0, le=1000.0, description="Simulation and output rate")
 
@@ -58,6 +98,8 @@ class ScenarioConfig(BaseModel):
             imu.setdefault("rate_hz", data.get("sample_rate_hz", 100.0))
             imu.setdefault("errors", ImuErrorConfig.ideal().model_dump())
             data = {**data, "imu": imu}
+        if isinstance(data, dict) and data.get("schema_version", SCHEMA_VERSION) < 4:
+            data = {**data, "tunnel": data.get("tunnel") or {"entrance_m": 0.0, "exit_m": 1e9}}
         return data
 
     @field_validator("schema_version")
@@ -69,12 +111,24 @@ class ScenarioConfig(BaseModel):
 
 
 @dataclass(frozen=True)
+class SectionTruth:
+    """Where (true-path arc length) and when the vehicle crosses map-defined points. Hidden state."""
+
+    entrance_s: float
+    exit_s: float
+    entrance_t: float
+    exit_t: float
+    targets: dict[str, tuple[float, float]]  # announcement target name -> (true s, true time)
+
+
+@dataclass(frozen=True)
 class SimulationResult:
     """Everything the simulator produced.
 
-    Observation (what a positioning algorithm may see): ``imu``, the measured phone IMU stream.
-    Hidden simulator state (for display, debugging and evaluation only): everything else, including
-    ``imu_ideal`` (error-free readings) and ``imu_errors`` (the bias/noise actually applied).
+    Observations (what a positioning algorithm may see): ``imu`` (measured phone IMU) and
+    ``route_map`` (the navigation route as the app knows it). Hidden simulator state (for display,
+    debugging and evaluation only): everything else, including ``imu_ideal`` (error-free readings),
+    ``imu_errors`` (the bias/noise actually applied) and ``sections`` (true crossing times).
     """
 
     config: ScenarioConfig
@@ -85,6 +139,8 @@ class SimulationResult:
     imu: ImuStream
     imu_ideal: ImuStream
     imu_errors: ImuErrorRealization
+    route_map: RouteMap
+    sections: SectionTruth | None
 
 
 def build_path(config: ScenarioConfig) -> RoadPath:
@@ -98,6 +154,7 @@ def run_scenario(config: ScenarioConfig, path: RoadPath | None = None) -> Simula
     motion = simulate_longitudinal(profile, path.length_m, config.driver, dt=1.0 / config.sample_rate_hz)
     truth = build_ground_truth(motion, path)
     imu, ideal, errors = simulate_imu(motion, path, config.imu, config.seed)
+    route_map = build_route_map(config)
     return SimulationResult(
         config=config,
         path=path,
@@ -107,7 +164,89 @@ def run_scenario(config: ScenarioConfig, path: RoadPath | None = None) -> Simula
         imu=imu,
         imu_ideal=ideal,
         imu_errors=errors,
+        route_map=route_map,
+        sections=section_truth(route_map, path, motion) if config.tunnel is not None else None,
     )
+
+
+def build_route_map(config: ScenarioConfig) -> RouteMap:
+    """The navigation route as the app knows it: the original polyline (not the smoothed truth path)."""
+    coords = np.asarray(config.route.coordinates, dtype=float)
+    lat, lon = coords[:, 0], coords[:, 1]
+    length = RouteMap(lat=lat, lon=lon, tunnel_entrance_m=0.0, tunnel_exit_m=0.0).length_m
+    tun = config.tunnel
+    if tun is None:
+        return RouteMap(lat=lat, lon=lon, tunnel_entrance_m=length, tunnel_exit_m=length)
+    entrance, exit_ = min(tun.entrance_m, length), min(tun.exit_m, length)
+    event_m = tun.exit_event_m if tun.exit_event_m is not None else 0.5 * (entrance + exit_)
+    event = NavigationEvent("exit", min(max(event_m, entrance), exit_), tuple(tun.announce_leads_m))
+    return RouteMap(lat=lat, lon=lon, tunnel_entrance_m=entrance, tunnel_exit_m=exit_, events=(event,))
+
+
+def announcement_targets(route_map: RouteMap) -> dict[str, float]:
+    """Map distance of every announcement point, e.g. {'exit@300m': 1950.0, 'exit@0m': 2250.0}."""
+    return {
+        f"{ev.name}@{lead:g}m": ev.distance_m - lead
+        for ev in route_map.events
+        for lead in ev.announce_leads_m
+    }
+
+
+def section_truth(route_map: RouteMap, path: RoadPath, motion: LongitudinalTrajectory) -> SectionTruth:
+    """Project map-defined points onto the true path (same ENU frame) and find the crossing times."""
+
+    def true_s(map_distance: float, s_lo: float = 0.0) -> float:
+        east, north = route_map.enu_at(map_distance)
+        return path.project(east, north, s_lo=s_lo)
+
+    def crossing_time(s: float) -> float:
+        return float(np.interp(s, motion.s, motion.t)) if motion.s[0] <= s <= motion.s[-1] else math.nan
+
+    s_b = true_s(route_map.tunnel_entrance_m)
+    s_c = true_s(route_map.tunnel_exit_m, s_lo=s_b)
+    targets = {}
+    for name, d in announcement_targets(route_map).items():
+        s = true_s(d)
+        targets[name] = (s, crossing_time(s))
+    return SectionTruth(
+        entrance_s=s_b, exit_s=s_c, entrance_t=crossing_time(s_b), exit_t=crossing_time(s_c), targets=targets
+    )
+
+
+def truth_at(result: SimulationResult, times: ArrayLike) -> GroundTruth:
+    """Exact ground truth at arbitrary times (constant jerk between simulation steps)."""
+    return build_ground_truth(result.motion.at(times), result.path)
+
+
+def scenario_warnings(result: SimulationResult) -> list[str]:
+    """Checks of the A-D structure (complements the road-geometry diagnostics)."""
+    rm, sec = result.route_map, result.sections
+    out = []
+    if sec is None:
+        out.append("No tunnel section is defined: GPS is available on the whole route.")
+        return out
+    tunnel = rm.tunnel_exit_m - rm.tunnel_entrance_m
+    if not TUNNEL_MIN_LENGTH_M <= tunnel <= TUNNEL_MAX_LENGTH_M:
+        out.append(f"Tunnel B–C is {tunnel / 1000:.2f} km, outside the 0.5–5 km range of the case study.")
+    if not sec.entrance_t >= MIN_APPROACH_S:
+        out.append(
+            f"The approach A–B lasts only {sec.entrance_t:.0f} s with GPS; "
+            "the estimator may not initialise well."
+        )
+    if rm.length_m - rm.tunnel_exit_m < MIN_RECOVERY_M:
+        out.append(f"The recovery section C–D is only {rm.length_m - rm.tunnel_exit_m:.0f} m long.")
+    if _max_turn_deg(rm) > 150.0:
+        out.append("The route doubles back (U-turn) at some point; check the selected points.")
+    return out
+
+
+def _max_turn_deg(route_map: RouteMap) -> float:
+    seg = np.diff(route_map.enu, axis=0)
+    seg = seg[np.linalg.norm(seg, axis=1) > 0.5]
+    if len(seg) < 2:
+        return 0.0
+    heading = np.arctan2(seg[:, 1], seg[:, 0])
+    return float(np.degrees(np.abs(np.angle(np.exp(1j * np.diff(heading))))).max())
 
 
 def simulate_imu(

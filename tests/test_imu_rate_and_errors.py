@@ -7,6 +7,7 @@ import pytest
 
 from throughtunnel.randomness import rng_stream
 from throughtunnel.scenario import (
+    SCHEMA_VERSION,
     ScenarioConfig,
     load_preset,
     load_scenario,
@@ -246,8 +247,10 @@ def test_v2_scenarios_migrate_to_ideal_imu_at_simulation_rate():
         "schema_version": 2,
         "imu": {k: v3["imu"][k] for k in ("mount", "gravity_model", "earth_rotation")},
     }
+    del v2["tunnel"]  # v2 files had no tunnel section
     cfg = scenario_from_json(json.dumps(v2))
-    assert cfg.schema_version == 3
+    assert cfg.schema_version == SCHEMA_VERSION
+    assert cfg.tunnel is not None and cfg.tunnel.entrance_m == 0.0  # legacy: whole route GPS-denied
     assert cfg.imu.rate_hz == cfg.sample_rate_hz
     assert cfg.imu.errors == ImuErrorConfig.ideal()
 

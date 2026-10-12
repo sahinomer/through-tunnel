@@ -13,6 +13,7 @@ from throughtunnel.scenario import (
     rng_stream,
     run_scenario,
     save_scenario,
+    scenario_warnings,
 )
 
 
@@ -68,8 +69,11 @@ def test_presets_load_and_run():
     assert {"seattle_sr99_tunnel", "eisenhower_tunnel", "synthetic_demo_track"} <= presets.keys()
     for pid in presets:
         res = run_scenario(load_preset(pid))
-        assert 500.0 <= res.path.length_m <= 5000.0
-        assert res.truth.duration_s > 30.0
+        rm, sec = res.route_map, res.sections
+        assert 500.0 <= rm.tunnel_exit_m - rm.tunnel_entrance_m <= 5000.0  # tunnel B–C, not the whole route
+        assert sec.entrance_t >= 30.0  # enough GPS before the tunnel to initialise
+        assert rm.length_m - rm.tunnel_exit_m >= 200.0  # recovery section
+        assert not scenario_warnings(res)
 
 
 def test_parse_osrm_response():

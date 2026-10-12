@@ -26,7 +26,7 @@ from __future__ import annotations
 from dataclasses import dataclass, fields
 
 import numpy as np
-from numpy.typing import NDArray
+from numpy.typing import ArrayLike, NDArray
 
 from throughtunnel.geodesy import LocalFrame
 from throughtunnel.road import RoadPath
@@ -105,6 +105,13 @@ class GroundTruth:
     def alpha_body(self) -> NDArray[np.float64]:
         """(N, 3) angular acceleration of the body w.r.t. ENU, body axes [rad/s^2]."""
         return np.column_stack([self.roll * 0.0, self.pitch * 0.0, self.yaw_accel])
+
+    def point_enu(self, lever_body: ArrayLike) -> NDArray[np.float64]:
+        """(N, 3) ENU position of a body-fixed point (e.g. the phone) at ``lever_body`` from the reference."""
+        ref = np.column_stack([self.x, self.y, self.z])
+        return ref + np.einsum(
+            "nij,j->ni", self.rotation_enu_from_body(), np.asarray(lever_body, dtype=float)
+        )
 
     def rotation_enu_from_body(self) -> NDArray[np.float64]:
         """(N, 3, 3) rotation matrices C such that v_enu = C @ v_body (yaw-only on a flat road)."""
