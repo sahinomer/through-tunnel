@@ -80,8 +80,10 @@ def test_imu_figure():
 
     res = run_scenario(load_preset("seattle_sr99_tunnel"))
     fig = imu_figure(res)
-    assert [d.name for d in fig.data] == ["accel x", "gyro x", "accel y", "gyro y", "accel z", "gyro z"]
+    assert len(fig.data) == 12  # measured + ideal for 3 accel and 3 gyro axes
+    assert [d.name for d in fig.data[:2]] == ["measured", "ideal"]
+    assert sum(d.showlegend for d in fig.data) == 2
     # accel z (gravity, varies ~1e-5 m/s^2 along the route) is not blown up by autoscaling
     lo, hi = fig.layout.yaxis3.range
     assert hi - lo >= MIN_SPAN_ACCEL
-    assert lo < res.imu.accel[:, 2].min() and hi > res.imu.accel[:, 2].max()
+    assert lo < res.imu.accel[:, 2].min() and hi > res.imu.accel[:, 2].max()  # measured (noisy) fits

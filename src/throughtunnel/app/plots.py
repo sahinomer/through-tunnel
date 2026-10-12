@@ -99,35 +99,64 @@ def ground_truth_figure(result: SimulationResult) -> go.Figure:
     return fig
 
 
-IMU_PLOT_RATE_HZ = 25.0
+IMU_PLOT_RATE_HZ = 25.0  # ideal traces (smooth)
+IMU_MEASURED_PLOT_RATE_HZ = 50.0  # measured traces: enough points to show the noise spread
 # Minimum visible y-span per IMU row: autoscaling would otherwise magnify physically negligible
 # variations (e.g. the ~1e-5 m/s^2 change of normal gravity along a 3 km route looks like a drift).
 MIN_SPAN_ACCEL = 1.0  # m/s^2
 MIN_SPAN_GYRO = 0.1  # rad/s
 AXIS_COLORS = ("#d62728", "#2ca02c", "#1f77b4")  # x, y, z
+AXIS_COLORS_LIGHT = ("rgba(214,39,40,0.35)", "rgba(44,160,44,0.35)", "rgba(31,119,180,0.35)")
 
 
 def imu_figure(result: SimulationResult) -> go.Figure:
-    """Accelerometer and gyroscope per phone axis (each axis on its own row: gravity moves
-    between axes with the mounting, so a shared y-range would hide the motion signals)."""
-    imu = result.imu
-    step = max(1, round(imu.rate_hz / IMU_PLOT_RATE_HZ))
-    t = imu.t[::step]
+    """Measured (light) and ideal (dark) accelerometer and gyroscope per phone axis.
+
+    Each axis has its own row: gravity moves between axes with the mounting, so a shared y-range
+    would hide the motion signals. Display is decimated; the data keeps its full rate.
+    """
+    meas, ideal = result.imu, result.imu_ideal
+    sm = max(1, round(meas.rate_hz / IMU_MEASURED_PLOT_RATE_HZ))
+    si = max(1, round(ideal.rate_hz / IMU_PLOT_RATE_HZ))
     titles = [f"Accelerometer {a} [m/s²]" for a in "xyz"] + [f"Gyroscope {a} [rad/s]" for a in "xyz"]
     fig = make_subplots(rows=6, cols=1, shared_xaxes=True, vertical_spacing=0.03, subplot_titles=titles)
-    for k, axis in enumerate("xyz"):
-        style = {"width": 1.5, "color": AXIS_COLORS[k]}
-        for row, name, data, min_span in (
-            (k + 1, f"accel {axis}", imu.accel[::step, k], MIN_SPAN_ACCEL),
-            (k + 4, f"gyro {axis}", imu.gyro[::step, k], MIN_SPAN_GYRO),
+    for k in range(3):
+        for row, m_data, i_data, min_span in (
+            (k + 1, meas.accel[:, k], ideal.accel[:, k], MIN_SPAN_ACCEL),
+            (k + 4, meas.gyro[:, k], ideal.gyro[:, k], MIN_SPAN_GYRO),
         ):
-            fig.add_trace(go.Scatter(x=t, y=data, name=name, line=style), row, 1)
-            fig.update_yaxes(range=_padded_range(data, min_span), row=row, col=1)
+            first = row == 1
+            fig.add_trace(
+                go.Scatter(
+                    x=meas.t[::sm],
+                    y=m_data[::sm],
+                    name="measured",
+                    legendgroup="measured",
+                    showlegend=first,
+                    line={"width": 1, "color": AXIS_COLORS_LIGHT[k]},
+                ),
+                row,
+                1,
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=ideal.t[::si],
+                    y=i_data[::si],
+                    name="ideal",
+                    legendgroup="ideal",
+                    showlegend=first,
+                    line={"width": 1.8, "color": AXIS_COLORS[k]},
+                ),
+                row,
+                1,
+            )
+            both = np.concatenate([m_data, i_data])
+            fig.update_yaxes(range=_padded_range(both, min_span), row=row, col=1)
     fig.update_layout(
-        height=900,
-        margin={"l": 60, "r": 20, "t": 30, "b": 40},
+        height=950,
+        margin={"l": 60, "r": 20, "t": 50, "b": 40},
         hovermode="x unified",
-        showlegend=False,
+        legend={"orientation": "h", "y": 1.04, "x": 0.0},
         template="plotly_white",
         shapes=[cursor_shape(0.0)],
         uirevision="keep-zoom",

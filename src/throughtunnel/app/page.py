@@ -43,6 +43,7 @@ from throughtunnel.scenario import (
     scenario_from_json,
     with_imu_config,
 )
+from throughtunnel.sensors.errors import DEG, MDPS, MG, UG, ImuErrorConfig, SensorErrorConfig
 from throughtunnel.sensors.imu import ImuConfig
 from throughtunnel.sensors.mounting import MOUNT_PRESETS, PhoneMount, describe_phone_axes
 from throughtunnel.vehicle.config import DRIVER_PRESETS, DriverConfig
@@ -89,7 +90,7 @@ class SimulatorPage:
         ui.add_body_html(f"<script>{TRACK_PLAYER_JS}</script>")
         with ui.header().classes("items-center py-2"):
             ui.label("ThroughTunnel").classes("text-lg font-bold")
-            ui.label("Vehicle and smartphone IMU simulation (milestone 2)").classes("text-sm opacity-80")
+            ui.label("Vehicle and smartphone IMU simulation").classes("text-sm opacity-80")
 
         with ui.row().classes("w-full no-wrap items-start gap-4"):
             with ui.column().classes("gap-1").style("flex: 3 1 0; min-width: 0"):
@@ -107,12 +108,13 @@ class SimulatorPage:
                 self._build_playback_card()
                 self._build_parameter_card()
                 self._build_phone_card()
+                self._build_sensor_card()
 
         # keep_alive=False: the hidden plot is unmounted (Plotly cannot resize a hidden div); only the
         # visible plot receives cursor updates, and a newly shown plot starts from the current cursor.
         with ui.tabs(on_change=self._on_tab).classes("w-full") as self.tabs:
             ui.tab("truth", label="Vehicle ground truth")
-            ui.tab("imu", label="Phone IMU (ideal, phone axes)")
+            ui.tab("imu", label="Phone IMU (measured vs ideal, phone axes)")
         with ui.tab_panels(self.tabs, value="truth", keep_alive=False).classes("w-full"):
             with ui.tab_panel("truth"):
                 self.plot = ui.plotly(empty_figure()).classes("w-full")
@@ -213,6 +215,43 @@ class SimulatorPage:
                 slider.on("change", self._on_mount_control)
         self._update_axes_label()
 
+    def _build_sensor_card(self) -> None:
+        cfg = self.base_imu
+        acc, gyr = cfg.errors.accel, cfg.errors.gyro
+        with ui.expansion("IMU sample rate & errors", icon="sensors", value=False).classes(
+            "w-full border rounded"
+        ):
+            with ui.row().classes("w-full items-center no-wrap gap-2"):
+                self.imu_rate = ui.number(
+                    "IMU rate [Hz]", value=cfg.rate_hz, min=10, max=2000, step=1, format="%g"
+                )
+                self.imu_rate.classes("w-32")
+                self.sensor_seed = ui.number(
+                    "Sensor seed (empty = scenario seed)", value=cfg.errors.seed, min=0, step=1, format="%d"
+                ).classes("flex-grow")
+            ui.label("Accelerometer").classes("text-sm font-bold mt-1")
+            self.acc_noise_on = ui.switch("White noise", value=acc.noise_enabled)
+            self.s_acc_nd = self._slider("Noise density", 0, 1000, 10, acc.noise_density / UG, "µg/√Hz")
+            self.acc_bias_on = ui.switch("Constant bias", value=acc.bias_enabled)
+            self.s_acc_bias = self._slider("Bias magnitude", 0, 100, 1, acc.bias_magnitude / MG, "mg")
+            ui.label("Gyroscope").classes("text-sm font-bold mt-1")
+            self.gyr_noise_on = ui.switch("White noise", value=gyr.noise_enabled)
+            self.s_gyr_nd = self._slider("Noise density", 0, 50, 0.5, gyr.noise_density / MDPS, "mdps/√Hz")
+            self.gyr_bias_on = ui.switch("Constant bias", value=gyr.bias_enabled)
+            self.s_gyr_bias = self._slider("Bias magnitude", 0, 2, 0.01, gyr.bias_magnitude / DEG, "°/s")
+            self.errors_label = ui.html().classes("text-sm")
+            ui.label(
+                "Noise density N: per-sample σ = N·√rate (rate-independent after averaging). Bias: constant "
+                "vector with the given norm, direction drawn from the seed."
+            ).classes("text-xs text-gray-500")
+            for switch in (self.acc_noise_on, self.acc_bias_on, self.gyr_noise_on, self.gyr_bias_on):
+                switch.on_value_change(self._on_imu_control)
+            for slider in (self.s_acc_nd, self.s_acc_bias, self.s_gyr_nd, self.s_gyr_bias):
+                slider.on("change", self._on_imu_control)
+            for number in (self.imu_rate, self.sensor_seed):
+                number.on("blur", self._on_imu_control)
+                number.on("keydown.enter", self._on_imu_control)
+
     # ================================================================== parameters <-> controls
     def _driver_from_controls(self) -> DriverConfig:
         values = {
@@ -254,19 +293,65 @@ class SimulatorPage:
         finally:
             self._loading_controls = False
 
-    def _imu_from_controls(self) -> ImuConfig:
-        mount = PhoneMount(
+    def _mount_from_controls(self) -> PhoneMount:
+        return PhoneMount(
             label=self.mount_select.value or "custom",
             yaw_deg=float(self.s_myaw.value),
             pitch_deg=float(self.s_mpitch.value),
             roll_deg=float(self.s_mroll.value),
             lever_arm_m=(float(self.s_lx.value), float(self.s_ly.value), float(self.s_lz.value)),
         )
-        return self.base_imu.model_copy(
-            update={"mount": mount, "earth_rotation": bool(self.earth_switch.value)}
+
+    def _imu_from_controls(self) -> ImuConfig:
+        mount = self._mount_from_controls()
+        base = self.base_imu
+        rate = self.imu_rate.value
+        rate = float(min(max(rate, 10.0), 2000.0)) if rate is not None else base.rate_hz
+        seed = self.sensor_seed.value
+        errors = ImuErrorConfig(
+            accel=self._sensor_errors(
+                base.errors.accel, self.acc_noise_on, self.s_acc_nd, UG, self.acc_bias_on, self.s_acc_bias, MG
+            ),
+            gyro=self._sensor_errors(
+                base.errors.gyro,
+                self.gyr_noise_on,
+                self.s_gyr_nd,
+                MDPS,
+                self.gyr_bias_on,
+                self.s_gyr_bias,
+                DEG,
+            ),
+            seed=int(seed) if seed is not None else None,
+        )
+        return base.model_copy(
+            update={
+                "mount": mount,
+                "earth_rotation": bool(self.earth_switch.value),
+                "rate_hz": rate,
+                "errors": errors,
+            }
         )
 
-    def _set_mount_controls(self, imu: ImuConfig) -> None:
+    @staticmethod
+    def _sensor_errors(
+        base: SensorErrorConfig, noise_on, s_noise, noise_unit: float, bias_on, s_bias, bias_unit: float
+    ) -> SensorErrorConfig:
+        magnitude = float(s_bias.value) * bias_unit
+        vector = base.bias_vector
+        if vector is not None:  # an explicit bias (e.g. from a loaded file) keeps its direction
+            norm = float(np.linalg.norm(vector))
+            vector = tuple(float(v) * magnitude / norm for v in vector) if norm > 0 else None
+        return base.model_copy(
+            update={
+                "noise_enabled": bool(noise_on.value),
+                "noise_density": float(s_noise.value) * noise_unit,
+                "bias_enabled": bool(bias_on.value),
+                "bias_magnitude": magnitude,
+                "bias_vector": vector,
+            }
+        )
+
+    def _set_imu_controls(self, imu: ImuConfig) -> None:
         self._loading_controls = True
         try:
             self.base_imu, m = imu, imu.mount
@@ -274,6 +359,13 @@ class SimulatorPage:
             self.s_myaw.value, self.s_mpitch.value, self.s_mroll.value = m.yaw_deg, m.pitch_deg, m.roll_deg
             self.s_lx.value, self.s_ly.value, self.s_lz.value = m.lever_arm_m
             self.earth_switch.value = imu.earth_rotation
+            self.imu_rate.value = imu.rate_hz
+            self.sensor_seed.value = imu.errors.seed
+            acc, gyr = imu.errors.accel, imu.errors.gyro
+            self.acc_noise_on.value, self.acc_bias_on.value = acc.noise_enabled, acc.bias_enabled
+            self.s_acc_nd.value, self.s_acc_bias.value = acc.noise_density / UG, acc.bias_magnitude / MG
+            self.gyr_noise_on.value, self.gyr_bias_on.value = gyr.noise_enabled, gyr.bias_enabled
+            self.s_gyr_nd.value, self.s_gyr_bias.value = gyr.noise_density / MDPS, gyr.bias_magnitude / DEG
         finally:
             self._loading_controls = False
         self._update_axes_label()
@@ -281,9 +373,9 @@ class SimulatorPage:
     def _on_mount_preset(self, e: events.ValueChangeEventArguments) -> None:
         if self._loading_controls or e.value not in MOUNT_PRESETS:
             return
-        lever = self._imu_from_controls().mount.lever_arm_m  # presets only set the rotation
+        lever = self._mount_from_controls().lever_arm_m  # presets only set the rotation
         mount = MOUNT_PRESETS[e.value].model_copy(update={"lever_arm_m": lever})
-        self._set_mount_controls(self.base_imu.model_copy(update={"mount": mount}))
+        self._set_imu_controls(self.base_imu.model_copy(update={"mount": mount}))
         self._apply_imu()
 
     def _on_mount_control(self, _: Any = None) -> None:
@@ -297,6 +389,10 @@ class SimulatorPage:
             self._loading_controls = False
         self._apply_imu()
 
+    def _on_imu_control(self, _: Any = None) -> None:
+        if not self._loading_controls:
+            self._apply_imu()
+
     def _apply_imu(self) -> None:
         """Re-run only the sensor model: the vehicle motion (ground truth) is unchanged."""
         self.base_imu = self._imu_from_controls()
@@ -305,10 +401,23 @@ class SimulatorPage:
             return
         self.result = with_imu_config(self.result, self.base_imu)
         self.imu_plot.update_figure(imu_figure(self.result))
+        self._update_errors_label()
         self._render(force=True)
 
+    def _update_errors_label(self) -> None:
+        if self.result is None:
+            return
+        real, rate = self.result.imu_errors, self.result.config.imu.rate_hz
+        acc_b = ", ".join(f"{v / MG:+.1f}" for v in real.accel.bias)
+        gyr_b = ", ".join(f"{v / DEG:+.3f}" for v in real.gyro.bias)
+        self.errors_label.content = (
+            f"At {rate:g} Hz, per-sample σ: accel {real.accel.noise_std / MG:.2f} mg "
+            f"({real.accel.noise_std:.4f} m/s²), gyro {real.gyro.noise_std / DEG:.3f} °/s<br>"
+            f"Applied bias (phone x, y, z): accel [{acc_b}] mg, gyro [{gyr_b}] °/s"
+        )
+
     def _update_axes_label(self) -> None:
-        axes = describe_phone_axes(self._imu_from_controls().mount.rotation_body_from_phone())
+        axes = describe_phone_axes(self._mount_from_controls().rotation_body_from_phone())
         mapping = " · ".join(f"<b>{k}</b> → {v}" for k, v in axes.items())
         self.axes_label.content = f"Phone axes in the vehicle: {mapping}"
 
@@ -339,7 +448,7 @@ class SimulatorPage:
 
     async def _load_scenario(self, cfg: ScenarioConfig) -> None:
         self._set_controls(cfg.driver, cfg.road, cfg.seed, cfg.sample_rate_hz)
-        self._set_mount_controls(cfg.imu)
+        self._set_imu_controls(cfg.imu)
         self.scenario_name = cfg.name
         self._set_route(cfg.route)
         await self._generate()
@@ -452,6 +561,7 @@ class SimulatorPage:
         self.client.run_javascript(f"ttPlayer.load({self.map.id}, {track}, {json.dumps(ids)})")
         self.plot.update_figure(ground_truth_figure(result))
         self.imu_plot.update_figure(imu_figure(result))
+        self._update_errors_label()
         self._update_route_info()
         self._render(force=True)
 
@@ -548,7 +658,9 @@ class SimulatorPage:
         if self._shown_playing != self.playback.playing:
             self._shown_playing = self.playback.playing
             self.play_button.props(f"icon={'pause' if self.playback.playing else 'play_arrow'}")
-        self.readouts.content = self._readout_html(tr.sample(t), *self.result.imu.at(t))
+        self.readouts.content = self._readout_html(
+            tr.sample(t), self.result.imu.at(t), self.result.imu_ideal.at(t)
+        )
 
     def _visible_plot(self) -> ui.plotly:
         return self.imu_plot if self.tabs.value == "imu" else self.plot
@@ -560,7 +672,11 @@ class SimulatorPage:
             plot.update()
 
     @staticmethod
-    def _readout_html(st: dict[str, float], accel: np.ndarray, gyro: np.ndarray) -> str:
+    def _readout_html(
+        st: dict[str, float],
+        measured: tuple[np.ndarray, np.ndarray],
+        ideal: tuple[np.ndarray, np.ndarray],
+    ) -> str:
         kappa = st["curvature"]
         radius = "straight" if abs(kappa) < 1e-4 else f"{1 / abs(kappa):,.0f} m {'L' if kappa > 0 else 'R'}"
         items = [
@@ -577,12 +693,17 @@ class SimulatorPage:
             f"<div><div class='text-xs text-gray-500'>{k}</div><div class='font-mono'>{v}</div></div>"
             for k, v in items
         )
-        acc = " ".join(f"{v:+7.3f}" for v in accel)
-        gyr = " ".join(f"{v:+7.4f}" for v in gyro)
+
+        def row(label: str, values: np.ndarray, fmt: str, unit: str) -> str:
+            nums = " ".join(format(v, fmt) for v in values)
+            return f"<div class='font-mono text-sm whitespace-pre'>{label} {nums} {unit}</div>"
+
         imu = (
-            "<div class='mt-2 text-xs text-gray-500'>phone IMU (ideal, phone axes x / y / z)</div>"
-            f"<div class='font-mono text-sm'>accel {acc} m/s²</div>"
-            f"<div class='font-mono text-sm'>gyro&nbsp; {gyr} rad/s</div>"
+            "<div class='mt-2 text-xs text-gray-500'>phone IMU, phone axes x / y / z (measured, ideal)</div>"
+            + row("accel", measured[0], "+7.3f", "m/s²")
+            + row("     ", ideal[0], "+7.3f", "ideal")
+            + row("gyro ", measured[1], "+7.4f", "rad/s")
+            + row("     ", ideal[1], "+7.4f", "ideal")
         )
         return f"<div class='grid grid-cols-4 gap-x-4 gap-y-1'>{cells}</div>{imu}"
 

@@ -1,4 +1,4 @@
-# Design notes: vehicle and smartphone IMU simulation (milestones 1–2)
+# Design notes: vehicle and smartphone IMU simulation
 
 This document records the technical decisions, models, conventions, assumptions and known limitations
 of the simulator. It is meant to be read alongside the code. Every claim about accuracy below is
@@ -218,7 +218,47 @@ local frame (v / R ≈ 3e-6 rad/s) is neglected.
 
 **Observation boundary.** `ImuStream` contains only what a phone reports. The mounting rotation, lever arm
 and gravity model stay in the scenario config (simulator side). Estimating the phone-to-vehicle rotation
-is part of the positioning problem, not an input to it.
+is part of the positioning problem, not an input to it. `SimulationResult.imu` is the measured stream
+(the observation). `imu_ideal` (error-free) and `imu_errors` (the bias and σ actually applied) are
+hidden simulator state, used only for display, debugging and evaluation.
+
+### 6.1 Sample rate
+
+The phone IMU runs on its own constant-rate clock, t_k = k / f_IMU (default 200 Hz, 10–2000 Hz),
+independent of the vehicle simulation rate (default 100 Hz). The longitudinal model holds the jerk
+constant over each simulation step, so s(t), v(t) and a(t) are exact cubic, quadratic and linear
+polynomials between steps (`LongitudinalTrajectory.at`). The vehicle state, and from it the path
+geometry, attitude, angular rate and specific force, is evaluated exactly at every IMU timestamp. A
+400 Hz IMU on a 100 Hz simulation therefore gets genuinely new samples.
+
+Measured: on the demo track, the second difference of the exact 400 Hz position matches the IMU to
+2e-4 m/s². Repeating the 100 Hz values (sample-and-hold) would leave 2e-2 m/s² forward and 7e-3 m/s²
+lateral, and the test tolerance rejects that. Sampling is instantaneous: there is no on-chip
+anti-aliasing filter, which only matters once vibration is modelled.
+
+### 6.2 Sensor errors (`sensors/errors.py`)
+
+```
+measured = ideal + b + n_k        n_k ~ N(0, σ² I) per axis, white;   σ = N_d · √f_s
+```
+
+* **White noise** is specified as a noise density N_d: µg/√Hz for the accelerometer, mdps/√Hz for the
+  gyroscope (velocity / angle random walk). The per-sample σ grows with √(sample rate), while the
+  1-second average (the Allan deviation at τ = 1 s) equals N_d at every rate. So changing the rate
+  changes the noise per sample, not the information content per second.
+* **Constant bias** (turn-on bias) is either an explicit vector in phone axes, or the configured
+  magnitude in a direction drawn from the seed.
+* There are four independent switches (accel/gyro × noise/bias), and magnitudes are set in
+  datasheet units. The defaults are smartphone-class values: accelerometer 180 µg/√Hz and 10 mg,
+  gyroscope 7 mdps/√Hz (0.007 °/s/√Hz) and 0.1 °/s. At 200 Hz that gives σ = 2.55 mg and 0.099 °/s
+  per sample.
+* **Randomness:** the named streams `imu.accel.noise`, `imu.accel.bias`, `imu.gyro.noise` and
+  `imu.gyro.bias` draw their standard normals whether or not a source is enabled. Toggling or rescaling
+  one source therefore never changes another, and changing a magnitude rescales the same noise
+  pattern. `errors.seed` (default: the scenario seed) gives Monte-Carlo runs over sensor errors on an
+  identical drive.
+* Not modelled yet: bias instability and random walk, temperature drift, scale factor, cross-axis
+  misalignment, quantisation, saturation, vibration, timestamp jitter, and separate accel/gyro clocks.
 
 **UI.** Changing the mounting re-runs only `ideal_imu` (`with_imu_config`), so the vehicle motion is
 bit-identical. Each IMU axis gets its own plot row, because gravity moves between axes with the mount.
@@ -237,7 +277,7 @@ by autoscaling, e.g. the ~1e-5 m/s² change of normal gravity along a 3 km route
 * Presets live inside the package (`throughtunnel/presets/*.json`), so the app and the tests run
   offline.
 
-## 8. Validation (`uv run pytest`, 72 tests, no network)
+## 8. Validation (`uv run pytest`, 96 tests, no network)
 
 | Property | Test |
 |---|---|
@@ -258,6 +298,11 @@ by autoscaling, e.g. the ~1e-5 m/s² change of normal gravity along a 3 km route
 | IMU: lever arm | steady turn: extra −ω²r on the forward axis |
 | IMU: Earth rotation | at rest the gyro reads Ω(cosφ, 0, sinφ) when heading north; driving east, accel gets +2Ωv sinφ to the north and −2Ωv cosφ vertically (Eötvös) |
 | IMU: observation type | shape and timestamp validation; `ImuStream` fields and metadata carry no truth (no mounting) |
+| IMU rate | own constant clock at 50/200/416 Hz; 400 Hz on a 100 Hz simulation equals the exact continuous-time kinematics and is not sample-and-hold; differentiated 400 Hz position matches within 1e-3; 50 Hz hits the right simulation samples |
+| IMU errors | all disabled → measured ≡ ideal; bias → constant offset with the configured norm (or the explicit vector); noise → zero mean, σ = N·√rate (±1%), white (lag-1 correlation < 0.01), independent axes and sensors; 1-s Allan deviation = N at 100 and 400 Hz |
+| IMU randomness | sources independent (toggling accel noise leaves gyro and bias unchanged); doubling N doubles the same residual; same seed → identical; sensor seed changes errors but not drive or ideal; scenario seed drives errors by default |
+| Persistence | v2 files migrate to an ideal IMU at the simulation rate; configs built in code are not migrated; rate and error settings round-trip |
+| UI construction | the page builds in NiceGUI's in-process user simulation (this caught a control-ordering bug) |
 | App logic | playback clock (play/pause/seek/end/restart), figure decimation and cursor, browser track payload, IMU figure ranges |
 
 The UI was additionally driven end-to-end in a headless browser: the preset loads, play/pause advance
@@ -283,8 +328,9 @@ console errors.
   anomalies and no deflection of the vertical.
 * The phone is rigidly mounted. There is no holder vibration, no engine/road vibration and no
   phone movement relative to the car.
-* Sensors are ideal in M2: no noise, bias, scale-factor or misalignment errors, no saturation or
-  quantisation. They are sampled at the simulation rate with perfect timestamps.
+* The sensor error model is Gaussian white noise plus a constant bias per axis (§6.2). The phone IMU
+  samples instantaneously, at a constant rate with perfect timestamps. Accelerometer and gyroscope
+  share one clock.
 * Earth rotation is off by default, and the transport rate is always neglected (see §6).
 
 ## 10. Known limitations and next steps
@@ -304,9 +350,9 @@ console errors.
   bound, not from surveyed geometry.
 * **Smoothing changes geometry slightly** (bounded and reported). It can be disabled
   (`smoothing_wavelength_m = 0`) to study the raw-polyline artefacts.
-* **IMU realism is intentionally minimal in M2.** M3 adds configurable noise and bias, kept separate from
-  the ideal stream for comparison. Later options: bias instability and random walk, temperature drift,
-  per-device profiles, timestamp jitter and sample-rate differences between accel and gyro.
+* **IMU error model is first-order.** White noise and constant bias only. Natural next steps are bias
+  instability and random walk (Gauss-Markov), temperature drift, scale factor and misalignment,
+  vibration, per-device profiles, timestamp jitter, and separate accel/gyro rates.
 * **Flat road → no pitch or roll.** On real grades (e.g. the Eisenhower tunnel at ~1.6%), gravity would
   leak into the forward accelerometer axis (0.16 m/s² at 1.6%), which matters for dead reckoning.
   Adding road elevation is a natural extension: the frames and the IMU model already handle a full
