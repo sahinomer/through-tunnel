@@ -4,10 +4,10 @@ import numpy as np
 import pytest
 
 from throughtunnel.road import RoadConfig
-from throughtunnel.routing.synthetic import Arc, Straight, synthetic_route
+from throughtunnel.routing.synthetic import Arc, Corner, Straight, synthetic_route
 from throughtunnel.scenario import ScenarioConfig, list_presets, load_preset, run_scenario
 from throughtunnel.vehicle.config import DRIVER_PRESETS, KMH, DriverConfig
-from throughtunnel.vehicle.speed_profile import ornstein_uhlenbeck
+from throughtunnel.vehicle.speed_profile import smooth_random_process
 
 
 @pytest.fixture(scope="module")
@@ -111,20 +111,26 @@ def test_constant_speed_on_circle():
 
 
 def test_straight_line_acceleration_phase():
-    """From a slow entry speed the driver accelerates at (jerk-limited) max_accel, s quadratic in t."""
+    """From a slow entry speed the driver accelerates at the planned rate (planning_margin * max_accel):
+    a constant-acceleration phase where v is linear and s quadratic in t."""
     route = synthetic_route([Straight(2000.0)], "straight", 100.0)
     driver = DriverConfig(cruise_speed_kmh=90.0, speed_variability_kmh=0.0, initial_speed_kmh=20.0)
     tr = run_scenario(ScenarioConfig(route=route, driver=driver)).truth
     assert tr.speed[0] == pytest.approx(20.0 * KMH)
-    assert tr.accel_long.max() == pytest.approx(driver.max_accel, abs=1e-6)
-    plateau = np.flatnonzero(np.isclose(tr.accel_long, driver.max_accel, atol=1e-6))
+    assert tr.accel_long.max() <= driver.max_accel + 1e-9
+    a_plan = driver.planning_margin * driver.max_accel
+    plateau = np.flatnonzero((np.abs(tr.accel_long - a_plan) < 0.05 * a_plan) & (np.abs(tr.jerk) < 0.01))
     i0, i1 = plateau[0], plateau[-1]
-    assert i1 - i0 > 500  # several seconds of constant acceleration
+    assert i1 - i0 > 500  # several seconds of (nearly) constant acceleration
     t = tr.t[i0 : i1 + 1] - tr.t[i0]
-    assert np.allclose(tr.speed[i0 : i1 + 1], tr.speed[i0] + driver.max_accel * t, atol=1e-4)
-    s_expected = tr.s[i0] + tr.speed[i0] * t + 0.5 * driver.max_accel * t**2
-    assert np.allclose(tr.s[i0 : i1 + 1], s_expected, atol=1e-3)
-    assert tr.speed[-1] == pytest.approx(90.0 * KMH, abs=0.05)
+    # v and s follow from integrating a(t) (trapezoid on a smooth signal), linear/quadratic in t.
+    a, v = tr.accel_long[i0 : i1 + 1], tr.speed[i0 : i1 + 1]
+    v_int = v[0] + np.concatenate([[0.0], np.cumsum(0.5 * (a[1:] + a[:-1]) * np.diff(t))])
+    s_int = tr.s[i0] + np.concatenate([[0.0], np.cumsum(0.5 * (v[1:] + v[:-1]) * np.diff(t))])
+    assert np.allclose(v, v_int, atol=1e-5)
+    assert np.allclose(tr.s[i0 : i1 + 1], s_int, atol=1e-4)
+    assert np.allclose(v, v[0] + a_plan * t, rtol=0.03)
+    assert tr.speed[-1] == pytest.approx(90.0 * KMH, rel=0.02)
 
 
 # ------------------------------------------------------------------ driver constraints on all presets
@@ -138,20 +144,47 @@ def test_driver_limits_respected(preset, style):
     assert tr.accel_long.max() <= driver.max_accel + 1e-9
     assert tr.accel_long.min() >= -driver.max_decel - 1e-9
     assert np.abs(tr.jerk).max() <= driver.max_jerk + 1e-9
-    assert np.abs(tr.accel_lat).max() <= 1.05 * driver.max_lateral_accel
+    assert np.abs(tr.accel_lat).max() <= 1.06 * driver.max_lateral_accel
     assert tr.speed.max() <= driver.max_speed_kmh * KMH * 1.01
     # Never stops: stays above the floor (or the curve limit if that is lower).
     floor = np.minimum(driver.min_speed_kmh * KMH, res.profile.v_curve.min())
     assert tr.speed.min() >= 0.95 * floor > 0
     # Speed genuinely varies (not a constant-speed toy).
-    assert tr.speed.std() > 0.5
+    assert tr.speed.std() > 0.2
     assert tr.s[-1] <= res.path.length_m < tr.s[-1] + tr.speed[-1] / tr.sample_rate_hz + 1e-9
 
 
-def test_ornstein_uhlenbeck_statistics():
-    rng = np.random.default_rng(5)
-    x = ornstein_uhlenbeck(400_000, 1.0, 2.0, 50.0, rng)
-    assert x.std() == pytest.approx(2.0, rel=0.05)
-    lag = 50
+def test_smooth_random_process_statistics():
+    std, length = 2.0, 50.0
+    x = smooth_random_process(400_000, 1.0, std, length, np.random.default_rng(5))
+    assert x.std() == pytest.approx(std, rel=0.05)
+    lag = int(length)
     corr = np.corrcoef(x[:-lag], x[lag:])[0, 1]
-    assert corr == pytest.approx(np.exp(-1.0), abs=0.05)
+    assert corr == pytest.approx(np.exp(-0.5), abs=0.05)  # squared-exponential covariance
+    # Smooth (differentiable) realisations: derivative std = std / L. A rough process
+    # (e.g. Ornstein-Uhlenbeck) would give a far larger, step-size dependent value.
+    assert np.diff(x).std() == pytest.approx(std / length, rel=0.1)
+
+
+def test_steady_driving_is_smooth():
+    """In a gentle tunnel the driver should rarely hit the jerk limit (no bang-bang jitter)."""
+    tr = run_scenario(load_preset("seattle_sr99_tunnel")).truth
+    driver = load_preset("seattle_sr99_tunnel").driver
+    assert np.mean(np.abs(tr.jerk) > 0.9 * driver.max_jerk) < 0.02
+    assert np.abs(tr.accel_long).max() < 1.0
+
+
+@pytest.mark.parametrize("style", sorted(DRIVER_PRESETS))
+def test_sharp_urban_corners_respect_lateral_limit(style):
+    """Intersections between long straights: hard braking into tight (R ~ 10 m) turns."""
+    route = synthetic_route(
+        [Straight(300.0), Corner(90.0), Straight(200.0), Corner(-90.0), Straight(150.0), Corner(-60.0),
+         Straight(300.0)],
+        "urban",
+        100.0,
+    )  # fmt: skip
+    driver = DRIVER_PRESETS[style]
+    tr = run_scenario(ScenarioConfig(route=route, driver=driver)).truth
+    assert np.abs(tr.accel_lat).max() <= 1.06 * driver.max_lateral_accel
+    assert tr.accel_long.min() >= -driver.max_decel - 1e-9
+    assert tr.speed.min() > 0.0

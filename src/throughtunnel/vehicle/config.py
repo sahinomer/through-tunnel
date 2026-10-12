@@ -26,7 +26,7 @@ class DriverConfig(BaseModel):
         4.0, ge=0, le=30, description="Std-dev of slow random variation of the preferred speed"
     )
     speed_correlation_length_m: float = Field(
-        400.0, gt=0, description="Correlation length of the preferred-speed variation"
+        300.0, gt=0, description="Length scale of the (smooth) preferred-speed variation"
     )
     initial_speed_kmh: float | None = Field(
         None, gt=0, description="Speed at the start of the route; None = the planned reference speed"
@@ -37,6 +37,9 @@ class DriverConfig(BaseModel):
     max_accel: float = Field(1.5, gt=0, le=6)
     max_decel: float = Field(2.5, gt=0, le=9)
     max_jerk: float = Field(2.0, gt=0, le=20, description="Longitudinal jerk limit")
+    planning_margin: float = Field(
+        0.8, gt=0, le=1, description="Fraction of accel/decel limits used to plan the reference speed"
+    )
     curve_preview_m: float = Field(
         15.0, ge=0, description="Curve speed limits are applied this far before/after the curvature peak"
     )
@@ -72,7 +75,7 @@ DRIVER_PRESETS: dict[str, DriverConfig] = {
         style="sporty",
         cruise_speed_kmh=85.0,
         speed_variability_kmh=6.0,
-        speed_correlation_length_m=300.0,
+        speed_correlation_length_m=200.0,
         max_lateral_accel=3.0,
         max_accel=2.5,
         max_decel=3.5,
