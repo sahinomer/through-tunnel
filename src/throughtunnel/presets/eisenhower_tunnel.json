@@ -1,0 +1,183 @@
+{
+ "schema_version": 1,
+ "name": "Eisenhower Tunnel, I-70 (westbound, 2.7 km)",
+ "description": "Eisenhower Memorial Tunnel, Colorado, portal to portal. Nearly straight with a slight bend. Posted limit 50 mph; the real ~1.6% grade is ignored (flat-road model).",
+ "route": {
+  "coordinates": [
+   [
+    39.679227,
+    -105.903419
+   ],
+   [
+    39.679163,
+    -105.903861
+   ],
+   [
+    39.679132,
+    -105.904134
+   ],
+   [
+    39.679109,
+    -105.904403
+   ],
+   [
+    39.679087,
+    -105.904773
+   ],
+   [
+    39.679076,
+    -105.90513
+   ],
+   [
+    39.679072,
+    -105.905553
+   ],
+   [
+    39.679075,
+    -105.905934
+   ],
+   [
+    39.679283,
+    -105.914721
+   ],
+   [
+    39.679328,
+    -105.918761
+   ],
+   [
+    39.679309,
+    -105.920863
+   ],
+   [
+    39.679045,
+    -105.933953
+   ],
+   [
+    39.679027,
+    -105.934548
+   ],
+   [
+    39.678992,
+    -105.935143
+   ]
+  ],
+  "source": "osrm",
+  "start": {
+   "lat": 39.679227399999995,
+   "lon": -105.9034194
+  },
+  "end": {
+   "lat": 39.67899230002182,
+   "lon": -105.93514309711941
+  },
+  "provider_distance_m": 2724.0,
+  "provider_duration_s": 152.4,
+  "metadata": {
+   "base_url": "https://router.project-osrm.org",
+   "fetched_utc": "2026-10-12T10:04:22+00:00",
+   "road_names": [
+    "I 70"
+   ],
+   "intersections": [
+    {
+     "lat": 39.679227,
+     "lon": -105.903419,
+     "classes": []
+    },
+    {
+     "lat": 39.678992,
+     "lon": -105.935143,
+     "classes": []
+    }
+   ],
+   "tunnel_osm_way": 17025436,
+   "tunnel_name": "Eisenhower Memorial Tunnel",
+   "tunnel_coordinates": [
+    [
+     39.6792274,
+     -105.9034194
+    ],
+    [
+     39.6791631,
+     -105.9038606
+    ],
+    [
+     39.6791321,
+     -105.9041342
+    ],
+    [
+     39.6791087,
+     -105.9044026
+    ],
+    [
+     39.6790867,
+     -105.9047726
+    ],
+    [
+     39.6790763,
+     -105.9051302
+    ],
+    [
+     39.6790723,
+     -105.9055531
+    ],
+    [
+     39.6790752,
+     -105.905934
+    ],
+    [
+     39.6792828,
+     -105.9147209
+    ],
+    [
+     39.6793284,
+     -105.9187612
+    ],
+    [
+     39.6793087,
+     -105.9208633
+    ],
+    [
+     39.6790449,
+     -105.933953
+    ],
+    [
+     39.6790269,
+     -105.9345478
+    ],
+    [
+     39.6789923,
+     -105.9351431
+    ]
+   ],
+   "maxspeed": "50 mph"
+  }
+ },
+ "road": {
+  "min_vertex_spacing_m": 0.5,
+  "spike_angle_deg": 150.0,
+  "spike_max_segment_m": 25.0,
+  "max_corner_cut_m": 4.0,
+  "smoothing_wavelength_m": 150.0,
+  "smoothing_corridor_m": 1.0,
+  "resample_step_m": 1.0
+ },
+ "driver": {
+  "style": "normal",
+  "cruise_speed_kmh": 80.0,
+  "speed_variability_kmh": 4.0,
+  "speed_correlation_length_m": 400.0,
+  "initial_speed_kmh": null,
+  "min_speed_kmh": 10.0,
+  "max_speed_kmh": 130.0,
+  "max_lateral_accel": 2.0,
+  "max_accel": 1.5,
+  "max_decel": 2.5,
+  "max_jerk": 2.0,
+  "curve_preview_m": 15.0,
+  "speed_tracking_gain": 0.8,
+  "accel_response_rate": 4.0
+ },
+ "seed": 2,
+ "sample_rate_hz": 100.0
+}
