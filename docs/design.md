@@ -33,11 +33,32 @@ RouteProvider ──► RawRoute ──► RoadPath ──► SpeedProfile ─�
 | Decision | Choice | Alternatives considered and why not |
 |---|---|---|
 | UI | **NiceGUI 3** (FastAPI and Vue under the hood) with its built-in Leaflet map and Plotly | **Dash + dash-leaflet**: dash-leaflet's last release targets Dash 3, while Dash is now 4.x, so there is a compatibility risk on Python 3.14 and a heavy dependency tree. **Streamlit**: its rerun-the-script model is a poor fit for smooth 20 Hz playback. **Custom FastAPI + JS**: more code in two languages; NiceGUI already runs on FastAPI if REST endpoints are needed later. |
-| Playback | Server-driven `ui.timer` (20 Hz) with incremental Leaflet and Plotly updates (`setLatLng`, `addLatLng`, `Plotly.relayout` on the cursor shape only) | Re-sending figures each frame is too heavy. Client-side JS playback would be smoother but duplicates interpolation logic in JS. |
+| Playback | The server owns the playback clock and drives readouts, slider and plot cursor (`Plotly.relayout` on the cursor shape only). **Map motion is rendered in the browser** (`app/static/track_player.js`) from a 10 Hz copy of the track, interpolated every animation frame and re-anchored to the server clock on play/pause/seek/speed changes | Server-pushed marker positions stuttered (see §2.1). Moving the whole clock client-side would duplicate the playback logic in JS. |
 | Routing | **OSRM HTTP API** (public demo server, configurable URL) | **OSMnx + networkx** would give OSM tags and offline graphs, but pulls in geopandas/shapely/pyproj and depends on Overpass, which was overloaded (HTTP 504) during development. The fetched geometry is stored in scenario files, so scenarios never need the network again. |
 | Geodesy | Own WGS84 geodetic↔ECEF↔ENU (~60 lines, exact, tested) | pyproj or pymap3d: unnecessary dependencies for one well-known transform. |
 | Numerics | numpy, scipy (sparse solve, B-splines, FFT convolution) | |
 | Config / persistence | pydantic v2 models → JSON | Validation of ranges and lossless JSON round-trip for free. |
+
+### 2.1 Playback jitter investigation
+
+After milestone 1, the marker visibly jittered during playback, especially at 5×. I measured the
+cause before changing anything:
+
+* **The simulated positions are continuous.** Step length = v·dt to 0.04 µm, the second difference of
+  position equals the true acceleration, and sampling the truth at ideal 20 Hz ticks gives uniform
+  displacements (CV 0.5% = the real speed variation).
+* **Rendering was the cause.** NiceGUI timer ticks reached the browser at ~16 Hz (62 ms) while it draws
+  at 60–75 fps. The marker held still for 4–5 frames and then jumped. The jump grows with playback
+  speed × zoom (0–1 px at zoom 15 and 1×; 5–9 px at zoom 17 and 5×). At low on-screen speed,
+  Leaflet's whole-pixel rounding turned this into irregular 0/1 px steps (58% of updates moved nothing).
+  The orange trail was appended every 0.5 s of simulation time, so its end lagged the marker in a
+  0–10 m sawtooth.
+* **Fix (rendering only, physics unchanged).** The browser interpolates the marker, heading tick and
+  trail from a decimated track every animation frame. The trail is now drawn up to the last sample plus
+  a short link to the marker. Result at zoom 17 and 5×: the marker advances in 92% of frames by
+  1.7 px on average (= on-screen speed / frame rate), instead of 5–9 px jumps 16 times a second. The
+  periodic server re-sync is "soft": both clocks run in real time, so it only corrects genuine drift
+  (> max(0.25 s, 0.1 s × rate)) and ignores ±40 ms timing noise.
 
 ## 3. Coordinate frames and conventions
 

@@ -2,21 +2,29 @@
 
 The page only orchestrates: it collects parameters, calls the core simulation
 (`throughtunnel.scenario.run_scenario`) and renders the result. No physics here.
+
+Playback: the server owns the playback clock (readouts, plot cursor, slider at ~16 Hz). Map
+motion is rendered in the browser (`static/track_player.js`) from a decimated copy of the track,
+interpolated every animation frame and re-anchored to the server clock on each state change.
+Server-pushed marker positions made the vehicle hold still for several frames and then jump.
 """
 
 from __future__ import annotations
 
 import html
+import json
 import math
 import re
 import time
+from pathlib import Path
 from typing import Any
 
 import numpy as np
-from nicegui import events, run, ui
+from nicegui import context, events, run, ui
 
 from throughtunnel.app.playback import SPEED_OPTIONS, PlaybackController
 from throughtunnel.app.plots import cursor_relayout, empty_figure, ground_truth_figure
+from throughtunnel.app.track import playback_track
 from throughtunnel.road import TUNNEL_MAX_LENGTH_M, TUNNEL_MIN_LENGTH_M, RoadConfig
 from throughtunnel.routing import LatLon, OsrmRouteProvider, RawRoute, RoutingError
 from throughtunnel.scenario import (
@@ -30,11 +38,11 @@ from throughtunnel.scenario import (
 from throughtunnel.vehicle.config import DRIVER_PRESETS, DriverConfig
 
 DEFAULT_PRESET = "seattle_sr99_tunnel"
-TICK_S = 0.05  # 20 Hz UI refresh
-PLOT_CURSOR_EVERY = 2  # ticks -> 10 Hz
-SLIDER_EVERY = 5  # ticks -> 4 Hz
-TRAIL_STEP_S = 0.5  # spacing of travelled-trail points (simulation time)
-HEADING_ARROW_M = 40.0
+TICK_S = 0.05  # server UI refresh (readouts, plot cursor, slider); map motion is client-side
+PLOT_CURSOR_EVERY = 2  # ticks
+SLIDER_EVERY = 5  # ticks
+RESYNC_EVERY = 100  # ticks: periodic re-anchoring of the browser clock while playing (safety net)
+TRACK_PLAYER_JS = (Path(__file__).parent / "static" / "track_player.js").read_text(encoding="utf-8")
 
 ROUTE_STYLE_RAW = {"color": "#555555", "weight": 2, "dashArray": "4 6", "opacity": 0.9}
 ROUTE_STYLE_PATH = {"color": "#1565c0", "weight": 5, "opacity": 0.55}
@@ -57,15 +65,17 @@ class SimulatorPage:
         self.pick_start: LatLon | None = None
         self.pick_end: LatLon | None = None
         self.layers: dict[str, Any] = {}
+        self.client = context.client
         self._loading_controls = False
         self._last_tick = time.perf_counter()
         self._tick_count = 0
-        self._trail_until = -1.0
+        self._shown_playing: bool | None = None
         self._busy = False
         self._build()
 
     # ================================================================== layout
     def _build(self) -> None:
+        ui.add_body_html(f"<script>{TRACK_PLAYER_JS}</script>")
         with ui.header().classes("items-center py-2"):
             ui.label("ThroughTunnel").classes("text-lg font-bold")
             ui.label("Vehicle simulation · ground truth (milestone 1)").classes("text-sm opacity-80")
@@ -115,7 +125,7 @@ class SimulatorPage:
                     {s: f"{s:g}×" for s in SPEED_OPTIONS},
                     value=1.0,
                     label="Speed",
-                    on_change=lambda e: setattr(self.playback, "speed", float(e.value)),
+                    on_change=self._on_speed,
                 ).classes("w-24")
                 self.time_label = ui.label("0.0 / 0.0 s").classes("text-sm font-mono ml-auto")
             self.progress = ui.slider(min=0.0, max=1.0, step=0.1, value=0.0).classes("w-full")
@@ -229,7 +239,7 @@ class SimulatorPage:
         self.route = route
         self.result = None
         self.playback.load(0.0)
-        self._remove_layers("raw", "path", "vehicle", "heading", "trail", "start", "end")
+        self._remove_layers("raw", "path", "vehicle", "heading", "trail", "link", "start", "end")
         coords = [list(c) for c in route.coordinates]
         self.layers["raw"] = self.map.generic_layer(name="polyline", args=[coords, ROUTE_STYLE_RAW])
         self._draw_endpoint("start", coords[0], "#2e7d32")
@@ -312,10 +322,11 @@ class SimulatorPage:
         self.progress.props(f"max={result.truth.duration_s:.2f}")
         self.progress.value = 0.0
 
-        self._remove_layers("path", "vehicle", "heading", "trail")
+        self._remove_layers("path", "vehicle", "heading", "trail", "link")
         path_ll = result.path.latlon(step_m=5.0).tolist()
         self.layers["path"] = self.map.generic_layer(name="polyline", args=[path_ll, ROUTE_STYLE_PATH])
         self.layers["trail"] = self.map.generic_layer(name="polyline", args=[[], TRAIL_STYLE])
+        self.layers["link"] = self.map.generic_layer(name="polyline", args=[[], TRAIL_STYLE])
         self.layers["heading"] = self.map.generic_layer(
             name="polyline", args=[[path_ll[0], path_ll[0]], {"color": "#000000", "weight": 3}]
         )
@@ -326,7 +337,9 @@ class SimulatorPage:
                 {"radius": 9, "color": "#000000", "weight": 2, "fillColor": "#ffb300", "fillOpacity": 1.0},
             ],
         )
-        self._trail_until = -1.0
+        ids = {k: self.layers[k].id for k in ("vehicle", "heading", "trail", "link")}
+        track = json.dumps(playback_track(result.truth))
+        self.client.run_javascript(f"ttPlayer.load({self.map.id}, {track}, {json.dumps(ids)})")
         self.plot.update_figure(ground_truth_figure(result))
         self._update_route_info()
         self._render(force=True)
@@ -366,68 +379,65 @@ class SimulatorPage:
         ui.download.content(self.result.config.model_dump_json(indent=1), f"{slug}.json", "application/json")
 
     # ================================================================== playback
+    def _sync_client(self, soft: bool = False) -> None:
+        """Re-anchor the browser's map animation to the server playback clock."""
+        pb = self.playback
+        args = f"{pb.t:.4f}, {pb.speed}, {'true' if pb.playing else 'false'}, {'true' if soft else 'false'}"
+        self.client.run_javascript(f"window.ttPlayer && ttPlayer.sync({args})")
+
+    def _after_control(self) -> None:
+        self._last_tick = time.perf_counter()
+        self._sync_client()
+        self._render(force=True)
+
     def _toggle_play(self) -> None:
         self.playback.toggle()
-        self._last_tick = time.perf_counter()
-        self._render(force=True)
+        self._after_control()
 
     def _restart(self) -> None:
         self.playback.restart()
-        self._last_tick = time.perf_counter()
-        self._render(force=True)
+        self._after_control()
+
+    def _on_speed(self, e: events.ValueChangeEventArguments) -> None:
+        self.playback.speed = float(e.value)
+        self._after_control()
 
     def _on_seek(self, e: events.GenericEventArguments) -> None:
         self.playback.seek(float(e.args))
-        self._render(force=True)
+        self._after_control()
 
     def _on_plot_click(self, e: events.GenericEventArguments) -> None:
         points = e.args.get("points") or []
         if points and self.result is not None:
             self.playback.seek(float(points[0]["x"]))
-            self._render(force=True)
+            self._after_control()
 
     def _tick(self) -> None:
         now = time.perf_counter()
-        wall_dt = min(now - self._last_tick, 0.25)  # avoid jumps after the tab was throttled
+        wall_dt = min(now - self._last_tick, 1.0)  # guard against a stalled server event loop
         self._last_tick = now
         self._tick_count += 1
-        if self.result is not None and self.playback.advance(wall_dt):
-            self._render()
+        if self.result is None or not self.playback.advance(wall_dt):
+            return
+        if not self.playback.playing:
+            self._sync_client()  # reached the end
+        elif self._tick_count % RESYNC_EVERY == 0:
+            self._sync_client(soft=True)
+        self._render()
 
     def _render(self, force: bool = False) -> None:
         if self.result is None:
             return
         tr, t = self.result.truth, self.playback.t
-        st = tr.sample(t)
-        pos = [st["lat"], st["lon"]]
-        self.layers["vehicle"].run_method("setLatLng", pos)
-        yaw = st["yaw"]
-        tip = [st["x"] + HEADING_ARROW_M * math.cos(yaw), st["y"] + HEADING_ARROW_M * math.sin(yaw), 0.0]
-        tlat, tlon, _ = tr.frame.to_geodetic(np.array([tip]))
-        self.layers["heading"].run_method("setLatLngs", [pos, [float(tlat[0]), float(tlon[0])]])
-        self._update_trail(t, pos)
-
         if force or self._tick_count % PLOT_CURSOR_EVERY == 0:
             self.plot.run_plot_method("relayout", cursor_relayout(t))
         if force or self._tick_count % SLIDER_EVERY == 0 or not self.playback.playing:
             self.progress.value = round(t, 1)
         self.time_label.text = f"{t:6.1f} / {tr.duration_s:.1f} s"
-        self.play_button.props(f"icon={'pause' if self.playback.playing else 'play_arrow'}")
-        self.readouts.content = self._readout_html(st)
-
-    def _update_trail(self, t: float, pos: list[float]) -> None:
-        tr = self.result.truth  # type: ignore[union-attr]
-        trail = self.layers["trail"]
-        if t < self._trail_until or self._trail_until < 0:
-            # Seek / restart: rebuild the travelled part from the ground truth.
-            step = max(1, round(TRAIL_STEP_S * tr.sample_rate_hz))
-            n = int(np.searchsorted(tr.t, t, side="right"))
-            pts = [*np.column_stack([tr.lat[:n:step], tr.lon[:n:step]]).tolist(), pos]
-            trail.run_method("setLatLngs", pts)
-            self._trail_until = t
-        elif t >= self._trail_until + TRAIL_STEP_S:
-            trail.run_method("addLatLng", pos)
-            self._trail_until = t
+        if self._shown_playing != self.playback.playing:
+            self._shown_playing = self.playback.playing
+            self.play_button.props(f"icon={'pause' if self.playback.playing else 'play_arrow'}")
+        self.readouts.content = self._readout_html(tr.sample(t))
 
     @staticmethod
     def _readout_html(st: dict[str, float]) -> str:

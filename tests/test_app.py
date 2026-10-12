@@ -1,5 +1,6 @@
 """UI-independent parts of the app: playback clock and figure building."""
 
+import numpy as np
 import pytest
 
 from throughtunnel.app.playback import PlaybackController
@@ -54,3 +55,21 @@ def test_page_module_imports():
     from throughtunnel.app import page
 
     assert page.DEFAULT_PRESET in list_presets()
+
+
+def test_playback_track_for_browser():
+    from throughtunnel.app.track import HEADING_ARROW_M, playback_track
+
+    tr = run_scenario(load_preset("synthetic_demo_track")).truth
+    track = playback_track(tr, rate_hz=10.0)
+    t = np.array(track["t"])
+    assert t[0] == 0.0 and t[-1] == pytest.approx(tr.duration_s)  # covers the whole run
+    assert np.all(np.diff(t) > 0) and np.diff(t).max() <= 0.1 + 1e-9
+    assert {len(v) for v in track.values()} == {len(t)}
+    # Positions are the ground truth (to the 1e-8 deg rounding), the heading tip is ahead of the vehicle.
+    i = len(t) // 2
+    k = int(np.argmin(np.abs(tr.t - t[i])))
+    assert track["lat"][i] == pytest.approx(tr.lat[k], abs=1e-8)
+    enu = tr.frame.to_enu(track["hlat"][i], track["hlon"][i])
+    ahead = (enu[0] - tr.x[k]) * np.cos(tr.yaw[k]) + (enu[1] - tr.y[k]) * np.sin(tr.yaw[k])
+    assert ahead == pytest.approx(HEADING_ARROW_M, abs=0.01)
