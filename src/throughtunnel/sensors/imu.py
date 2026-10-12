@@ -1,5 +1,7 @@
 """Smartphone IMU (accelerometer + gyroscope) measurement model.
 
+``ImuStream`` itself is defined in ``throughtunnel.observations`` (re-exported here).
+
 ``ImuStream`` is an *observation*: exactly what a phone reports, with no ground truth attached.
 The simulator produces it here; a loader for recorded phone logs will produce the same type,
 so downstream positioning code cannot tell (and must not care) where it came from.
@@ -26,13 +28,13 @@ local frame (v / R_earth ~ 3e-6 rad/s) is neglected.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Literal
 
 import numpy as np
 from numpy.typing import NDArray
 from pydantic import BaseModel, ConfigDict, Field
 
+from throughtunnel.observations import ImuStream
 from throughtunnel.sensors.errors import STANDARD_GRAVITY, ImuErrorConfig
 from throughtunnel.sensors.mounting import PhoneMount
 from throughtunnel.vehicle.truth import GroundTruth
@@ -42,8 +44,6 @@ OMEGA_EARTH = 7.292115e-5  # WGS84 Earth rotation rate [rad/s]
 _GAMMA_E = 9.7803253359
 _K_SOMIGLIANA = 0.00193185265241
 _E2 = 6.69437999014e-3
-
-ANDROID_FRAME = "android"  # x: right edge, y: top edge, z: out of the screen; m/s^2 and rad/s
 
 
 def normal_gravity(lat_deg: NDArray[np.float64] | float) -> NDArray[np.float64]:
@@ -70,43 +70,6 @@ def imu_timestamps(t_end: float, rate_hz: float) -> NDArray[np.float64]:
     """Sample times k / rate_hz covering [0, t_end] (a sensor clock started with the run)."""
     n = int(np.floor(t_end * rate_hz + 1e-9)) + 1
     return np.arange(n) / rate_hz
-
-
-@dataclass(frozen=True)
-class ImuStream:
-    """Timestamped accelerometer and gyroscope samples in the phone's sensor frame.
-
-    Deliberately carries no simulation truth: in particular not the phone mounting, which a real
-    app does not know (estimating the phone-to-vehicle rotation is part of the positioning problem).
-    """
-
-    t: NDArray[np.float64]  # [s], strictly increasing
-    accel: NDArray[np.float64]  # (N, 3) specific force [m/s^2]
-    gyro: NDArray[np.float64]  # (N, 3) angular rate [rad/s]
-    frame: str = ANDROID_FRAME
-    source: str = "simulated:ideal"
-    metadata: dict = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        n = len(self.t)
-        if self.accel.shape != (n, 3) or self.gyro.shape != (n, 3):
-            raise ValueError("accel and gyro must have shape (len(t), 3)")
-        if n > 1 and not np.all(np.diff(self.t) > 0):
-            raise ValueError("timestamps must be strictly increasing")
-
-    def __len__(self) -> int:
-        return len(self.t)
-
-    @property
-    def rate_hz(self) -> float:
-        return (len(self.t) - 1) / float(self.t[-1] - self.t[0])
-
-    def at(self, t: float) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-        """Linearly interpolated (accel, gyro) at time ``t`` (display helper)."""
-        tc = min(max(t, float(self.t[0])), float(self.t[-1]))
-        accel = np.array([np.interp(tc, self.t, self.accel[:, k]) for k in range(3)])
-        gyro = np.array([np.interp(tc, self.t, self.gyro[:, k]) for k in range(3)])
-        return accel, gyro
 
 
 def ideal_imu(truth: GroundTruth, config: ImuConfig | None = None) -> ImuStream:
