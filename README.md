@@ -144,6 +144,8 @@ and reported.
   interface and evaluation harness, then positioning algorithms. Still open: data export and a
   recorded-data loader producing the same `ImuStream`.
 
+What is still missing before positioning, and the open design decisions: [docs/readiness_review.md](docs/readiness_review.md).
+
 ## Data and services
 
 Map tiles and road geometry © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors
