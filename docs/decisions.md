@@ -1,0 +1,59 @@
+# Decision log
+
+Every design decision that shapes the project, in one place. Decisions are never deleted. When one
+changes, the old entry is marked **superseded**, with a pointer to its replacement.
+
+Status values:
+* **active**: agreed and in force;
+* **proposed**: suggested by the assistant, awaiting review;
+* **superseded**: replaced by a later decision.
+
+Source: *brief* = original task brief; *review N* = user feedback at review N; *impl* = made during
+implementation and accepted at a later review.
+
+## Simulation (in force)
+
+| ID | Decision | Status | Source |
+|---|---|---|---|
+| D01 | Python 3.14 + uv; NiceGUI + Plotly UI; numpy/scipy; pydantic configs; OSRM routing on OSM data; own WGS84/ENU geodesy. Rationale in design.md §2. | active | impl, accepted review 1 |
+| D02 | Frames: local ENU navigation frame, ISO 8855 vehicle body frame (x fwd, y left, z up), **Android** phone sensor axes. No iPhone convention. | active | review 2 |
+| D03 | Road processing: corner fillets + Whittaker smoothing (λc = 150 m, max cut 4 m, corridor 1 m). Keep the defaults, but **do not assume they suit every OSM road**: re-check on new real geometries. | active | review 1 |
+| D04 | Driver model and defaults: smooth random speed variation, curve limit, planning margin 0.8, jerk-limited tracking. Approved as realistic. | active | review 1 |
+| D05 | Simplifying assumptions for the first positioning experiments: the vehicle follows the route, flat road, no slip, no suspension, **no stop-and-go**, phone rigidly mounted, configurable noise and bias. They isolate error sources and **must not be presented as complete real-world realism**. | active | review 4 |
+| D06 | Phone IMU on its own constant-rate clock, default **200 Hz**, configurable. Samples are evaluated exactly at their timestamps, never duplicated. | active | review 3 |
+| D07 | IMU errors: Gaussian white noise (noise density) + constant bias, four independent switches, sliders in physical units, ideal readings kept, seeded. Bias instability and temperature drift come later. | active | review 3 |
+| D08 | Ground truth is strictly separated from observations. Truth is for diagnostics and evaluation only. | active | brief, review 4 |
+| D09 | Jitter fix is rendering only: the browser interpolates the map motion and the server owns the clock. | active | review 2 |
+| D10 | Tunnel presets run portal to portal; the whole route is GPS-denied (milestone 1). | **superseded by D11** | impl |
+
+## Scenario, GPS and positioning (decided at review 4)
+
+| ID | Decision | Status | Source |
+|---|---|---|---|
+| D11 | A scenario is defined by **four map-selected points**: A start (GPS available), B tunnel entrance (GPS degrades/stops), C tunnel exit (GPS may reacquire after a delay), D end (recovery observed). A–D follows real OSM roads; B–C is a *simulated* tunnel (ideally 0.5–5 km) and need not be a real tunnel. Keep the selection UI simple. | active | review 4 |
+| D12 | **No OSM tunnel detection.** Replaces the readiness-review idea of using OSM `tunnel=yes` ways and cached OSRM intersection classes. | active (supersedes readiness_review §1.1 tunnel extents, design.md §10 "tunnel extent") | review 4 |
+| D13 | Map display: B–C drawn as a thick, semi-transparent grey line *under* the route; route, points and vehicle stay clearly visible. The three phases (A–B approach, B–C tunnel, C–D recovery) must be distinguishable. | active | review 4 |
+| D14 | Navigation exit announcement = a configurable **navigation event inside B–C** (a distance along the route), separate from the physical tunnel exit C. The estimator decides when to announce from its estimated progress. Evaluation compares with the true crossing. A simple point is enough; no junction model. | active (supersedes readiness_review §1.1 "find a tunnel with an internal exit") | review 4 |
+| D15 | Information policy. The estimator **may** use timestamped (imperfect) phone sensor data, GPS observations as they arrive, the navigation route and its road geometry, map information relevant to navigation (B and C locations), and known navigation targets. It **must not** use truth position, velocity, acceleration or orientation, future measurements, hidden simulation parameters (e.g. the injected bias), the actual future trajectory, or crossing/arrival times. | active | review 4 |
+| D16 | GPS = **phone-style location fixes**, not raw GNSS. Eventually: ~1 Hz, temporally correlated errors, degradation near B, no fixes in B–C, configurable reacquisition delay after C. Essential first: realistic pre-tunnel fixes and a clear transition to loss. Estimator initialisation comes from simulated fixes, **never** from the truth state. GPS recovery remains a required later feature. | active | review 4 |
+| D17 | **Causal processing**: a timestamp-ordered runner feeds observations incrementally. Offline (non-real-time) execution is allowed; future information is not. Smoothers that need future samples are not allowed as live estimators. | active | review 4 |
+| D18 | Architecture: **inheritance** for the common estimator contract, **composition / pipeline stages** for reusable processing (preprocessing, causal filtering, frames, bias handling, map constraints, probabilistic filtering where applicable). No unnecessary subclasses; a Kalman filter may be a stateful estimator rather than a "post-processing stage". | active | review 4 |
+| D19 | Estimators are compared on **identical observations and noise realisations** unless an experiment explicitly varies them. Multiple estimated tracks are drawn on one map with ground truth, each overlay can be toggled, and errors are compared. | active | review 4 |
+| D20 | **No OBD / Android Auto / external vehicle speed** in the main solution. External speed is an optional, separate experiment later. | active (supersedes readiness_review §3 candidate list) | review 4 |
+| D21 | Map vs truth: the estimator never receives the simulator's ground-truth trajectory as a map. Initially it gets the **original route geometry** (OSRM polyline) while the vehicle follows the processed/smoothed path. Controlled map errors come later. | active | review 4 |
+| D22 | Start simple: physical/mathematical dead reckoning before probabilistic methods. **No advanced probabilistic methods before a working, measurable baseline.** | active | review 4 |
+| D23 | Evaluation: along-track, cross-track and total error; error over time and distance; error at the tunnel exit; announcement timing error; GPS recovery behaviour/time; repeated seeds; method comparisons; uncertainty calibration where available. Reproducible, truth isolated from inputs, measurable rather than "visually convincing". | active | review 4 |
+| D24 | Backlog experiments (not initial): road grade, stop-and-go traffic, map uncertainty, vehicle-speed availability. | active | review 4 |
+
+## Proposed (awaiting review)
+
+| ID | Proposal | Why |
+|---|---|---|
+| PD1 | Move observation types (`ImuStream`, new `GnssStream`, `RouteMap`, `NavigationEvent`) into a neutral `throughtunnel/observations.py` that imports no simulator module. Enforce the boundary with a subprocess test: importing `throughtunnel.positioning` must not load `vehicle`, `road`, `scenario` or `sensors`. | Today `ImuStream` lives in `sensors/imu.py`, which imports `GroundTruth`, so positioning code would load the truth module just by using the observation type. |
+| PD2 | GPS measures the **phone** position (the antenna is in the phone), and evaluation compares estimates with the true **phone** position (reference point + lever arm), evaluated exactly at estimate timestamps. | Truth currently refers to the rear-axle reference point; with a lever arm the two differ by up to ~2–3 m. |
+| PD3 | Along/cross-track errors are defined against the **true path tangent at the true position at the same timestamp**. Event crossing times come from projecting map-defined points onto the true path. | The map polyline and the smoothed truth path have different arc lengths (corner cuts up to ~4 m, ~1 m per 3 km). A single, truth-side frame avoids mixing parametrisations. |
+| PD4 | The GPS loss and reacquisition boundaries are **not perfectly sharp**: randomised loss point / short degradation zone before B, randomised reacquisition delay after C. | A deterministic cut-off exactly at B tells the estimator the exact entrance time, an unrealistically perfect along-track anchor. |
+| PD5 | Phone mounting for the first baseline: estimate levelling (gravity) from approach data. Either **declare** the yaw misalignment as an estimator assumption, used only in aligned-mount scenarios, or **estimate** it from GPS speed/bearing vs. gyro and accelerometer during the approach. Report which mode was used. | The mounting is hidden truth. Its yaw part is only observable when the approach has turns or speed changes, and levelling errors act like accelerometer bias (1° ≈ 17 mg). |
+| PD6 | Estimator tuning (assumed noise densities etc.) comes from **the estimator's own configuration** (datasheet-level nominal values), never read from the scenario's error config. Later experiments mismatch tuning on purpose. | Prevents hidden-parameter leakage and "matched tuning" optimism. |
+| PD7 | Schema v4 for A–D scenarios. v3 files (no approach/recovery) load as "legacy: B = A, C = D". Initialisation-dependent features warn on them. | Old geometry cannot be extended offline. |
+| PD8 | Exit announcement is a **shared component** that consumes any estimator's state (projected onto the route map if the estimator has no along-route state). Differences in announcement timing then come from the estimators, not from per-estimator announcement logic. | Fair comparison; composition over inheritance (D18). |

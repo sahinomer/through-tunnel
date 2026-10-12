@@ -1,3 +1,21 @@
+> **Historical document (2026-10-12).** Superseded by [roadmap.md](roadmap.md) and
+> [decisions.md](decisions.md) after review 4. It is kept unchanged below so no earlier reasoning is
+> lost. Where each item went:
+>
+> | Item below | Disposition |
+> |---|---|
+> | §1.1 tunnel extents from OSM `tunnel=yes` | **superseded** by D11/D12 (four map points A–D) → P2 |
+> | §1.1 find a tunnel with an internal exit | **superseded** by D14 (configurable navigation event) → P2, A9 |
+> | §1.1 approach/exit sections, OSRM carriageway snapping | kept → P2 (OSRM `bearings` or point placement) |
+> | §1.2 GPS (Android Location-level fixes) | **confirmed** by D16 → P5 (essential subset), R4 (details), A10 (recovery) |
+> | §1.3 observation interface, causal runner | **confirmed** by D15/D17/D18 → P1, P6, P7 |
+> | §1.4 evaluation harness, reference point | **confirmed** by D23 → P8, A9, A11; reference point → PD2/PD3 |
+> | §1.5 map information policy, map errors | **decided**: D15, D21 → R3 |
+> | §2 flat road, no stops, sensor errors, vibration | **backlog** (D05, D24) → R1, R2, R5 |
+> | §3 OBD / Android Auto speed | **excluded from the main solution** (D20) → optional R6 |
+> | §3 curvature matching, barometer/magnetometer | A7; barometer/magnetometer not planned |
+> | §4 export, real-phone loader, timing, OSRM | F6, F7, R5, P2 |
+
 # Readiness review before positioning
 
 Status: the vehicle simulation and the smartphone IMU (rate, mounting, white noise, constant bias) are

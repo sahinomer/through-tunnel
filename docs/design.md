@@ -1,8 +1,13 @@
 # Design notes: vehicle and smartphone IMU simulation
 
 This document records the technical decisions, models, conventions, assumptions and known limitations
-of the simulator. It is meant to be read alongside the code. Every claim about accuracy below is
-enforced by a test in `tests/`.
+of the simulator **as implemented**. It is meant to be read alongside the code. Accuracy claims are
+enforced by tests (`tests/`) unless marked as a *one-off measurement*; see the evidence note in §8.
+
+Related documents:
+* [decisions.md](decisions.md): decision log, including superseded decisions.
+* [roadmap.md](roadmap.md): status, remaining tasks, open decisions.
+* [positioning_design.md](positioning_design.md): the positioning proposal, not implemented yet.
 
 ## 1. Architecture
 
@@ -28,6 +33,8 @@ RouteProvider ──► RawRoute ──► RoadPath ──► SpeedProfile ─�
   true phone mounting (a test guards this). A recorded-phone loader will produce the same type, so
   positioning code written against `ImuStream` works on both. Positioning code will never import
   `GroundTruth`, and a test will enforce that import boundary once that package exists.
+  **Known gap:** `ImuStream` is currently defined in `sensors/imu.py`, which imports `GroundTruth`, so
+  that test cannot pass until the observation types move to a neutral module (roadmap P1, PD1).
 
 ## 2. Technology decisions
 
@@ -104,7 +111,8 @@ turns the node pattern into a fake oscillating yaw rate. The first prototype sho
 5. **Arc-length quintic spline.** The smoothed points are re-parametrised by true arc length
    (|dr/ds| − 1 < 1e-6 on all presets). This gives continuous heading, curvature and dκ/ds analytically.
 
-**Why not just a Gaussian filter.** Measured on an R = 300 m arc mapped like a hand-digitised way
+**Why not just a Gaussian filter.** *One-off measurement* (only the default row is enforced by
+a test, with looser ±12 % bounds) on an R = 300 m arc mapped like a hand-digitised way
 (uneven node spacing 2–34 m, 0.3 m jitter; the `uneven_jittered_circle` test fixture). Smoothing is
 applied after filleting, and κ·R is evaluated well inside the arc:
 
@@ -305,6 +313,18 @@ by autoscaling, e.g. the ~1e-5 m/s² change of normal gravity along a 3 km route
 | UI construction | the page builds in NiceGUI's in-process user simulation (this caught a control-ordering bug) |
 | App logic | playback clock (play/pause/seek/end/restart), figure decimation and cursor, browser track payload, IMU figure ranges |
 
+**Evidence note.** The table above is enforced by tests. These figures are *one-off measurements*
+recorded during development and are not re-checked automatically:
+* the smoother comparison table (§4);
+* the jitter study figures (§2.1);
+* the ~0.06 m/s² lever-arm magnitude (§6);
+* the real-tunnel deviation 0.7–0.9 m and radius 700–900 m (§4; the tests use looser bounds,
+  < 1.5 m and > 300 m);
+* the browser checks below.
+
+The browser checks below were made with ad-hoc Playwright scripts that are **not in the repository**
+(roadmap F9).
+
 The UI was additionally driven end-to-end in a headless browser: the preset loads, play/pause advance
 correctly in wall-clock time, seek lands on the requested time, the plot cursor matches the playback
 time, clicking two map points produces an OSRM route, regeneration with another driver style works,
@@ -323,7 +343,9 @@ console errors.
 * No side-slip: the velocity is always along body-x. Kinematic constraint, no tyre model.
 * No suspension, so no body roll or pitch under acceleration.
 * The driver behaves reasonably (comfort limits above) and never stops.
-* The entire selected route is the GPS-denied section in M1. The tunnel presets run portal to portal.
+* The entire selected route is the GPS-denied section, and the tunnel presets run portal to portal
+  (D10). **Superseded by D11** (A–D scenario with approach, tunnel and recovery sections), which is not
+  implemented yet (roadmap P2/P3).
 * Gravity is WGS84 normal gravity on the ellipsoid surface. There is no height correction, no gravity
   anomalies and no deflection of the vertical.
 * The phone is rigidly mounted. There is no holder vibration, no engine/road vibration and no
@@ -340,8 +362,12 @@ console errors.
   onto the opposite carriageway and produced detours, which is why the presets are portal-to-portal.
   A self-hosted OSRM, or via-points along the motorway, would allow approach sections with GPS before
   and after the tunnel.
-* **Tunnel extent is not marked yet.** OSM `tunnel=yes` intervals could be stored as s-ranges (OSRM's
-  intersection classes are cached in `RawRoute.metadata` for this) to switch GPS off only inside.
+* **Tunnel extent is not marked yet.** The earlier idea of deriving it from OSM `tunnel=yes` ways is
+  **superseded** (D12). The tunnel will be the user-selected section B–C of an A–D route (D11,
+  roadmap P2).
+* **The 0.5–5 km length check applies to the whole route.** Under D11 it must apply to B–C (roadmap P2).
+* **Ground truth refers to the vehicle reference point (rear axle).** Phone-position truth, needed for
+  GPS and evaluation, is not yet available (PD2, roadmap P4).
 * **Lateral limit is soft** (≤ 5–6% overshoot at sharp corners). That is acceptable for "reasonable
   driver" realism, but it is not a hard guarantee.
 * **Single vehicle, no traffic.** No stop-and-go or lane changes. The `DriverConfig` and scenario

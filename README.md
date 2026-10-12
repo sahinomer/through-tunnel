@@ -6,7 +6,15 @@ what the accelerometer and gyroscope of a phone mounted in the car would measure
 
 **Status: vehicle simulation and smartphone IMU (accelerometer and gyroscope) complete.** The IMU has a
 configurable sample rate, white noise and constant bias, and the ideal readings are kept for comparison.
-GPS simulation (with approach, tunnel and exit sections) and positioning algorithms come next.
+GPS simulation, A–D scenarios (approach → simulated tunnel → recovery) and positioning are planned; see
+[docs/roadmap.md](docs/roadmap.md).
+
+Documentation:
+* [docs/design.md](docs/design.md): simulator design as implemented.
+* [docs/decisions.md](docs/decisions.md): decision log.
+* [docs/roadmap.md](docs/roadmap.md): status, tasks, open decisions.
+* [docs/positioning_design.md](docs/positioning_design.md): proposed positioning architecture and
+  baseline.
 
 ![Simulator UI](docs/img/ui.jpg)
 
@@ -130,9 +138,11 @@ receive sensor observations and explicitly allowed side information.
 ## Main assumptions (details and limitations in the design doc)
 
 Flat, level road (no grade, roll or pitch); single lane on the OSM centreline; no side-slip; no
-suspension dynamics; the driver never stops; the whole selected route is treated as GPS-denied. The
-road is smoothed so the path has continuous curvature. The deviation from the map polyline is bounded
-and reported.
+suspension dynamics; the driver never stops; the phone is rigidly mounted. The whole selected route is
+currently treated as GPS-denied (to be replaced by A–D sections, roadmap P2). The road is smoothed so
+the path has continuous curvature, and the deviation from the map polyline is bounded and reported.
+These assumptions isolate error sources for the first positioning experiments. They are not a
+complete model of real driving; road grade, stop-and-go traffic and map errors are on the roadmap.
 
 ## Roadmap
 
@@ -140,11 +150,10 @@ and reported.
 - **M2: smartphone sensors** (done). Ideal accelerometer and gyroscope, phone mounting, IMU plots.
 - **M3: sensor imperfections** (done). Separate IMU rate, white noise and constant bias with
   toggles/sliders, ideal vs. measured, independent seeded streams.
-- **Next:** GPS simulation with configurable approach / tunnel / exit sections, the positioning
-  interface and evaluation harness, then positioning algorithms. Still open: data export and a
-  recorded-data loader producing the same `ImuStream`.
-
-What is still missing before positioning, and the open design decisions: [docs/readiness_review.md](docs/readiness_review.md).
+- **Next:** A–D scenarios (four map points: start, tunnel entrance, tunnel exit, end), phone-style GPS
+  simulation, the observation/estimator interfaces with a causal runner, the evaluation core, then a
+  GPS-initialised dead-reckoning baseline. The full, tracked plan, with the open decisions, is in
+  [docs/roadmap.md](docs/roadmap.md).
 
 ## Data and services
 
