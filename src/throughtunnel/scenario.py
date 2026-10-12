@@ -228,15 +228,6 @@ def build_route_map(config: ScenarioConfig) -> RouteMap:
     return RouteMap(lat=lat, lon=lon, tunnel_entrance_m=entrance, tunnel_exit_m=exit_, events=(event,))
 
 
-def announcement_targets(route_map: RouteMap) -> dict[str, float]:
-    """Map distance of every announcement point, e.g. {'exit@300m': 1950.0, 'exit@0m': 2250.0}."""
-    return {
-        f"{ev.name}@{lead:g}m": ev.distance_m - lead
-        for ev in route_map.events
-        for lead in ev.announce_leads_m
-    }
-
-
 def section_truth(route_map: RouteMap, path: RoadPath, motion: LongitudinalTrajectory) -> SectionTruth:
     """Project map-defined points onto the true path (same ENU frame) and find the crossing times."""
 
@@ -250,7 +241,7 @@ def section_truth(route_map: RouteMap, path: RoadPath, motion: LongitudinalTraje
     s_b = true_s(route_map.tunnel_entrance_m)
     s_c = true_s(route_map.tunnel_exit_m, s_lo=s_b)
     targets = {}
-    for name, d in announcement_targets(route_map).items():
+    for name, d in route_map.announcement_targets().items():
         s = true_s(d)
         targets[name] = (s, crossing_time(s))
     return SectionTruth(

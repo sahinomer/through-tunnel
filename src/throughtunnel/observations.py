@@ -167,6 +167,12 @@ class RouteMap:
     def length_m(self) -> float:
         return float(self.distance_m[-1])
 
+    def announcement_targets(self) -> dict[str, float]:
+        """Route distance of every announcement point, e.g. {'exit@300m': 1950.0, 'exit@0m': 2250.0}."""
+        return {
+            f"{ev.name}@{lead:g}m": ev.distance_m - lead for ev in self.events for lead in ev.announce_leads_m
+        }
+
     def enu_at(self, distance_m: float) -> tuple[float, float]:
         d = self.distance_m
         xy = self.enu
