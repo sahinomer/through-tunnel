@@ -99,6 +99,51 @@ def ground_truth_figure(result: SimulationResult) -> go.Figure:
     return fig
 
 
+IMU_PLOT_RATE_HZ = 25.0
+# Minimum visible y-span per IMU row: autoscaling would otherwise magnify physically negligible
+# variations (e.g. the ~1e-5 m/s^2 change of normal gravity along a 3 km route looks like a drift).
+MIN_SPAN_ACCEL = 1.0  # m/s^2
+MIN_SPAN_GYRO = 0.1  # rad/s
+AXIS_COLORS = ("#d62728", "#2ca02c", "#1f77b4")  # x, y, z
+
+
+def imu_figure(result: SimulationResult) -> go.Figure:
+    """Accelerometer and gyroscope per phone axis (each axis on its own row: gravity moves
+    between axes with the mounting, so a shared y-range would hide the motion signals)."""
+    imu = result.imu
+    step = max(1, round(imu.rate_hz / IMU_PLOT_RATE_HZ))
+    t = imu.t[::step]
+    titles = [f"Accelerometer {a} [m/s²]" for a in "xyz"] + [f"Gyroscope {a} [rad/s]" for a in "xyz"]
+    fig = make_subplots(rows=6, cols=1, shared_xaxes=True, vertical_spacing=0.03, subplot_titles=titles)
+    for k, axis in enumerate("xyz"):
+        style = {"width": 1.5, "color": AXIS_COLORS[k]}
+        for row, name, data, min_span in (
+            (k + 1, f"accel {axis}", imu.accel[::step, k], MIN_SPAN_ACCEL),
+            (k + 4, f"gyro {axis}", imu.gyro[::step, k], MIN_SPAN_GYRO),
+        ):
+            fig.add_trace(go.Scatter(x=t, y=data, name=name, line=style), row, 1)
+            fig.update_yaxes(range=_padded_range(data, min_span), row=row, col=1)
+    fig.update_layout(
+        height=900,
+        margin={"l": 60, "r": 20, "t": 30, "b": 40},
+        hovermode="x unified",
+        showlegend=False,
+        template="plotly_white",
+        shapes=[cursor_shape(0.0)],
+        uirevision="keep-zoom",
+    )
+    fig.update_xaxes(title_text="time [s]", row=6, col=1)
+    fig.update_annotations(font_size=12)
+    return fig
+
+
+def _padded_range(data: np.ndarray, min_span: float) -> list[float]:
+    lo, hi = float(np.min(data)), float(np.max(data))
+    span = max(hi - lo, min_span) * 1.1
+    mid = 0.5 * (lo + hi)
+    return [mid - span / 2, mid + span / 2]
+
+
 def cursor_shape(t: float) -> dict:
     return {
         "type": "line",

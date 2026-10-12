@@ -1,11 +1,11 @@
 # ThroughTunnel
 
 A vehicle and smartphone-sensor simulator for **GPS-denied positioning research**. A car drives a real
-road (OpenStreetMap) treated as a tunnel; the simulator produces physically consistent ground truth and,
-in later milestones, what a phone in the car would measure.
+road (OpenStreetMap) treated as a tunnel; the simulator produces physically consistent ground truth and
+what the accelerometer and gyroscope of a phone mounted in the car would measure.
 
-**Status: milestone 1, vehicle simulation.** Smartphone sensors (M2), sensor imperfections and data
-export (M3), and positioning algorithms come later.
+**Status: milestone 2, smartphone accelerometer and gyroscope (ideal sensors).** Sensor imperfections
+and data export (M3), GPS and tunnel approach sections, and positioning algorithms come later.
 
 ![Simulator UI](docs/img/ui.jpg)
 
@@ -35,8 +35,17 @@ Options: `uv run throughtunnel --port 8090 --host 0.0.0.0 --no-browser`.
 3. **Change the scenario.** Under *Scenario parameters* you can set the driver style (calm / normal /
    sporty), cruise speed, speed variability, the lateral/longitudinal acceleration and jerk limits, the
    road smoothing settings, the random seed and the sample rate. Then press **Generate**.
-4. **Reproduce it.** *Save scenario* downloads a JSON file with the route geometry *as fetched*, every
-   parameter and the seed. *Load scenario* replays it bit-for-bit, offline.
+4. **Mount the phone.** Under *Phone mounting (IMU)* pick a mounting preset (aligned with the vehicle,
+   flat in portrait, dashboard holder in portrait / tilted / landscape) or set yaw, pitch and roll
+   yourself, plus a lever arm (where the phone sits relative to the rear axle) and optional Earth
+   rotation. The panel says where each phone axis points in the car. Only the sensor model is
+   re-run; the vehicle motion stays identical. The *Phone IMU* tab shows the accelerometer and
+   gyroscope per phone axis, and the readouts show the current values.
+5. **Reproduce it.** *Save scenario* downloads a JSON file with the route geometry *as fetched*, every
+   parameter (including the phone mounting) and the seed. *Load scenario* replays it bit-for-bit,
+   offline.
+
+![Phone IMU tab](docs/img/imu.jpg)
 
 ### Programmatic use
 
@@ -46,9 +55,14 @@ The simulation core has no UI dependency:
 from throughtunnel.scenario import load_preset, run_scenario
 
 result = run_scenario(load_preset("seattle_sr99_tunnel"))
-truth = result.truth                 # GroundTruth: columnar numpy arrays at 100 Hz
+truth = result.truth                 # GroundTruth: hidden simulation state, columnar arrays at 100 Hz
 truth.t, truth.speed, truth.yaw_rate, truth.acc_body, truth.omega_body
+imu = result.imu                     # ImuStream: the observation (t, accel[N,3], gyro[N,3], Android axes)
 result.path.diagnostics              # road-geometry processing report
+
+from throughtunnel.scenario import with_imu_config
+from throughtunnel.sensors import MOUNT_PRESETS, ImuConfig
+dash = with_imu_config(result, ImuConfig(mount=MOUNT_PRESETS["dash_portrait"]))  # same drive, new mount
 ```
 
 To simulate your own road, build a `ScenarioConfig(route=RawRoute(...))` or use
@@ -62,6 +76,7 @@ src/throughtunnel/
   routing/              RawRoute model, OSRM provider, synthetic test roads
   road.py               map polyline -> smooth arc-length path (+ diagnostics)
   vehicle/              driver config, speed planning, longitudinal dynamics, ground truth
+  sensors/              phone mounting, IMU measurement model, ImuStream observation type
   scenario.py           ScenarioConfig, run_scenario, seeds, JSON persistence, presets
   presets/              bundled scenarios (route geometry cached -> work offline)
   app/                  NiceGUI front-end (depends on the core, never the reverse)
@@ -74,10 +89,26 @@ docs/design.md          design decisions, frames, models, assumptions, limitatio
 `t, s, x, y, z, lat, lon, alt, speed, accel_long, accel_lat, jerk, yaw, bearing_deg, yaw_rate, yaw_accel,
 curvature, roll, pitch`, plus the vectors `acc_enu`, `acc_body` and `omega_body` (N×3). The navigation
 frame is local ENU and the body frame is ISO 8855 (x forward, y left, z up). Positive yaw rate and
-positive lateral acceleration mean a left turn. See [docs/design.md](docs/design.md#coordinate-frames-and-conventions).
+positive lateral acceleration mean a left turn. See [docs/design.md](docs/design.md#3-coordinate-frames-and-conventions).
 
 The ground truth is the simulator's hidden reality. Positioning algorithms (later milestones) will only
 receive sensor observations and explicitly allowed side information.
+
+## Phone IMU (`ImuStream`, same rate as the simulation)
+
+* **Axes:** Android `SensorEvent` convention. With the phone in portrait: x = right edge, y = top edge,
+  z = out of the screen. Units are m/s² and rad/s.
+* **Accelerometer = specific force** at the phone, f = a − g. A phone lying still, screen up, reads
+  +g on z. Gravity is WGS84 normal gravity at the vehicle's latitude. When the phone is not at the
+  vehicle reference point, the lever-arm terms α×r + ω×(ω×r) are included.
+* **Gyroscope** = angular rate of the phone. Optional Earth rotation adds the Earth rate to the gyro
+  and the Coriolis term to the accelerometer.
+* **Mounting:** the rotation from the phone frame to the vehicle frame, given as Z-Y-X Euler angles
+  (all zeros = phone axes aligned with the vehicle's x forward, y left, z up).
+* `ImuStream` deliberately carries no ground truth, not even the true mounting: a real app does not
+  know how the phone sits in the car. A recorded-phone loader will produce the same type.
+
+Sensors are ideal in this milestone (no noise, bias or timestamp jitter).
 
 ## Main assumptions (details and limitations in the design doc)
 
@@ -88,10 +119,13 @@ and reported.
 
 ## Roadmap
 
-- **M2: smartphone sensors.** Accelerometer (specific force, gravity) and gyroscope from the ground
-  truth, configurable phone mounting rotation, Android sensor axes, ideal-measurement plots.
+- **M1: vehicle simulation** (done).
+- **M2: smartphone sensors** (done). Ideal accelerometer and gyroscope, phone mounting, IMU plots.
 - **M3: imperfections and scenarios.** Noise and bias toggles and sliders, independent seeded RNG
-  streams per sensor, export, and a recorded-data loader that produces the same sensor-stream type.
+  streams per sensor, ideal vs. measured comparison, export, and a recorded-data loader that produces
+  the same `ImuStream` type.
+- **Later: GPS simulation** with configurable approach / tunnel / exit sections, then positioning
+  algorithms evaluated against the ground truth.
 
 ## Data and services
 

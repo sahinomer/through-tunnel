@@ -1,4 +1,4 @@
-# Design notes: vehicle simulation (milestone 1)
+# Design notes: vehicle and smartphone IMU simulation (milestones 1–2)
 
 This document records the technical decisions, models, conventions, assumptions and known limitations
 of the simulator. It is meant to be read alongside the code. Every claim about accuracy below is
@@ -8,9 +8,9 @@ enforced by a test in `tests/`.
 
 ```
             ┌────────────── core (pure Python / numpy, no UI imports) ──────────────┐
-RouteProvider ──► RawRoute ──► RoadPath ──► SpeedProfile ──► Longitudinal ──► GroundTruth
- (OSRM, synthetic)  (lat/lon     (smooth      (spatial plan,    (time domain,     (all kinematic
-                    polyline)    arc-length    seeded RNG)       jerk-limited)     quantities)
+RouteProvider ──► RawRoute ──► RoadPath ──► SpeedProfile ──► Longitudinal ──► GroundTruth ──► ImuStream
+ (OSRM, synthetic)  (lat/lon     (smooth      (spatial plan,    (time domain,     (hidden      (observation,
+                    polyline)    arc-length    seeded RNG)       jerk-limited)     state)       phone axes)
                                  spline)
             └── ScenarioConfig (route + parameters + seed) ──► run_scenario() ──► SimulationResult ┘
                                                                      │
@@ -22,11 +22,12 @@ RouteProvider ──► RawRoute ──► RoadPath ──► SpeedProfile ─�
 * **The UI is a client of the core.** `app/` imports the core; nothing in the core imports `app/`.
   The playback clock (`app/playback.py`) and the figure builders (`app/plots.py`) are plain Python
   and unit-tested.
-* **Ground truth is separate from observations.** `GroundTruth` is the simulator's hidden state. Milestone 2
-  adds a `sensors/` package that reads `GroundTruth` and emits an observation stream (`ImuStream`:
-  timestamps, accel[N,3], gyro[N,3], frame metadata). A recorded-phone loader will produce the same
-  type, so positioning code written against `ImuStream` works on both. Positioning code will never
-  import `GroundTruth`, and a test will enforce that import boundary once the package exists.
+* **Ground truth is separate from observations.** `GroundTruth` is the simulator's hidden state. The
+  `sensors/` package reads it and emits an observation stream, `ImuStream` (timestamps, accel[N,3],
+  gyro[N,3], axis convention, source label). `ImuStream` carries **no** simulation truth, not even the
+  true phone mounting (a test guards this). A recorded-phone loader will produce the same type, so
+  positioning code written against `ImuStream` works on both. Positioning code will never import
+  `GroundTruth`, and a test will enforce that import boundary once that package exists.
 
 ## 2. Technology decisions
 
@@ -66,6 +67,8 @@ cause before changing anything:
 |---|---|
 | Navigation frame | Local **ENU** tangent plane anchored at the first route vertex (x East, y North, z Up). |
 | Body frame | **ISO 8855** vehicle axes: x forward, y left, z up. |
+| Phone (sensor) frame | **Android `SensorEvent`** axes, device in portrait: x = right edge, y = top edge, z = out of the screen. |
+| Mounting | `R_bs` (v_body = R_bs · v_phone) = Rz(yaw) · Ry(pitch) · Rx(roll), intrinsic Z-Y′-X″ angles of the phone frame relative to the vehicle frame. All zeros = aligned axes. |
 | Yaw ψ | Angle from East to body-x, counter-clockwise positive, **unwrapped** (continuous). |
 | Bearing | Compass heading = (90° − ψ) mod 360, clockwise from North (display only). |
 | Signs | Curvature κ, yaw rate and lateral acceleration are **positive for a left turn**. |
@@ -175,7 +178,54 @@ are zero (flat road).
 | normal | 70 km/h | 4 km/h | 2.0 m/s² | 1.5 | 2.5 | 2.0 m/s³ |
 | sporty | 85 km/h | 6 km/h | 3.0 m/s² | 2.5 | 3.5 | 3.5 m/s³ |
 
-## 6. Reproducibility
+## 6. Smartphone IMU model (`sensors/`)
+
+**Accelerometer.** It measures the specific force at the phone, expressed in phone axes:
+
+```
+f_s = R_bsᵀ · C_bn · ( a_phone,n − g_n )            g_n = (0, 0, −γ(lat))
+a_phone = a_ref + α × r + ω × (ω × r)                (rigid-body transfer over the lever arm r)
+```
+
+* γ is the **WGS84 normal gravity** (Somigliana: 9.780 m/s² at the equator, 9.832 m/s² at the poles),
+  evaluated at each sample's latitude. Normal gravity already includes the centrifugal part of Earth
+  rotation. A constant 9.80665 is available as an option.
+* A phone lying still, screen up, reads **+γ on z** (Android convention). Upright in portrait it reads +γ on
+  y. Face down it reads −γ on z.
+* **Lever arm r**: the phone's position relative to the vehicle reference point. That point is the one
+  that follows the road without side-slip, i.e. the rear-axle centre in a kinematic bicycle model. A phone
+  1.6 m ahead adds up to ~0.06 m/s² on the demo track: tangential α×r at curve entries and centripetal
+  ω²r in curves.
+
+**Gyroscope.** It measures the angular rate of the phone, ω_s = R_bsᵀ · ω_b. The phone is rigidly
+mounted, so the lever arm does not matter.
+
+**Earth rotation (option, off by default).** It adds Ω_ie (7.292e-5 rad/s ≈ 15 °/h) to the gyro and the
+Coriolis term 2 Ω_ie × v to the accelerometer. Both are physically present but far below
+consumer-sensor noise and bias: driving east at 90 km/h at 45° latitude, the Coriolis term is about
+0.26 mg sideways, plus a similar Eötvös reduction of the vertical force. The transport rate of the
+local frame (v / R ≈ 3e-6 rad/s) is neglected.
+
+**Mounting presets.**
+
+| preset | Euler (yaw, pitch, roll) | phone x / y / z point to |
+|---|---|---|
+| aligned | (0, 0, 0) | forward / left / up |
+| flat_portrait | (−90°, 0, 0) | right / forward / up |
+| dash_portrait | (−90°, 0, 90°) | right / up / backward (screen faces the driver) |
+| dash_portrait_tilted | (−90°, 0, 75°) | right / 0.97 up + 0.26 forward / 0.97 backward + 0.26 up |
+| dash_landscape | (0, −90°, 0) | up / left / backward. Pitch = −90° is the Euler gimbal lock, where yaw and roll rotate about the same axis. |
+
+**Observation boundary.** `ImuStream` contains only what a phone reports. The mounting rotation, lever arm
+and gravity model stay in the scenario config (simulator side). Estimating the phone-to-vehicle rotation
+is part of the positioning problem, not an input to it.
+
+**UI.** Changing the mounting re-runs only `ideal_imu` (`with_imu_config`), so the vehicle motion is
+bit-identical. Each IMU axis gets its own plot row, because gravity moves between axes with the mount.
+Each row has a minimum y-span (1 m/s², 0.1 rad/s) so physically negligible variations are not blown up
+by autoscaling, e.g. the ~1e-5 m/s² change of normal gravity along a 3 km route.
+
+## 7. Reproducibility
 
 * A `ScenarioConfig` contains the **route geometry as fetched** (not just the endpoints), every
   parameter, the sample rate and the seed. Saved JSON reproduces runs bit-for-bit, offline, and
@@ -187,7 +237,7 @@ are zero (flat road).
 * Presets live inside the package (`throughtunnel/presets/*.json`), so the app and the tests run
   offline.
 
-## 7. Validation (`uv run pytest`, 50 tests, no network)
+## 8. Validation (`uv run pytest`, 72 tests, no network)
 
 | Property | Test |
 |---|---|
@@ -201,14 +251,25 @@ are zero (flat road).
 | Driving smoothness | jerk limit active < 2% of the time in a tunnel |
 | Random process | std, squared-exponential correlation, derivative std = σ/L |
 | Reproducibility | same seed → identical arrays; different seed → different driver; JSON round trip → identical run; independent named RNG streams |
-| App logic | playback clock (play/pause/seek/end/restart), figure decimation and cursor |
+| IMU: gravity | stationary phone reads exactly γ(lat) on the axis that points up, for every preset; face down → −γ; WGS84 normal gravity values at 0°/45°/90° |
+| IMU: motion | aligned phone: accel = (a_long, a_lat, γ), gyro = (0, 0, yaw rate); flat portrait: x = −a_lat, y = a_long |
+| IMU: mounting | 26 random and preset mounts are proper rotations; the Euler convention is pinned; changing the mount leaves the ground truth bit-identical, preserves the magnitudes of f and ω, and rotating back gives the same body vectors |
+| IMU: end-to-end | Numerically differentiate the phone's actual pose (vehicle pose + lever arm, tilted mount) twice for position and once for orientation, and compare with the IMU: residual 5e-4 m/s² (tolerance 0.005, while the lever-arm terms alone reach 0.06) and 4e-7 rad/s |
+| IMU: lever arm | steady turn: extra −ω²r on the forward axis |
+| IMU: Earth rotation | at rest the gyro reads Ω(cosφ, 0, sinφ) when heading north; driving east, accel gets +2Ωv sinφ to the north and −2Ωv cosφ vertically (Eötvös) |
+| IMU: observation type | shape and timestamp validation; `ImuStream` fields and metadata carry no truth (no mounting) |
+| App logic | playback clock (play/pause/seek/end/restart), figure decimation and cursor, browser track payload, IMU figure ranges |
 
 The UI was additionally driven end-to-end in a headless browser: the preset loads, play/pause advance
 correctly in wall-clock time, seek lands on the requested time, the plot cursor matches the playback
 time, clicking two map points produces an OSRM route, regeneration with another driver style works,
-and saving then loading a scenario reproduces it exactly.
+and saving then loading a scenario reproduces it exactly. For milestone 2: the IMU tab shows gravity on
+z for the aligned mount and on y for the dashboard-portrait mount (with the yaw rate moving to gyro y).
+Changing the mount leaves the drive unchanged. A custom yaw switches the preset to "custom", and the
+custom mount survives save/load. The cursor follows on whichever plot tab is visible, with no
+console errors.
 
-## 8. Assumptions
+## 9. Assumptions
 
 * The road is flat and level: z = 0, no grade, no banking, roll = pitch = 0. (The Eisenhower tunnel
   really has a ~1.6% grade, which is ignored.)
@@ -218,10 +279,15 @@ and saving then loading a scenario reproduces it exactly.
 * No suspension, so no body roll or pitch under acceleration.
 * The driver behaves reasonably (comfort limits above) and never stops.
 * The entire selected route is the GPS-denied section in M1. The tunnel presets run portal to portal.
-* Constant gravity and no Earth rotation (relevant only from M2: the Earth rate of 7.3e-5 rad/s can be
-  added to the gyro model).
+* Gravity is WGS84 normal gravity on the ellipsoid surface. There is no height correction, no gravity
+  anomalies and no deflection of the vertical.
+* The phone is rigidly mounted. There is no holder vibration, no engine/road vibration and no
+  phone movement relative to the car.
+* Sensors are ideal in M2: no noise, bias, scale-factor or misalignment errors, no saturation or
+  quantisation. They are sampled at the simulation rate with perfect timestamps.
+* Earth rotation is off by default, and the transport rate is always neglected (see §6).
 
-## 9. Known limitations and next steps
+## 10. Known limitations and next steps
 
 * **OSRM demo server:** rate-limited, no SLA, development use only. Routes from clicked points may snap
   to an unexpected carriageway. When extending the presets beyond the tunnel portals, endpoints snapped
@@ -238,3 +304,10 @@ and saving then loading a scenario reproduces it exactly.
   bound, not from surveyed geometry.
 * **Smoothing changes geometry slightly** (bounded and reported). It can be disabled
   (`smoothing_wavelength_m = 0`) to study the raw-polyline artefacts.
+* **IMU realism is intentionally minimal in M2.** M3 adds configurable noise and bias, kept separate from
+  the ideal stream for comparison. Later options: bias instability and random walk, temperature drift,
+  per-device profiles, timestamp jitter and sample-rate differences between accel and gyro.
+* **Flat road → no pitch or roll.** On real grades (e.g. the Eisenhower tunnel at ~1.6%), gravity would
+  leak into the forward accelerometer axis (0.16 m/s² at 1.6%), which matters for dead reckoning.
+  Adding road elevation is a natural extension: the frames and the IMU model already handle a full
+  3-D attitude (`rotation_enu_from_body`).

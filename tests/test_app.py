@@ -73,3 +73,15 @@ def test_playback_track_for_browser():
     enu = tr.frame.to_enu(track["hlat"][i], track["hlon"][i])
     ahead = (enu[0] - tr.x[k]) * np.cos(tr.yaw[k]) + (enu[1] - tr.y[k]) * np.sin(tr.yaw[k])
     assert ahead == pytest.approx(HEADING_ARROW_M, abs=0.01)
+
+
+def test_imu_figure():
+    from throughtunnel.app.plots import MIN_SPAN_ACCEL, imu_figure
+
+    res = run_scenario(load_preset("seattle_sr99_tunnel"))
+    fig = imu_figure(res)
+    assert [d.name for d in fig.data] == ["accel x", "gyro x", "accel y", "gyro y", "accel z", "gyro z"]
+    # accel z (gravity, varies ~1e-5 m/s^2 along the route) is not blown up by autoscaling
+    lo, hi = fig.layout.yaxis3.range
+    assert hi - lo >= MIN_SPAN_ACCEL
+    assert lo < res.imu.accel[:, 2].min() and hi > res.imu.accel[:, 2].max()

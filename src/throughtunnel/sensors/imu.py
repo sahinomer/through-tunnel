@@ -91,6 +91,13 @@ class ImuStream:
     def rate_hz(self) -> float:
         return (len(self.t) - 1) / float(self.t[-1] - self.t[0])
 
+    def at(self, t: float) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        """Linearly interpolated (accel, gyro) at time ``t`` (display helper)."""
+        tc = min(max(t, float(self.t[0])), float(self.t[-1]))
+        accel = np.array([np.interp(tc, self.t, self.accel[:, k]) for k in range(3)])
+        gyro = np.array([np.interp(tc, self.t, self.gyro[:, k]) for k in range(3)])
+        return accel, gyro
+
 
 def ideal_imu(truth: GroundTruth, config: ImuConfig | None = None) -> ImuStream:
     """Error-free accelerometer and gyroscope readings of a phone rigidly mounted in the vehicle."""

@@ -20,10 +20,17 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import plotly.graph_objects as go
 from nicegui import context, events, run, ui
 
 from throughtunnel.app.playback import SPEED_OPTIONS, PlaybackController
-from throughtunnel.app.plots import cursor_relayout, empty_figure, ground_truth_figure
+from throughtunnel.app.plots import (
+    CURSOR_SHAPE_INDEX,
+    cursor_relayout,
+    empty_figure,
+    ground_truth_figure,
+    imu_figure,
+)
 from throughtunnel.app.track import playback_track
 from throughtunnel.road import TUNNEL_MAX_LENGTH_M, TUNNEL_MIN_LENGTH_M, RoadConfig
 from throughtunnel.routing import LatLon, OsrmRouteProvider, RawRoute, RoutingError
@@ -34,7 +41,10 @@ from throughtunnel.scenario import (
     load_preset,
     run_scenario,
     scenario_from_json,
+    with_imu_config,
 )
+from throughtunnel.sensors.imu import ImuConfig
+from throughtunnel.sensors.mounting import MOUNT_PRESETS, PhoneMount, describe_phone_axes
 from throughtunnel.vehicle.config import DRIVER_PRESETS, DriverConfig
 
 DEFAULT_PRESET = "seattle_sr99_tunnel"
@@ -62,6 +72,7 @@ class SimulatorPage:
         self.scenario_name = "Custom route"
         self.base_driver: DriverConfig = DRIVER_PRESETS["normal"]
         self.base_road = RoadConfig()
+        self.base_imu = ImuConfig()
         self.pick_start: LatLon | None = None
         self.pick_end: LatLon | None = None
         self.layers: dict[str, Any] = {}
@@ -78,7 +89,7 @@ class SimulatorPage:
         ui.add_body_html(f"<script>{TRACK_PLAYER_JS}</script>")
         with ui.header().classes("items-center py-2"):
             ui.label("ThroughTunnel").classes("text-lg font-bold")
-            ui.label("Vehicle simulation · ground truth (milestone 1)").classes("text-sm opacity-80")
+            ui.label("Vehicle and smartphone IMU simulation (milestone 2)").classes("text-sm opacity-80")
 
         with ui.row().classes("w-full no-wrap items-start gap-4"):
             with ui.column().classes("gap-1").style("flex: 3 1 0; min-width: 0"):
@@ -95,9 +106,20 @@ class SimulatorPage:
                 self._build_scenario_card()
                 self._build_playback_card()
                 self._build_parameter_card()
+                self._build_phone_card()
 
-        self.plot = ui.plotly(empty_figure()).classes("w-full")
-        self.plot.on("plotly_click", self._on_plot_click)
+        # keep_alive=False: the hidden plot is unmounted (Plotly cannot resize a hidden div); only the
+        # visible plot receives cursor updates, and a newly shown plot starts from the current cursor.
+        with ui.tabs(on_change=self._on_tab).classes("w-full") as self.tabs:
+            ui.tab("truth", label="Vehicle ground truth")
+            ui.tab("imu", label="Phone IMU (ideal, phone axes)")
+        with ui.tab_panels(self.tabs, value="truth", keep_alive=False).classes("w-full"):
+            with ui.tab_panel("truth"):
+                self.plot = ui.plotly(empty_figure()).classes("w-full")
+            with ui.tab_panel("imu"):
+                self.imu_plot = ui.plotly(empty_figure()).classes("w-full")
+        for plot in (self.plot, self.imu_plot):
+            plot.on("plotly_click", self._on_plot_click)
         ui.timer(TICK_S, self._tick)
         ui.timer(0.1, self._initial_load, once=True)
 
@@ -163,6 +185,34 @@ class SimulatorPage:
                 self.rate_select = ui.select([50, 100, 200], value=100, label="Rate [Hz]").classes("w-28")
                 ui.button("Generate", icon="play_circle", on_click=self._generate).props("unelevated")
 
+    def _build_phone_card(self) -> None:
+        m = self.base_imu.mount
+        options = {k: k.replace("_", " ") for k in MOUNT_PRESETS} | {"custom": "custom"}
+        with ui.expansion("Phone mounting (IMU)", icon="smartphone", value=False).classes(
+            "w-full border rounded"
+        ):
+            self.mount_select = ui.select(
+                options, value=m.label, label="Mount preset", on_change=self._on_mount_preset
+            ).classes("w-full")
+            self.s_myaw = self._slider("Yaw (about vehicle z)", -180, 180, 5, m.yaw_deg, "°")
+            self.s_mpitch = self._slider("Pitch", -90, 90, 5, m.pitch_deg, "°")
+            self.s_mroll = self._slider("Roll", -180, 180, 5, m.roll_deg, "°")
+            self.s_lx = self._slider("Lever arm x (fwd)", -3, 3, 0.1, m.lever_arm_m[0], "m")
+            self.s_ly = self._slider("Lever arm y (left)", -1.5, 1.5, 0.1, m.lever_arm_m[1], "m")
+            self.s_lz = self._slider("Lever arm z (up)", -1, 2, 0.1, m.lever_arm_m[2], "m")
+            self.earth_switch = ui.switch(
+                "Earth rotation (gyro Earth rate, Coriolis)", value=self.base_imu.earth_rotation
+            )
+            self.earth_switch.on_value_change(self._on_mount_control)
+            self.axes_label = ui.html().classes("text-sm")
+            ui.label(
+                "Android axes: x = right edge, y = top edge, z = out of the screen. "
+                "Lever arm = phone position relative to the vehicle reference point (rear-axle centre)."
+            ).classes("text-xs text-gray-500")
+            for slider in (self.s_myaw, self.s_mpitch, self.s_mroll, self.s_lx, self.s_ly, self.s_lz):
+                slider.on("change", self._on_mount_control)
+        self._update_axes_label()
+
     # ================================================================== parameters <-> controls
     def _driver_from_controls(self) -> DriverConfig:
         values = {
@@ -204,6 +254,64 @@ class SimulatorPage:
         finally:
             self._loading_controls = False
 
+    def _imu_from_controls(self) -> ImuConfig:
+        mount = PhoneMount(
+            label=self.mount_select.value or "custom",
+            yaw_deg=float(self.s_myaw.value),
+            pitch_deg=float(self.s_mpitch.value),
+            roll_deg=float(self.s_mroll.value),
+            lever_arm_m=(float(self.s_lx.value), float(self.s_ly.value), float(self.s_lz.value)),
+        )
+        return self.base_imu.model_copy(
+            update={"mount": mount, "earth_rotation": bool(self.earth_switch.value)}
+        )
+
+    def _set_mount_controls(self, imu: ImuConfig) -> None:
+        self._loading_controls = True
+        try:
+            self.base_imu, m = imu, imu.mount
+            self.mount_select.value = m.label if m.label in MOUNT_PRESETS else "custom"
+            self.s_myaw.value, self.s_mpitch.value, self.s_mroll.value = m.yaw_deg, m.pitch_deg, m.roll_deg
+            self.s_lx.value, self.s_ly.value, self.s_lz.value = m.lever_arm_m
+            self.earth_switch.value = imu.earth_rotation
+        finally:
+            self._loading_controls = False
+        self._update_axes_label()
+
+    def _on_mount_preset(self, e: events.ValueChangeEventArguments) -> None:
+        if self._loading_controls or e.value not in MOUNT_PRESETS:
+            return
+        lever = self._imu_from_controls().mount.lever_arm_m  # presets only set the rotation
+        mount = MOUNT_PRESETS[e.value].model_copy(update={"lever_arm_m": lever})
+        self._set_mount_controls(self.base_imu.model_copy(update={"mount": mount}))
+        self._apply_imu()
+
+    def _on_mount_control(self, _: Any = None) -> None:
+        if self._loading_controls:
+            return
+        preset = MOUNT_PRESETS.get(self.mount_select.value)
+        angles = (self.s_myaw.value, self.s_mpitch.value, self.s_mroll.value)
+        if preset is not None and angles != (preset.yaw_deg, preset.pitch_deg, preset.roll_deg):
+            self._loading_controls = True
+            self.mount_select.value = "custom"
+            self._loading_controls = False
+        self._apply_imu()
+
+    def _apply_imu(self) -> None:
+        """Re-run only the sensor model: the vehicle motion (ground truth) is unchanged."""
+        self.base_imu = self._imu_from_controls()
+        self._update_axes_label()
+        if self.result is None:
+            return
+        self.result = with_imu_config(self.result, self.base_imu)
+        self.imu_plot.update_figure(imu_figure(self.result))
+        self._render(force=True)
+
+    def _update_axes_label(self) -> None:
+        axes = describe_phone_axes(self._imu_from_controls().mount.rotation_body_from_phone())
+        mapping = " · ".join(f"<b>{k}</b> → {v}" for k, v in axes.items())
+        self.axes_label.content = f"Phone axes in the vehicle: {mapping}"
+
     def _on_style(self, e: events.ValueChangeEventArguments) -> None:
         if self._loading_controls or e.value not in DRIVER_PRESETS:
             return
@@ -231,6 +339,7 @@ class SimulatorPage:
 
     async def _load_scenario(self, cfg: ScenarioConfig) -> None:
         self._set_controls(cfg.driver, cfg.road, cfg.seed, cfg.sample_rate_hz)
+        self._set_mount_controls(cfg.imu)
         self.scenario_name = cfg.name
         self._set_route(cfg.route)
         await self._generate()
@@ -310,6 +419,7 @@ class SimulatorPage:
                 route=self.route,
                 road=self._road_from_controls(),
                 driver=self._driver_from_controls(),
+                imu=self._imu_from_controls(),
                 seed=int(self.seed_input.value or 0),
                 sample_rate_hz=float(self.rate_select.value),
             )
@@ -341,6 +451,7 @@ class SimulatorPage:
         track = json.dumps(playback_track(result.truth))
         self.client.run_javascript(f"ttPlayer.load({self.map.id}, {track}, {json.dumps(ids)})")
         self.plot.update_figure(ground_truth_figure(result))
+        self.imu_plot.update_figure(imu_figure(result))
         self._update_route_info()
         self._render(force=True)
 
@@ -430,17 +541,26 @@ class SimulatorPage:
             return
         tr, t = self.result.truth, self.playback.t
         if force or self._tick_count % PLOT_CURSOR_EVERY == 0:
-            self.plot.run_plot_method("relayout", cursor_relayout(t))
+            self._visible_plot().run_plot_method("relayout", cursor_relayout(t))
         if force or self._tick_count % SLIDER_EVERY == 0 or not self.playback.playing:
             self.progress.value = round(t, 1)
         self.time_label.text = f"{t:6.1f} / {tr.duration_s:.1f} s"
         if self._shown_playing != self.playback.playing:
             self._shown_playing = self.playback.playing
             self.play_button.props(f"icon={'pause' if self.playback.playing else 'play_arrow'}")
-        self.readouts.content = self._readout_html(tr.sample(t))
+        self.readouts.content = self._readout_html(tr.sample(t), *self.result.imu.at(t))
+
+    def _visible_plot(self) -> ui.plotly:
+        return self.imu_plot if self.tabs.value == "imu" else self.plot
+
+    def _on_tab(self, _: events.ValueChangeEventArguments) -> None:
+        plot = self._visible_plot()
+        if self.result is not None and isinstance(plot.figure, go.Figure) and plot.figure.layout.shapes:
+            plot.figure.update_shapes(x0=self.playback.t, x1=self.playback.t, selector=CURSOR_SHAPE_INDEX)
+            plot.update()
 
     @staticmethod
-    def _readout_html(st: dict[str, float]) -> str:
+    def _readout_html(st: dict[str, float], accel: np.ndarray, gyro: np.ndarray) -> str:
         kappa = st["curvature"]
         radius = "straight" if abs(kappa) < 1e-4 else f"{1 / abs(kappa):,.0f} m {'L' if kappa > 0 else 'R'}"
         items = [
@@ -457,7 +577,14 @@ class SimulatorPage:
             f"<div><div class='text-xs text-gray-500'>{k}</div><div class='font-mono'>{v}</div></div>"
             for k, v in items
         )
-        return f"<div class='grid grid-cols-4 gap-x-4 gap-y-1'>{cells}</div>"
+        acc = " ".join(f"{v:+7.3f}" for v in accel)
+        gyr = " ".join(f"{v:+7.4f}" for v in gyro)
+        imu = (
+            "<div class='mt-2 text-xs text-gray-500'>phone IMU (ideal, phone axes x / y / z)</div>"
+            f"<div class='font-mono text-sm'>accel {acc} m/s²</div>"
+            f"<div class='font-mono text-sm'>gyro&nbsp; {gyr} rad/s</div>"
+        )
+        return f"<div class='grid grid-cols-4 gap-x-4 gap-y-1'>{cells}</div>{imu}"
 
     # ================================================================== helpers
     def _remove_layers(self, *names: str) -> None:
