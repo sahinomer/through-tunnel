@@ -19,7 +19,14 @@ from typing import Any
 import plotly.graph_objects as go
 from nicegui import events, run, ui
 
-from throughtunnel.app.controls import CalibrationPanel, DrivePanel, MountPanel, SensorPanel, TunnelPanel
+from throughtunnel.app.controls import (
+    CalibrationPanel,
+    DrivePanel,
+    MountPanel,
+    SensorPanel,
+    TrafficPanel,
+    TunnelPanel,
+)
 from throughtunnel.app.map_view import MapView
 from throughtunnel.app.playback import SPEED_OPTIONS, PlaybackController
 from throughtunnel.app.plots import (
@@ -94,6 +101,7 @@ class SimulatorPage:
                 self._build_playback_card()
                 self._build_positioning_card()
                 self.tunnel_panel = TunnelPanel(self._on_tunnel_change)
+                self.traffic_panel = TrafficPanel(self._on_tunnel_change)
                 self.drive_panel = DrivePanel(self._generate, DRIVER_PRESETS["normal"], RoadConfig())
                 self.profile_editor = ProfileEditor(self._on_profile_change)
                 self.mount_panel = MountPanel(self._apply_sensors, self.base_imu)
@@ -194,6 +202,7 @@ class SimulatorPage:
         self.sensor_panel.set_imu(cfg.imu)
         self.sensor_panel.set_gnss(cfg.gnss)
         self.tunnel_panel.set(cfg.tunnel)
+        self.traffic_panel.set(cfg.traffic)
         rm = build_route_map(cfg)
         b, c = (rm.tunnel_entrance_m, rm.tunnel_exit_m) if cfg.tunnel is not None else (None, None)
         self.profile_editor.set(cfg.road_profile, rm.length_m, b, c)
@@ -248,6 +257,7 @@ class SimulatorPage:
                 calibration=self.calibration_panel.config(),
                 gnss=self.sensor_panel.gnss(self.base_gnss),
                 tunnel=self.tunnel_panel.config(),
+                traffic=self.traffic_panel.config(),
                 seed=self.drive_panel.seed,
                 sample_rate_hz=self.drive_panel.sample_rate_hz,
             )

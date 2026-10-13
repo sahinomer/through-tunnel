@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 from nicegui import events, ui
@@ -27,6 +27,7 @@ from throughtunnel.sensors.mounting import (
     describe_phone_axes,
 )
 from throughtunnel.vehicle.config import DRIVER_PRESETS, DriverConfig
+from throughtunnel.vehicle.traffic import SCENARIO_LABELS, TrafficConfig
 
 Callback = Callable[[], Awaitable[None]]
 SIMULATION_RATES = (50, 100, 200)
@@ -179,6 +180,96 @@ class TunnelPanel(Panel):
             if tunnel is not None:
                 self.s_announce.props(f"max={math.floor(tunnel.exit_m - tunnel.entrance_m)}")
                 self.s_announce.value = tunnel.announce_before_exit_m
+
+
+class TrafficPanel(Panel):
+    """Traffic scenario in the tunnel (D37) with the parameters of the chosen scenario."""
+
+    # scenario -> the parameter sliders it uses (attribute names)
+    USES: ClassVar[dict[str, tuple[str, ...]]] = {
+        "portal": ("s_drop", "s_recovery"),
+        "speed_limit": ("s_limit",),
+        "stop_and_go": ("s_moving", "s_count", "s_stop_min", "s_stop_max"),
+        "exit_queue": ("s_queue_len", "s_queue_speed", "s_queue_stops", "s_stop_min", "s_stop_max"),
+        "congested": ("s_cong_speed", "s_cong_var"),
+    }
+
+    def __init__(self, on_change: Callback) -> None:
+        super().__init__(on_change)
+        t = TrafficConfig()
+        with ui.expansion("Traffic in the tunnel", icon="traffic", value=False).classes(
+            "w-full border rounded"
+        ):
+            self.select = ui.select(SCENARIO_LABELS, value=t.scenario, label="Scenario").classes("w-full")
+            self.s_drop = slider("Speed drop at B", 0, 40, 1, t.portal_drop_kmh, "km/h")
+            self.s_recovery = slider("Speeds up after", 0, 2000, 50, t.portal_recovery_m, "m")
+            self.s_limit = slider("Tunnel speed limit", 20, 120, 5, t.speed_limit_kmh, "km/h")
+            self.s_moving = slider("Speed between stops", 10, 60, 1, t.moving_speed_kmh, "km/h")
+            self.s_count = slider("Number of stops", 0, 8, 1, t.stop_count, "")
+            self.s_queue_len = slider("Queue length before C", 100, 1500, 50, t.queue_length_m, "m")
+            self.s_queue_speed = slider("Queue speed", 5, 40, 1, t.queue_speed_kmh, "km/h")
+            self.s_queue_stops = slider("Stops in the queue", 0, 4, 1, t.queue_stops, "")
+            self.s_stop_min = slider("Shortest stop", 1, 120, 1, t.stop_min_s, "s")
+            self.s_stop_max = slider("Longest stop", 1, 300, 5, t.stop_max_s, "s")
+            self.s_cong_speed = slider("Congested speed", 10, 60, 1, t.congested_speed_kmh, "km/h")
+            self.s_cong_var = slider("Speed variation σ", 0, 20, 1, t.congested_variation_kmh, "km/h")
+            self.s_jitter = slider("Random variation", 0, 0.5, 0.05, t.jitter, "")
+            self.seed = ui.number(
+                "Traffic seed (empty = scenario seed)", value=None, min=0, step=1, format="%d"
+            )
+            self.seed.classes("w-full")
+            ui.label(
+                "Events are anchored to the tunnel B–C; positions, durations and speeds vary randomly by the "
+                "given fraction (reproducible with the seed). Stops are real standstills."
+            ).classes("text-xs text-gray-500")
+            sliders = {name for names in self.USES.values() for name in names}
+            for name in sliders:
+                getattr(self, name).parent_slot.parent.bind_visibility_from(
+                    self.select, "value", backward=lambda v, n=name: n in self.USES.get(v, ())
+                )
+            self.s_jitter.parent_slot.parent.bind_visibility_from(
+                self.select, "value", backward=lambda v: v != "free"
+            )
+            self.seed.bind_visibility_from(self.select, "value", backward=lambda v: v != "free")
+            self.select.on_value_change(self._changed)
+            for name in (*sliders, "s_jitter"):
+                getattr(self, name).on("change", self._changed)
+            self.seed.on("blur", self._changed)
+            self.seed.on("keydown.enter", self._changed)
+
+    def config(self) -> TrafficConfig:
+        lo, hi = sorted((float(self.s_stop_min.value), float(self.s_stop_max.value)))
+        seed = self.seed.value
+        return TrafficConfig(
+            scenario=self.select.value or "free",
+            seed=int(seed) if seed is not None else None,
+            jitter=float(self.s_jitter.value),
+            portal_drop_kmh=float(self.s_drop.value),
+            portal_recovery_m=float(self.s_recovery.value),
+            speed_limit_kmh=float(self.s_limit.value),
+            moving_speed_kmh=float(self.s_moving.value),
+            stop_count=int(self.s_count.value),
+            stop_min_s=lo,
+            stop_max_s=hi,
+            queue_length_m=float(self.s_queue_len.value),
+            queue_speed_kmh=float(self.s_queue_speed.value),
+            queue_stops=int(self.s_queue_stops.value),
+            congested_speed_kmh=float(self.s_cong_speed.value),
+            congested_variation_kmh=float(self.s_cong_var.value),
+        )
+
+    def set(self, t: TrafficConfig) -> None:
+        with self._quiet():
+            self.select.value = t.scenario
+            self.seed.value = t.seed
+            self.s_jitter.value = t.jitter
+            self.s_drop.value, self.s_recovery.value = t.portal_drop_kmh, t.portal_recovery_m
+            self.s_limit.value = t.speed_limit_kmh
+            self.s_moving.value, self.s_count.value = t.moving_speed_kmh, t.stop_count
+            self.s_stop_min.value, self.s_stop_max.value = t.stop_min_s, t.stop_max_s
+            self.s_queue_len.value, self.s_queue_speed.value = t.queue_length_m, t.queue_speed_kmh
+            self.s_queue_stops.value = t.queue_stops
+            self.s_cong_speed.value, self.s_cong_var.value = t.congested_speed_kmh, t.congested_variation_kmh
 
 
 class MountPanel(Panel):

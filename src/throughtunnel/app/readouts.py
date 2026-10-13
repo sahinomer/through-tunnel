@@ -45,6 +45,7 @@ def route_info_html(result: SimulationResult, route: RawRoute) -> str:
         ),
         ("GPS", f"{len(res.gnss)} fixes · outage: {outage}"),
         ("Calibration error", html.escape(res.config.calibration.describe())),
+        ("Traffic", html.escape(traffic_summary(res))),
         ("Map polyline", f"{fmt_km(d.raw_length_m)} · {d.raw_vertices} vertices"),
         ("Smoothing deviation", f"max {d.max_deviation_m:.2f} m · rms {d.rms_deviation_m:.2f} m"),
         ("Min turn radius", f"{d.min_radius_m:,.0f} m" if math.isfinite(d.min_radius_m) else "∞"),
@@ -59,6 +60,23 @@ def route_info_html(result: SimulationResult, route: RawRoute) -> str:
     warnings = [*scenario_warnings(res), *d.warnings]
     warn = "".join(f"<div style='color:#e65100'>⚠ {html.escape(w)}</div>" for w in warnings)
     return f"<table>{body}</table>{warn}"
+
+
+def traffic_summary(result: SimulationResult) -> str:
+    """E.g. 'Stop-and-go (T3) · 3 stops, 82 s standing · tunnel crossed in 346 s'."""
+    from throughtunnel.vehicle.traffic import SCENARIO_LABELS
+
+    label = SCENARIO_LABELS.get(result.config.traffic.scenario, result.config.traffic.scenario)
+    sec = result.sections
+    if sec is None or result.config.traffic.scenario == "free":
+        return label
+    m = result.motion
+    standing = float(np.sum(m.v == 0.0) * (m.t[1] - m.t[0]))
+    parts = [label]
+    if result.traffic.stops:
+        parts.append(f"{len(result.traffic.stops)} stops, {standing:.0f} s standing")
+    parts.append(f"tunnel crossed in {sec.exit_t - sec.entrance_t:.0f} s")
+    return " · ".join(parts)
 
 
 def state_readout_html(

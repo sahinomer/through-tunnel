@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from importlib import resources
 from pathlib import Path
 
@@ -39,6 +39,7 @@ from throughtunnel.sensors.mounting import CalibrationErrorConfig
 from throughtunnel.vehicle.config import DriverConfig
 from throughtunnel.vehicle.longitudinal import LongitudinalTrajectory, simulate_longitudinal
 from throughtunnel.vehicle.speed_profile import SpeedProfile, plan_speed_profile
+from throughtunnel.vehicle.traffic import TrafficConfig, TrafficPlan, build_traffic_plan
 from throughtunnel.vehicle.truth import GroundTruth, build_ground_truth
 
 # v2: added `imu` (phone mounting, gravity model).
@@ -50,7 +51,8 @@ from throughtunnel.vehicle.truth import GroundTruth, build_ground_truth
 #     (`exit_event_m`, `announce_leads_m`; D32). Older files get the default distance, capped at the tunnel.
 # v6: added `calibration` (orientation error of the estimators' phone calibration, D34); default off.
 # v7: added `road_profile` (road elevation, D36); default flat.
-SCHEMA_VERSION = 7
+# v8: added `traffic` (traffic scenario in the tunnel, D37); default free flow.
+SCHEMA_VERSION = 8
 
 TUNNEL_MIN_LENGTH_M = 500.0
 TUNNEL_MAX_LENGTH_M = 5000.0
@@ -91,6 +93,9 @@ class ScenarioConfig(BaseModel):
     description: str = ""
     route: RawRoute
     road: RoadConfig = Field(default_factory=RoadConfig)
+    traffic: TrafficConfig = Field(
+        default_factory=TrafficConfig, description="Traffic scenario in the tunnel (D37); default free flow"
+    )
     road_profile: RoadProfileConfig = Field(
         default_factory=RoadProfileConfig, description="Road elevation along the route (D36); default flat"
     )
@@ -167,6 +172,7 @@ class SimulationResult:
     gnss: GnssStream
     gnss_ideal: GnssStream
     gnss_events: GnssEvents
+    traffic: TrafficPlan = field(default_factory=TrafficPlan)  # zones and stops used (hidden state)
 
     def observations(self) -> Observations:
         """The only data an estimator may use (D15): measured IMU, measured GPS, the route map."""
@@ -186,11 +192,14 @@ def run_scenario(config: ScenarioConfig, path: RoadPath | None = None) -> Simula
             f"the road geometry contains a turn of radius {path.diagnostics.min_radius_m:.1f} m, which a car "
             "cannot drive; usually the route makes a U-turn at a selected point"
         )
-    profile = plan_speed_profile(path, config.driver, rng_stream(config.seed, "driver"))
-    motion = simulate_longitudinal(profile, path.length_m, config.driver, dt=1.0 / config.sample_rate_hz)
+    route_map = build_route_map(config)
+    traffic = traffic_plan(config, route_map)
+    profile = plan_speed_profile(path, config.driver, rng_stream(config.seed, "driver"), traffic)
+    motion = simulate_longitudinal(
+        profile, path.length_m, config.driver, 1.0 / config.sample_rate_hz, traffic
+    )
     truth = build_ground_truth(motion, path)
     imu, ideal, errors = simulate_imu(motion, path, config.imu, config.seed)
-    route_map = build_route_map(config)
     sections = section_truth(route_map, path, motion) if config.tunnel is not None else None
     gnss, gnss_ideal, gnss_events = simulate_gps(motion, path, sections, config.gnss, config.imu, config.seed)
     return SimulationResult(
@@ -207,6 +216,22 @@ def run_scenario(config: ScenarioConfig, path: RoadPath | None = None) -> Simula
         gnss=gnss,
         gnss_ideal=gnss_ideal,
         gnss_events=gnss_events,
+        traffic=traffic,
+    )
+
+
+def traffic_plan(config: ScenarioConfig, route_map: RouteMap) -> TrafficPlan:
+    """The traffic zones and stops of the scenario, anchored to B and C on the map route (D37)."""
+    if config.tunnel is None or config.traffic.scenario == "free":
+        return TrafficPlan()
+    seed = config.traffic.seed if config.traffic.seed is not None else config.seed
+    cruise = config.driver.cruise_speed_kmh / 3.6
+    return build_traffic_plan(
+        config.traffic,
+        route_map.tunnel_entrance_m,
+        route_map.tunnel_exit_m,
+        cruise,
+        rng_stream(seed, "traffic"),
     )
 
 

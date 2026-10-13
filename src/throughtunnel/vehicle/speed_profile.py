@@ -13,6 +13,9 @@ The plan is built on the road's arc-length grid:
    anticipatory braking before curves) — the classic minimum-time speed-profile
    construction. It uses only ``planning_margin`` of the accel/decel limits, so
    the jerk-limited tracker keeps authority to catch up when it lags.
+4. Traffic (optional, D37): speed zones lower the cap (with their own gentle braking and
+   acceleration ramps). Stops are not part of the spatial plan: standing still is time-based and is
+   handled by the longitudinal model.
 
 The result is a *reference*; the time-domain longitudinal model then follows it
 with finite jerk (see ``longitudinal.py``).
@@ -30,6 +33,7 @@ from scipy.signal import fftconvolve
 
 from throughtunnel.road import RoadPath
 from throughtunnel.vehicle.config import KMH, DriverConfig
+from throughtunnel.vehicle.traffic import TrafficPlan, zone_speed_cap
 
 
 @dataclass(frozen=True)
@@ -66,7 +70,9 @@ def smooth_random_process(
     return std * fftconvolve(noise, kernel, mode="valid")
 
 
-def plan_speed_profile(path: RoadPath, driver: DriverConfig, rng: np.random.Generator) -> SpeedProfile:
+def plan_speed_profile(
+    path: RoadPath, driver: DriverConfig, rng: np.random.Generator, traffic: TrafficPlan | None = None
+) -> SpeedProfile:
     s = path.grid_s
     step = float(s[1] - s[0])
     kappa = np.abs(path.evaluate(s).curvature)
@@ -85,6 +91,15 @@ def plan_speed_profile(path: RoadPath, driver: DriverConfig, rng: np.random.Gene
     v_lim = np.minimum(v_pref, v_curve)
     # The speed floor never overrides the curve limit (a hairpin is crawled, not skidded).
     v_lim = np.maximum(v_lim, np.minimum(v_min, v_curve))
+    for zone in traffic.zones if traffic is not None else ():  # traffic may go below the driver's floor
+        variation = smooth_random_process(
+            len(s),
+            step,
+            zone.variation_mps,
+            zone.variation_length_m,
+            np.random.default_rng(zone.variation_seed),
+        )
+        v_lim = np.minimum(v_lim, zone_speed_cap(s, zone, variation))
 
     v = v_lim.copy()
     if driver.initial_speed_kmh is not None:

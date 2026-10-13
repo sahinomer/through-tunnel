@@ -110,6 +110,9 @@ def simulate_gnss(
     )
     speed = np.hypot(vel[:, 0], vel[:, 1])
     bearing = np.mod(np.degrees(np.arctan2(vel[:, 0], vel[:, 1])), 360.0)
+    standing = speed < 1e-6  # traffic stop: report the vehicle heading (the velocity direction is undefined)
+    if np.any(standing):
+        bearing[standing] = np.mod(90.0 - np.degrees(kinematics.yaw[standing]), 360.0)
 
     # Errors are drawn for every candidate time, unconditionally (independent of availability/enable).
     dt = 1.0 / config.rate_hz

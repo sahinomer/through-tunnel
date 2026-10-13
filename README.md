@@ -80,7 +80,9 @@ Options: `uv run throughtunnel --port 8090 --host 0.0.0.0 --no-browser`.
 
    *Tunnel exit announcement* sets how far before the tunnel exit C the app announces the exit (one
    announcement per estimator, triggered from its own estimate; default 300 m). The GPS controls are
-   in *IMU sample rate & errors*. *Road profile (elevation)* sets the road's height: drag the points
+   in *IMU sample rate & errors*. *Traffic in the tunnel* adds a portal slowdown, a tunnel speed limit,
+   stop-and-go, an exit queue or congested flow, with real stops (anchored to B/C, seeded).
+   *Road profile (elevation)* sets the road's height: drag the points
    up or down, or start from a template (steady climb, climb inside the tunnel, underwater tunnel).
    The grade never exceeds the limit (default 6%), and the drive re-simulates.
    *Calibration error (assumed orientation)* rotates the phone-to-vehicle
@@ -124,6 +126,7 @@ uv run python -m throughtunnel.evaluation.report --seeds 20 --vary-drive
 uv run python -m throughtunnel.evaluation.calibration_study --seeds 10   # docs/calibration_error.md
 uv run python -m throughtunnel.evaluation.factor_study --seeds 20         # docs/factor_study.md (+ figures)
 uv run python -m throughtunnel.evaluation.slope_study --seeds 20          # docs/slope_study.md (+ figures)
+uv run python -m throughtunnel.evaluation.traffic_study --seeds 20        # docs/traffic_study.md (+ figures)
 ```
 
 The figures need matplotlib, a dev dependency (installed by `uv sync`). The simulator does not need it.
@@ -207,8 +210,10 @@ Stop-and-go traffic and map errors are on the roadmap.
 - **Road grade** (done, 2026-10-13). Editable elevation profile, 3-D vehicle kinematics, and a
   study of its effect ([docs/slope_study.md](docs/slope_study.md)). A grade change in the tunnel
   breaks the IMU speed (0.4–1 km per 1 %); the heading survives.
-- **Next:** grade experiments, map errors, a probabilistic estimator with
-  covariance, stop-and-go, then the write-up. Tracked in [docs/roadmap.md](docs/roadmap.md).
+- **Traffic** (done, 2026-10-13). Portal slowdown, speed limit, stop-and-go, exit queue and congested
+  flow with real stops, and a study ([docs/traffic_study.md](docs/traffic_study.md)).
+- **Next:** an estimator that handles standstills, time-driven drift and grade; map errors; a
+  probabilistic estimator with covariance; then the write-up. Tracked in [docs/roadmap.md](docs/roadmap.md).
 
 ## Data and services
 

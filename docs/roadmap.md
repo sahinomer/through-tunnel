@@ -201,6 +201,30 @@ approach-calibrated IMU speed is not usable in sloped tunnels.** Grade handling 
 elevation, or treating slow forward-acceleration offsets as unobservable) is a prerequisite for any
 inertial along-track claim. Turn information survives and remains useful.
 
+**Task 7: traffic research** ([traffic_research.md](traffic_research.md)), then **task 8: traffic model
+and study, done** ([traffic_study.md](traffic_study.md)).
+* *Model:* T1, T2, T3, T5 and T6 are built from two shared primitives (speed zones, real stops), anchored
+  to B/C and seeded. Motion stays jerk-limited; stops end with a constant-jerk manoeuvre. Free flow is
+  bit-identical to before.
+* *Study:* 3 presets × 6 scenarios, ideal sensors and 20 paired realistic runs, plus sweeps of the
+  portal speed drop and the number of stops.
+* *Findings:*
+  * The constant-speed baseline fails from a systematic speed change of about 5 km/h. Stops, queues and
+    congestion put it 0.7–1.9 km ahead, and it announces the exit 3–4 min early.
+  * The IMU follows traffic (0–7 m with ideal sensors, even with stops). With realistic sensors its
+    error grows with outage *time* (traffic lengthens outages 2–3.6×), not with stops.
+  * Unexpected: the speed clamp v ≥ 0 acts as a *one-sided* zero-velocity update. Negative speed errors
+    are wiped at stops; positive ones creep forward while the vehicle stands still, causing a long
+    "ahead" tail.
+  * At low speed, small position errors become large announcement-timing errors.
+
+**Finding raised for attention.** Traffic lengthens outages, and grade leakage grows with the square of
+the outage time. A congested *and* sloped tunnel would cost the IMU methods kilometres (not simulated).
+Improvement candidates, none implemented:
+* standstill detection (a proper two-sided zero-velocity update);
+* bounding time-driven along-track drift;
+* grade information.
+
 **Observation (UI behaviour, pre-existing, not fixed):** NiceGUI runs *async* change handlers as
 background tasks, so the "loading" guard that marks values set from code is already reset when they run.
 Handlers registered with `on_value_change` / `on_change` (switches, mount-preset select) therefore
@@ -324,7 +348,7 @@ are committed (F9).
 | ID | Task | Status |
 |---|---|---|
 | R1 | Road grade: elevation profile, pitch in truth and IMU; grade sensitivity of the estimators (D24) | [x] model + editor (D36) and study ([slope_study.md](slope_study.md)); no grade handling in the estimators yet |
-| R2 | Stop-and-go / slow traffic inside the tunnel (D24) | [~] real-life variants researched, scenarios T1–T6 proposed ([traffic_research.md](traffic_research.md)); awaiting decisions |
+| R2 | Stop-and-go / slow traffic inside the tunnel (D24) | [x] research, model T1/T2/T3/T5/T6 (D37) and study ([traffic_study.md](traffic_study.md)); T4 skipped by decision |
 | R3 | Map uncertainty: scale error, lateral offsets, local distortions of the estimator's map (D21, D24) | [ ] |
 | R4 | GPS detail: entrance degradation ramp, dropouts, multipath outliers, reacquisition transients, latency (D16) | [ ] |
 | R5 | IMU error extensions: bias instability/random walk, temperature drift, scale factor, misalignment, vibration + anti-aliasing, timestamp jitter, separate accel/gyro clocks, device profiles (D07) | [ ] |

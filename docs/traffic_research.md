@@ -1,7 +1,8 @@
 # Traffic in and around road tunnels: real-life variants (research for R2)
 
-Research note of 2026-10-13. Nothing is implemented yet. It collects how traffic actually behaves in
-tunnels and proposes which variants to simulate, for review. Sources are listed at the end. Where the
+Research note of 2026-10-13. It collects how traffic actually behaves in tunnels and proposed which
+variants to simulate. *Outcome:* T1, T2, T3, T5 and T6 were implemented (D37; T4 skipped by decision)
+and studied in [traffic_study.md](traffic_study.md). Sources are listed at the end. Where the
 evidence is weak (news reports, FAQ pages), it is marked as an example, not as data.
 
 ## 1. Why traffic matters for this case study

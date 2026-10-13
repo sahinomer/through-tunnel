@@ -91,3 +91,24 @@ async def test_profile_drag_is_clamped_and_reaches_the_simulation():
         with user.client:
             await editor._apply_template("underwater")
         assert page.result.truth.z.min() < -20.0
+
+
+@pytest.mark.anyio
+async def test_traffic_panel_reaches_the_simulation():
+    import gc
+
+    from throughtunnel.scenario import load_preset
+
+    async with user_simulation(root=SimulatorPage) as user:
+        await user.open("/")
+        page = next(o for o in gc.get_objects() if isinstance(o, SimulatorPage))
+        panel = page.traffic_panel
+        with user.client:
+            await page._load_scenario(load_preset("synthetic_demo_track"))
+            assert page.result.config.traffic.scenario == "free"
+            panel.select.value = "stop_and_go"
+            panel.s_count.value = 2
+            await panel._changed()
+        assert page.result.config.traffic.scenario == "stop_and_go" and len(page.result.traffic.stops) == 2
+        assert (page.result.motion.v == 0.0).any()
+        assert "standing" in page.route_info.content

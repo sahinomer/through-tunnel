@@ -214,6 +214,21 @@ horizontal distance s.
 | normal | 70 km/h | 4 km/h | 2.0 m/s² | 1.5 | 2.5 | 2.0 m/s³ |
 | sporty | 85 km/h | 6 km/h | 3.0 m/s² | 2.5 | 3.5 | 3.5 m/s³ |
 
+**5.5 Traffic (`vehicle/traffic.py`, D37).** Traffic in the tunnel is built from two primitives,
+anchored to B and C on the map route:
+* *Speed zones* cap the planned speed between two distances. Before a zone the cap is a constant-braking
+  ramp, after it a constant-acceleration ramp, with optional smooth random variation inside (own seed).
+* *Stops* are time-based and live in the longitudinal model:
+  * before a stop, the reference is capped by v = sqrt(2·b·(s_stop − s)) with a_ref = −b;
+  * near rest, a constant-jerk manoeuvre j = a²/(2v) brings speed and acceleration to zero together;
+  * the state is snapped to exact rest at the end of that step (< 0.02 m/s², < 1e-4 m/s);
+  * the vehicle stands for the stop's duration, then pulls away along v = sqrt(2·a_go·(s − s_rest)).
+
+Scenarios: portal slowdown (T1), tunnel speed limit (T2), stop-and-go (T3), exit queue (T5), congested
+flow (T6). Positions, durations and speeds are varied by ±jitter from a seeded "traffic" stream. With
+free flow both models take their original code paths (bit-identical). GPS reports the vehicle heading
+as bearing at standstill.
+
 ## 6. Smartphone IMU model (`sensors/`)
 
 **Accelerometer.** It measures the specific force at the phone, expressed in phone axes:
@@ -345,7 +360,7 @@ Android-`Location`-style fixes (D16), not raw GNSS. Defaults are in decision D25
 * Presets live inside the package (`throughtunnel/presets/*.json`), so the app and the tests run
   offline.
 
-## 8. Validation (`uv run pytest`, 187 tests, no network)
+## 8. Validation (`uv run pytest`, 202 tests, no network)
 
 | Property | Test |
 |---|---|
@@ -377,6 +392,7 @@ Android-`Location`-style fixes (D16), not raw GNSS. Defaults are in decision D25
 | Positioning | causality of every estimator (perturb the future, past unchanged); runner order and tie rule; zero-error dead reckoning < 1 m; forward-bias error = analytic vector integral (1 %); gyro-bias heading error linear (5 %); calibration removes > 95 % / > 80 % of bias errors; tilted mount recovered < 1°; gyro-bias calibration < 0.02 °/s on the hardest approach; GPS blending improves the hand-over state; route estimators stay on the route; on-time announcements with perfect data |
 | Evaluation | along/cross sign conventions on shifted truth; recovery-time definition |
 | Road elevation (D36) | curve passes through the points without overshoot; grade and vertical curvature continuous (C2); grade limit validated and enforced by the drag clamp (lands exactly on the limit); templates within the limit and gentle (< 0.3 m/s² at 90 km/h); truth height/grade/pitch follow the profile, body x along the 3-D velocity; flat profile bit-identical to no profile; the IMU end-to-end test also runs on an underwater profile; a grade change after calibration leaks gravity, a constant grade does not; editor: drag events parsed, only points draggable, simulated drag clamped and re-simulated |
+| Traffic (D37) | plans anchored to B/C, reproducible per seed; every scenario respects the driver's accel/decel/jerk limits, never reverses, slows the tunnel and still gets through; stops are real standstills of the planned duration at the planned place; ds/dt = v and dv/dt = a through the stops; the IMU reads gravity only while standing and matches the numerically differentiated phone pose; the GPS outage lengthens; GPS bearing at standstill = heading; free flow bit-identical (checked against the previous code) |
 | App logic | playback clock (play/pause/seek/end/restart), figure decimation and cursor, browser track payload, IMU figure ranges |
 
 **Evidence note.** The table above is enforced by tests. These figures are *one-off measurements*
