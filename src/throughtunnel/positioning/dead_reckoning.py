@@ -30,8 +30,16 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
+import numpy as np
+from numpy.typing import NDArray
+
 from throughtunnel.observations import GnssFix, RouteMap
-from throughtunnel.positioning.alignment import ALIGNED, Alignment, MountAlignmentEstimator
+from throughtunnel.positioning.alignment import (
+    ALIGNED,
+    Alignment,
+    MountAlignmentEstimator,
+    with_orientation_error,
+)
 from throughtunnel.positioning.base import Estimator, StateEstimate
 
 
@@ -49,11 +57,17 @@ class VehicleDeadReckoning(Estimator):
     name = "dr"
     label = "Dead reckoning"
 
-    def __init__(self, route: RouteMap, config: DeadReckoningConfig | None = None) -> None:
-        super().__init__(route)
+    def __init__(
+        self,
+        route: RouteMap,
+        config: DeadReckoningConfig | None = None,
+        calibration_error: NDArray[np.float64] | None = None,
+    ) -> None:
+        super().__init__(route, calibration_error)
         self.config = config or DeadReckoningConfig()
         self._aligner = MountAlignmentEstimator() if self.config.alignment == "estimate" else None
-        self._axes: Alignment | None = ALIGNED if self._aligner is None else None
+        declared = with_orientation_error(ALIGNED, calibration_error)
+        self._axes: Alignment | None = declared if self._aligner is None else None
         self._t: float | None = None
         self._last_fix_t = -math.inf
         self._e = self._n = self._v = self._psi = 0.0
@@ -86,7 +100,7 @@ class VehicleDeadReckoning(Estimator):
             self._aligner.add_fix(fix)
             solved = self._aligner.solve()
             if solved is not None and solved.ready:
-                self._axes = solved
+                self._axes = with_orientation_error(solved, self.calibration_error)
 
     def on_imu(self, t: float, accel: Sequence[float], gyro: Sequence[float]) -> None:
         if self._aligner is not None and t - self._last_fix_t <= self.config.gnss_timeout_s:
@@ -129,7 +143,7 @@ class VehicleDeadReckoning(Estimator):
 
     @property
     def alignment(self) -> Alignment | None:
-        """Current axes (diagnostics)."""
+        """Axes in use, including an injected calibration error (diagnostics)."""
         return self._axes
 
 
@@ -137,23 +151,29 @@ class RawDeadReckoning(VehicleDeadReckoning):
     name = "dr_raw"
     label = "DR raw IMU (assumed aligned mount)"
 
-    def __init__(self, route: RouteMap) -> None:
-        super().__init__(route, DeadReckoningConfig(alignment="assume_aligned", calibrate_gyro_bias=False))
+    def __init__(self, route: RouteMap, calibration_error: NDArray[np.float64] | None = None) -> None:
+        super().__init__(
+            route,
+            DeadReckoningConfig(alignment="assume_aligned", calibrate_gyro_bias=False),
+            calibration_error,
+        )
 
 
 class CalibratedDeadReckoning(VehicleDeadReckoning):
     name = "dr_calibrated"
     label = "DR GPS-calibrated IMU"
 
-    def __init__(self, route: RouteMap) -> None:
-        super().__init__(route, DeadReckoningConfig(alignment="estimate", calibrate_gyro_bias=True))
+    def __init__(self, route: RouteMap, calibration_error: NDArray[np.float64] | None = None) -> None:
+        super().__init__(
+            route, DeadReckoningConfig(alignment="estimate", calibrate_gyro_bias=True), calibration_error
+        )
 
 
 class FilteredDeadReckoning(VehicleDeadReckoning):
     name = "dr_filtered"
     label = "DR calibrated + GPS-blended speed/heading"
 
-    def __init__(self, route: RouteMap) -> None:
+    def __init__(self, route: RouteMap, calibration_error: NDArray[np.float64] | None = None) -> None:
         super().__init__(
             route,
             DeadReckoningConfig(
@@ -162,4 +182,5 @@ class FilteredDeadReckoning(VehicleDeadReckoning):
                 blend_speed_tau_s=5.0,
                 blend_heading_tau_s=10.0,
             ),
+            calibration_error,
         )

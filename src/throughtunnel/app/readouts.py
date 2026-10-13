@@ -44,6 +44,7 @@ def route_info_html(result: SimulationResult, route: RawRoute) -> str:
             f"{fmt_km(rm.tunnel_entrance_m)} · recovery {fmt_km(rm.length_m - rm.tunnel_exit_m)}",
         ),
         ("GPS", f"{len(res.gnss)} fixes · outage: {outage}"),
+        ("Calibration error", html.escape(res.config.calibration.describe())),
         ("Map polyline", f"{fmt_km(d.raw_length_m)} · {d.raw_vertices} vertices"),
         ("Smoothing deviation", f"max {d.max_deviation_m:.2f} m · rms {d.rms_deviation_m:.2f} m"),
         ("Min turn radius", f"{d.min_radius_m:,.0f} m" if math.isfinite(d.min_radius_m) else "∞"),

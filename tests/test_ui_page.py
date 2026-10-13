@@ -45,3 +45,24 @@ async def test_panels_feed_the_simulation():
         imu = page.result.config.imu
         assert imu.mount.yaw_deg == 90 and imu.mount.label == "custom"
         assert imu.errors == cfg.imu.errors  # other sensor settings unchanged
+
+
+@pytest.mark.anyio
+async def test_calibration_panel_reaches_the_estimators_only():
+    import gc
+
+    from throughtunnel.scenario import load_preset
+
+    async with user_simulation(root=SimulatorPage) as user:
+        await user.open("/")
+        page = next(o for o in gc.get_objects() if isinstance(o, SimulatorPage))
+        with user.client:
+            await page._load_scenario(load_preset("synthetic_demo_track"))
+            before = page.result
+            page.calibration_panel.enabled.value = True
+            page.calibration_panel.s_pitch.value = 0.25
+            await page.calibration_panel._changed()
+        cal = page.result.config.calibration
+        assert cal.enabled and cal.pitch_deg == 0.25
+        assert page.result.imu is before.imu and page.result.gnss is before.gnss  # nothing re-simulated
+        assert "Calibration error" in page.route_info.content

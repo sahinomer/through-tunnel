@@ -18,8 +18,11 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 
+import numpy as np
+from numpy.typing import NDArray
+
 from throughtunnel.observations import GnssFix, RouteMap
-from throughtunnel.positioning.alignment import Alignment, MountAlignmentEstimator
+from throughtunnel.positioning.alignment import Alignment, MountAlignmentEstimator, with_orientation_error
 from throughtunnel.positioning.base import Estimator, StateEstimate
 
 GNSS_TIMEOUT_S = 1.5
@@ -33,8 +36,8 @@ class RouteConstrained(Estimator):
     label = "Route-constrained"
     use_imu_speed = True
 
-    def __init__(self, route: RouteMap) -> None:
-        super().__init__(route)
+    def __init__(self, route: RouteMap, calibration_error: NDArray[np.float64] | None = None) -> None:
+        super().__init__(route, calibration_error)
         self._aligner = MountAlignmentEstimator()
         self._axes: Alignment | None = None
         self._t: float | None = None
@@ -62,7 +65,7 @@ class RouteConstrained(Estimator):
         self._aligner.add_fix(fix)
         solved = self._aligner.solve()
         if solved is not None and solved.ready:
-            self._axes = solved
+            self._axes = with_orientation_error(solved, self.calibration_error)
 
     def on_imu(self, t: float, accel: Sequence[float], gyro: Sequence[float]) -> None:
         gnss = t - self._last_fix_t <= GNSS_TIMEOUT_S

@@ -19,7 +19,7 @@ from typing import Any
 import plotly.graph_objects as go
 from nicegui import events, run, ui
 
-from throughtunnel.app.controls import DrivePanel, MountPanel, SensorPanel, TunnelPanel
+from throughtunnel.app.controls import CalibrationPanel, DrivePanel, MountPanel, SensorPanel, TunnelPanel
 from throughtunnel.app.map_view import MapView
 from throughtunnel.app.playback import SPEED_OPTIONS, PlaybackController
 from throughtunnel.app.plots import (
@@ -43,10 +43,12 @@ from throughtunnel.scenario import (
     load_preset,
     run_scenario,
     scenario_from_json,
+    with_calibration,
     with_sensor_config,
 )
 from throughtunnel.sensors.gnss import GnssConfig
 from throughtunnel.sensors.imu import ImuConfig
+from throughtunnel.sensors.mounting import CalibrationErrorConfig
 from throughtunnel.vehicle.config import DRIVER_PRESETS
 
 DEFAULT_PRESET = "seattle_sr99_tunnel"
@@ -91,6 +93,7 @@ class SimulatorPage:
                 self.tunnel_panel = TunnelPanel(self._on_tunnel_change)
                 self.drive_panel = DrivePanel(self._generate, DRIVER_PRESETS["normal"], RoadConfig())
                 self.mount_panel = MountPanel(self._apply_sensors, self.base_imu)
+                self.calibration_panel = CalibrationPanel(self._apply_calibration, CalibrationErrorConfig())
                 self.sensor_panel = SensorPanel(self._apply_sensors, self.base_imu, self.base_gnss)
 
         # keep_alive=False: the hidden plot is unmounted (Plotly cannot resize a hidden div); only the
@@ -183,6 +186,7 @@ class SimulatorPage:
         self.drive_panel.set(cfg.driver, cfg.road, cfg.seed, cfg.sample_rate_hz)
         self.base_imu, self.base_gnss = cfg.imu, cfg.gnss
         self.mount_panel.set(cfg.imu)
+        self.calibration_panel.set(cfg.calibration)
         self.sensor_panel.set_imu(cfg.imu)
         self.sensor_panel.set_gnss(cfg.gnss)
         self.tunnel_panel.set(cfg.tunnel)
@@ -228,6 +232,7 @@ class SimulatorPage:
                 road=self.drive_panel.road(),
                 driver=self.drive_panel.driver(),
                 imu=self._imu_from_controls(),
+                calibration=self.calibration_panel.config(),
                 gnss=self.sensor_panel.gnss(self.base_gnss),
                 tunnel=self.tunnel_panel.config(),
                 seed=self.drive_panel.seed,
@@ -263,6 +268,14 @@ class SimulatorPage:
         self.imu_plot.update_figure(imu_figure(self.result))
         self.sensor_panel.show_applied_errors(self.result)
         self.map_view.show_gps(self.result)
+        self._update_route_info()
+        await self._run_positioning()
+
+    async def _apply_calibration(self) -> None:
+        """Re-run only positioning: the calibration error changes no simulated data (D34)."""
+        if self.result is None:
+            return
+        self.result = with_calibration(self.result, self.calibration_panel.config())
         self._update_route_info()
         await self._run_positioning()
 

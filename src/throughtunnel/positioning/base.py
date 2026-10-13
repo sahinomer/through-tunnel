@@ -7,6 +7,9 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+import numpy as np
+from numpy.typing import NDArray
+
 from throughtunnel.observations import GnssFix, RouteMap
 
 
@@ -30,14 +33,20 @@ class Estimator(ABC):
     Subclasses implement the three methods; reusable processing (alignment, filtering, map matching)
     is composed in as plain objects (D18). An estimator gets the route map at construction and must
     not use any other information (D15).
+
+    ``calibration_error`` is an experiment hook (D34), not information: a rotation (vehicle axes) that
+    the experiment harness injects into the phone-to-vehicle orientation the estimator uses, to model a
+    residual calibration error. The estimator applies it blindly and cannot observe or correct it.
+    Estimators that do not use the IMU orientation ignore it.
     """
 
     name: str = "estimator"
     label: str = "Estimator"
 
-    def __init__(self, route: RouteMap) -> None:
+    def __init__(self, route: RouteMap, calibration_error: NDArray[np.float64] | None = None) -> None:
         self.route = route
         self.frame = route.frame
+        self.calibration_error = calibration_error
 
     @abstractmethod
     def on_imu(self, t: float, accel: Sequence[float], gyro: Sequence[float]) -> None:

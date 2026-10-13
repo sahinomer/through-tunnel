@@ -34,6 +34,7 @@ from throughtunnel.routing.base import RawRoute
 from throughtunnel.sensors.errors import ImuErrorConfig, ImuErrorRealization, apply_imu_errors
 from throughtunnel.sensors.gnss import GnssConfig, GnssEvents, gnss_timestamps, simulate_gnss
 from throughtunnel.sensors.imu import ImuConfig, ImuStream, ideal_imu, imu_timestamps
+from throughtunnel.sensors.mounting import CalibrationErrorConfig
 from throughtunnel.vehicle.config import DriverConfig
 from throughtunnel.vehicle.longitudinal import LongitudinalTrajectory, simulate_longitudinal
 from throughtunnel.vehicle.speed_profile import SpeedProfile, plan_speed_profile
@@ -46,7 +47,8 @@ from throughtunnel.vehicle.truth import GroundTruth, build_ground_truth
 #     are migrated to a tunnel covering the whole route (PD7).
 # v5: one exit announcement `tunnel.announce_before_exit_m` replaces the navigation event inside the tunnel
 #     (`exit_event_m`, `announce_leads_m`; D32). Older files get the default distance, capped at the tunnel.
-SCHEMA_VERSION = 5
+# v6: added `calibration` (orientation error of the estimators' phone calibration, D34); default off.
+SCHEMA_VERSION = 6
 
 TUNNEL_MIN_LENGTH_M = 500.0
 TUNNEL_MAX_LENGTH_M = 5000.0
@@ -89,6 +91,10 @@ class ScenarioConfig(BaseModel):
     road: RoadConfig = Field(default_factory=RoadConfig)
     driver: DriverConfig = Field(default_factory=DriverConfig)
     imu: ImuConfig = Field(default_factory=ImuConfig)
+    calibration: CalibrationErrorConfig = Field(
+        default_factory=CalibrationErrorConfig,
+        description="Orientation error of the estimators' phone calibration (positioning side, D34)",
+    )
     tunnel: TunnelConfig | None = Field(None, description="None = no tunnel (GPS on the whole route)")
     gnss: GnssConfig = Field(default_factory=GnssConfig)
     seed: int = Field(0, ge=0)
@@ -347,6 +353,12 @@ def with_sensor_config(
         gnss_ideal=g_ideal,
         gnss_events=g_events,
     )
+
+
+def with_calibration(result: SimulationResult, calibration: CalibrationErrorConfig) -> SimulationResult:
+    """Same simulation with another calibration error. Nothing is re-simulated: the error acts only on
+    the estimators (D34), so the vehicle motion and all sensor data stay identical."""
+    return replace(result, config=result.config.model_copy(update={"calibration": calibration}))
 
 
 def with_imu_config(result: SimulationResult, imu: ImuConfig) -> SimulationResult:

@@ -80,7 +80,10 @@ Options: `uv run throughtunnel --port 8090 --host 0.0.0.0 --no-browser`.
 
    *Tunnel exit announcement* sets how far before the tunnel exit C the app announces the exit (one
    announcement per estimator, triggered from its own estimate; default 300 m). The GPS controls are
-   in *IMU sample rate & errors*.
+   in *IMU sample rate & errors*. *Calibration error (assumed orientation)* rotates the phone-to-vehicle
+   orientation the estimators use (yaw, pitch, roll) without changing the actual mount or any sensor
+   data. Only positioning re-runs, so with/without comparisons are exactly paired
+   ([docs/calibration_error.md](docs/calibration_error.md)).
 7. **Reproduce it.** *Save scenario* downloads a JSON file with the route geometry *as fetched*, every
    parameter (phone mounting, IMU rate and errors included) and the seeds. *Load scenario* replays it
    bit-for-bit, offline.
@@ -115,6 +118,7 @@ Monte-Carlo comparison of all estimators on the presets (as in docs/results.md):
 
 ```bash
 uv run python -m throughtunnel.evaluation.report --seeds 20 --vary-drive
+uv run python -m throughtunnel.evaluation.calibration_study --seeds 10   # docs/calibration_error.md
 ```
 
 To simulate your own road, build a `ScenarioConfig(route=RawRoute(...))` or use

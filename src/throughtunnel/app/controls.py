@@ -20,7 +20,12 @@ from throughtunnel.scenario import DEFAULT_ANNOUNCE_BEFORE_EXIT_M, SimulationRes
 from throughtunnel.sensors.errors import DEG, MDPS, MG, UG, ImuErrorConfig, SensorErrorConfig
 from throughtunnel.sensors.gnss import GnssConfig
 from throughtunnel.sensors.imu import ImuConfig
-from throughtunnel.sensors.mounting import MOUNT_PRESETS, PhoneMount, describe_phone_axes
+from throughtunnel.sensors.mounting import (
+    MOUNT_PRESETS,
+    CalibrationErrorConfig,
+    PhoneMount,
+    describe_phone_axes,
+)
 from throughtunnel.vehicle.config import DRIVER_PRESETS, DriverConfig
 
 Callback = Callable[[], Awaitable[None]]
@@ -258,6 +263,45 @@ class MountPanel(Panel):
         axes = describe_phone_axes(self.mount().rotation_body_from_phone())
         mapping = " · ".join(f"<b>{k}</b> → {v}" for k, v in axes.items())
         self.axes_label.content = f"Phone axes in the vehicle: {mapping}"
+
+
+class CalibrationPanel(Panel):
+    """Calibration error: the phone orientation the estimators use vs. the actual mount (D34)."""
+
+    def __init__(self, on_change: Callback, calibration: CalibrationErrorConfig) -> None:
+        super().__init__(on_change)
+        c = calibration
+        with ui.expansion(
+            "Calibration error (assumed orientation)", icon="screen_rotation", value=False
+        ).classes("w-full border rounded"):
+            self.enabled = ui.switch("Calibration error", value=c.enabled)
+            self.s_yaw = slider("Heading (yaw) error", -10, 10, 0.5, c.yaw_deg, "°")
+            self.s_pitch = slider("Pitch error", -2, 2, 0.05, c.pitch_deg, "°")
+            self.s_roll = slider("Roll error", -5, 5, 0.1, c.roll_deg, "°")
+            ui.label(
+                "Each estimator uses the phone-to-vehicle orientation from its own calibration, rotated "
+                "by these angles (vehicle axes). The actual mount and all sensor data stay unchanged. "
+                "+ yaw: assumed forward to the left; + pitch: assumed forward nose-down (gravity leaks in "
+                "as −g·sin pitch); + roll: assumed up tilted to the right."
+            ).classes("text-xs text-gray-500")
+            self.enabled.on_value_change(self._changed)
+            for s in (self.s_yaw, self.s_pitch, self.s_roll):
+                s.on("change", self._changed)
+
+    def config(self) -> CalibrationErrorConfig:
+        return CalibrationErrorConfig(
+            enabled=bool(self.enabled.value),
+            yaw_deg=float(self.s_yaw.value),
+            pitch_deg=float(self.s_pitch.value),
+            roll_deg=float(self.s_roll.value),
+        )
+
+    def set(self, calibration: CalibrationErrorConfig) -> None:
+        with self._quiet():
+            self.enabled.value = calibration.enabled
+            self.s_yaw.value = calibration.yaw_deg
+            self.s_pitch.value = calibration.pitch_deg
+            self.s_roll.value = calibration.roll_deg
 
 
 class SensorPanel(Panel):

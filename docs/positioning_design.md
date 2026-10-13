@@ -26,6 +26,9 @@ the implementation:
   physical tunnel exit C** (`TunnelConfig.announce_before_exit_m`, default 300 m, 0 ≤ d ≤ B–C length).
   `NavigationEvent` was removed; `RouteMap` carries `announce_before_exit_m`. The sections below
   describe the current design.
+* **Calibration error hook** (D34, 2026-10-13): `Estimator(route, calibration_error=R)` rotates the
+  phone-to-vehicle orientation the estimator uses (declared or estimated). It is an experiment
+  fault-injection, not an observation. Study: [calibration_error.md](calibration_error.md).
 * **Not yet:** covariance outputs (so no NEES/coverage), probabilistic estimators, map matching beyond
   projection, recovery gating.
 

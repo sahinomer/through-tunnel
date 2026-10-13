@@ -107,6 +107,33 @@ Minor differences:
   controls to their last applied values (identical except for an un-applied edit).
 * Two empty, never-filled labels were removed (`gps_label`; `tunnel_info` in task 1).
 
+**Task 3: configurable calibration error and controlled study (D34), done.** Details and tables:
+[calibration_error.md](calibration_error.md).
+* *Model:* the actual mount drives the sensors. The orientation each estimator uses is rotated by a
+  configurable yaw/pitch/roll error, injected by the harness rather than given as an observation.
+  Default off; UI panel; schema v6.
+* *Unchanged:* with the error off, positioning outputs are bit-identical; the sensor data is
+  identical with the error on (both tested).
+* *Not done:* no correction methods, by request.
+* *Study:* 3 presets × 10 seeds, paired runs (identical observations with and without the error);
+  `python -m throughtunnel.evaluation.calibration_study`.
+* *Findings:*
+  * Pitch error dominates. Gravity leaks into the forward channel at 17 mg per degree, giving an
+    along-track error of −½·g·sin θ·τ². 0.05° adds 40–100 m at C; 0.5° adds 0.4–1 km.
+  * All IMU-integrating estimators are hit about equally. The route constraint does not help, and GPS
+    blending makes it slightly worse (the approach speed lag is carried into the tunnel).
+  * Yaw error is moderate and depends on where the curves are: sin δ·∬a_lat, 20–45 m at 2°.
+  * Roll error is negligible on a flat road.
+  * At about 0.1° of pitch residual, the best inertial estimator is no better than the naive
+    reference.
+
+**Finding raised for attention (credibility): pitch calibration.** The headline accuracy (20–30 m at
+C) requires a pitch residual of about 0.02°. The simulation achieves this only because the road is
+flat and the mount and body are rigid. A grade difference of 1% between approach and tunnel equals a
+0.57° pitch error, i.e. hundreds of metres. This quantifies the R1 caveat: **implementing road grade
+will likely degrade the IMU-based results substantially unless the method changes.** Vehicle body
+pitch (acceleration, braking, load) is a further unmodelled source of the same error (R11).
+
 **Observation (UI behaviour, pre-existing, not fixed):** NiceGUI runs *async* change handlers as
 background tasks, so the "loading" guard that marks values set from code is already reset when they run.
 Handlers registered with `on_value_change` / `on_change` (switches, mount-preset select) therefore
@@ -238,6 +265,8 @@ are committed (F9).
 | R7 | Estimator tuning mismatch (PD6) | [ ] |
 | R8 | Scenario library: curved vs straight, 0.5–5 km tunnels, different mounts and driver styles | [ ] |
 | R9 | Re-check road smoothing defaults on new real roads (D03) | [ ] |
+| R10 | Calibration error: injected orientation residual + controlled study (D34, calibration_error.md) | [x] model + study; no correction methods (by request) |
+| R11 | Calibration error from physical causes instead of injection: body pitch under acceleration/braking/load, phone shifting in the holder, grade during calibration (with R1); random per-drive residuals | [ ] |
 
 ### Phase F: final evaluation and deliverables
 | ID | Task | Status |

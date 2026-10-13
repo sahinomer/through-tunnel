@@ -97,3 +97,50 @@ def describe_phone_axes(rotation_bs: NDArray[np.float64], threshold: float = 0.2
             parts.append(name if abs(col[i]) > 0.999 else f"{abs(col[i]):.2f} {name}")
         out[axis] = " + ".join(parts)
     return out
+
+
+DEFAULT_CALIBRATION_YAW_DEG = 2.0
+DEFAULT_CALIBRATION_PITCH_DEG = 0.5
+DEFAULT_CALIBRATION_ROLL_DEG = 0.5
+
+
+class CalibrationErrorConfig(BaseModel):
+    """Residual error of the phone-to-vehicle orientation that the estimators use (D34).
+
+    The actual mounting (``PhoneMount``) drives the sensor simulation and is never changed by this.
+    Each estimator obtains its own phone-to-vehicle orientation: ``dr_raw`` declares it (aligned), the
+    calibrated estimators estimate it from approach GPS (levelling + yaw). With the error enabled, the
+    orientation an estimator *uses* is additionally rotated: its assumed vehicle axes are the axes it
+    would otherwise use, rotated by ``R_err = Rz(yaw) Ry(pitch) Rx(roll)`` in vehicle axes. This models
+    what a real calibration leaves behind (vehicle pitch under load or acceleration during calibration,
+    grade, the phone shifting in its holder) without modelling the cause. Constant during a run.
+
+    Sign conventions (ISO 8855 vehicle axes, x forward, y left, z up):
+    * + yaw: the assumed forward axis points to the left of the true one;
+    * + pitch: the assumed forward axis points below the true one (nose-down): gravity then leaks into
+      the forward channel as -g·sin(pitch);
+    * + roll: the assumed up axis tilts to the right.
+
+    Defaults (used when enabled): order-of-magnitude residuals assumed for an online smartphone
+    calibration: heading 2°, pitch and roll 0.5°. Real values depend strongly on the method and drive.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    enabled: bool = False
+    yaw_deg: float = Field(DEFAULT_CALIBRATION_YAW_DEG, ge=-20, le=20, description="Heading misalignment")
+    pitch_deg: float = Field(DEFAULT_CALIBRATION_PITCH_DEG, ge=-10, le=10, description="Pitch misalignment")
+    roll_deg: float = Field(DEFAULT_CALIBRATION_ROLL_DEG, ge=-10, le=10, description="Roll misalignment")
+
+    def rotation_error(self) -> NDArray[np.float64] | None:
+        """R_err (assumed vehicle axes = true axes rotated by R_err, in vehicle axes); None if disabled."""
+        if not self.enabled:
+            return None
+        return euler_zyx(
+            math.radians(self.yaw_deg), math.radians(self.pitch_deg), math.radians(self.roll_deg)
+        )
+
+    def describe(self) -> str:
+        if not self.enabled:
+            return "off"
+        return f"yaw {self.yaw_deg:+g}°, pitch {self.pitch_deg:+g}°, roll {self.roll_deg:+g}°"

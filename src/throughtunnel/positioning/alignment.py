@@ -25,7 +25,7 @@ Method (per GPS interval of ~1 s, using the mean phone specific force f̄ and an
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 from numpy.typing import NDArray
@@ -164,6 +164,18 @@ class MountAlignmentEstimator:
             excitation=excitation,
             correlation=corr,
         )
+
+
+def with_orientation_error(alignment: Alignment, rotation: NDArray[np.float64] | None) -> Alignment:
+    """The alignment with its vehicle axes rotated by ``rotation`` (in vehicle axes, D34).
+
+    ``A = [forward left up]`` maps vehicle to phone coordinates; the erroneous axes are ``A @ rotation``.
+    Used only to inject a calibration error in experiments; ``None`` returns the alignment unchanged.
+    """
+    if rotation is None:
+        return alignment
+    axes = np.column_stack([alignment.forward, alignment.left, alignment.up]) @ rotation
+    return replace(alignment, forward=axes[:, 0], left=axes[:, 1], up=axes[:, 2])
 
 
 def _gyro_bias_regression(r, dt, t_end, sigma, good) -> float:

@@ -157,6 +157,10 @@ Tunnel B–C 1.96 km, crossed in 103 s (preset drive); exit announced 300 m befo
   The forward specific force then gains g·sin(1.7°) ≈ 0.29 m/s², three times the entire default
   accelerometer bias (10 mg ≈ 0.1 m/s²), which is ~1.2 km of error after 90 s if uncorrected. Real tunnels often have grades (underwater tunnels: 4–6 %),
   so these results are optimistic until road grade is simulated (roadmap R1).
+* **Perfect pitch calibration.** The calibrated estimators level the phone on a flat road with a
+  rigid mount, which leaves a pitch residual far below 0.02°. A residual of 0.05° already adds
+  40–100 m at C, and 0.1° removes the advantage over the naive reference
+  ([calibration_error.md](calibration_error.md)).
 * **Map = truth geometry.** Route-constrained estimators use the original OSM polyline, which is within
   ~1–5 m of the driven path. Real map/road mismatches (lane offsets, length scale errors) would add
   along-track error (R3).

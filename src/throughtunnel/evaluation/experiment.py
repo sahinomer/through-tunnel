@@ -20,9 +20,14 @@ class Comparison:
 
 
 def compare_estimators(result: SimulationResult, names: Sequence[str] | None = None) -> Comparison:
-    """Run the named estimators (default: all registered) on the result's observations."""
+    """Run the named estimators (default: all registered) on the result's observations, with the
+    scenario's calibration error injected into each estimator's phone orientation (D34)."""
     obs = result.observations()
-    tracks = [run_estimator(ESTIMATORS[n](obs.route), obs) for n in (names or list(ESTIMATORS))]
+    error = result.config.calibration.rotation_error()
+    tracks = [
+        run_estimator(ESTIMATORS[n](obs.route, calibration_error=error), obs)
+        for n in (names or list(ESTIMATORS))
+    ]
     return Comparison(tracks=tracks, evaluations=[evaluate_track(tr, result) for tr in tracks])
 
 
