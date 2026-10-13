@@ -134,6 +134,31 @@ flat and the mount and body are rigid. A grade difference of 1% between approach
 will likely degrade the IMU-based results substantially unless the method changes.** Vehicle body
 pitch (acceleration, braking, load) is a further unmodelled source of the same error (R11).
 
+**Task 4: sensor-factor baseline study, done.** Details, figures and data:
+[factor_study.md](factor_study.md).
+* *Design:* 5 requested conditions (ideal; IMU noise; IMU bias; calibration error; combined) plus
+  supplementary ones (accelerometer vs gyroscope, GPS errors). 3 presets × 20 runs. Identical drive,
+  seeds and GPS outage in every condition.
+* *Anchor:* the "noise + bias + GPS" condition reproduces `results.md` §2.2 exactly.
+* *Findings:*
+  * With perfect sensors the inertial methods are exact. The naive reference is not (model error up
+    to 336 m).
+  * IMU noise is harmless (1–5 m) and matches random-walk theory.
+  * The calibrated estimators remove the IMU bias completely. That is optimistic: flat road, constant
+    bias.
+  * **The realistic results are limited by GPS errors (hand-over and calibration from noisy GPS), not
+    by the IMU.**
+  * Calibration error (0.5° pitch) dominates everything.
+  * Negative and unexpected results:
+    * calibration turns noise into bias, so the calibrated estimators are worse than raw under noise
+      only or GPS errors only;
+    * with large lags the exit announcement is effectively missed (18–21 s late, after the exit);
+    * combined errors do not simply add.
+
+**Finding raised for attention.** Improving the estimators should start with how approach-phase GPS
+is used (calibration from noisy GPS, hand-over state). That, not the IMU model, limits the current
+accuracy. Pitch calibration and grade (R1) remain the dominant risk.
+
 **Observation (UI behaviour, pre-existing, not fixed):** NiceGUI runs *async* change handlers as
 background tasks, so the "loading" guard that marks values set from code is already reset when they run.
 Handlers registered with `on_value_change` / `on_change` (switches, mount-preset select) therefore
@@ -354,3 +379,10 @@ Places where AI-generated work had to be corrected, found by measurement, tests 
       geometry.
   * A first ranking of estimators on a single drive was misleading (the naive method won on Seattle);
     caught by varying the drive.
+* Calibration study (2026-10-13): a first draft claimed that the naive estimator "overtakes" the
+  inertial ones at 0.05° of pitch. On the fixed preset drives the naive estimator already won
+  without any error (it is drive-dependent). Corrected by comparing against its varied-drive results.
+* Factor study (2026-10-13): the first figures hid overlapping conditions and showed artefacts at the
+  end of the outage (a median over a changing subset of runs). Both were found by looking at the
+  rendered figures and fixed. A suspected 2× discrepancy for gyroscope noise was a noisy 20-run
+  median; the spread matched theory.

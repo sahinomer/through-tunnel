@@ -119,7 +119,10 @@ Monte-Carlo comparison of all estimators on the presets (as in docs/results.md):
 ```bash
 uv run python -m throughtunnel.evaluation.report --seeds 20 --vary-drive
 uv run python -m throughtunnel.evaluation.calibration_study --seeds 10   # docs/calibration_error.md
+uv run python -m throughtunnel.evaluation.factor_study --seeds 20         # docs/factor_study.md (+ figures)
 ```
+
+The figures need matplotlib, a dev dependency (installed by `uv sync`). The simulator does not need it.
 
 To simulate your own road, build a `ScenarioConfig(route=RawRoute(...))` or use
 `OsrmRouteProvider().route(start, end)`.
