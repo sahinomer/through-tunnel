@@ -123,6 +123,7 @@ Monte-Carlo comparison of all estimators on the presets (as in docs/results.md):
 uv run python -m throughtunnel.evaluation.report --seeds 20 --vary-drive
 uv run python -m throughtunnel.evaluation.calibration_study --seeds 10   # docs/calibration_error.md
 uv run python -m throughtunnel.evaluation.factor_study --seeds 20         # docs/factor_study.md (+ figures)
+uv run python -m throughtunnel.evaluation.slope_study --seeds 20          # docs/slope_study.md (+ figures)
 ```
 
 The figures need matplotlib, a dev dependency (installed by `uv sync`). The simulator does not need it.
@@ -203,8 +204,9 @@ Stop-and-go traffic and map errors are on the roadmap.
   toggles/sliders, ideal vs. measured, independent seeded streams.
 - **Positioning phase 1** (done). A–D scenarios, phone GPS, causal estimator framework, five
   estimators, evaluation, Monte-Carlo report, UI overlays.
-- **Road grade** (done, 2026-10-13). Editable elevation profile, 3-D vehicle kinematics. The study
-  of its effect on the estimators is next.
+- **Road grade** (done, 2026-10-13). Editable elevation profile, 3-D vehicle kinematics, and a
+  study of its effect ([docs/slope_study.md](docs/slope_study.md)). A grade change in the tunnel
+  breaks the IMU speed (0.4–1 km per 1 %); the heading survives.
 - **Next:** grade experiments, map errors, a probabilistic estimator with
   covariance, stop-and-go, then the write-up. Tracked in [docs/roadmap.md](docs/roadmap.md).
 

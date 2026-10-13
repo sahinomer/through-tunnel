@@ -151,7 +151,9 @@ Tunnel B–C 1.96 km, crossed in 103 s (preset drive); exit announced 300 m befo
 
 ## 3.1 Caveats that limit these numbers
 
-* **Flat road. This is the most important caveat.** The calibrated estimators rely on levelling during
+* **Flat road. This is the most important caveat**, now measured ([slope_study.md](slope_study.md)):
+  a grade change of 1 % between approach and tunnel adds 0.4–1.0 km at C for every IMU-based
+  estimator. The paragraph below is the original estimate. The calibrated estimators rely on levelling during
   the approach to cancel the accelerometer bias. That cancellation holds only while the road keeps the
   grade it had during the approach. Example: the approach is level and the tunnel descends at 3 %.
   The forward specific force then gains g·sin(1.7°) ≈ 0.29 m/s², three times the entire default

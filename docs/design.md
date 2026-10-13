@@ -345,7 +345,7 @@ Android-`Location`-style fixes (D16), not raw GNSS. Defaults are in decision D25
 * Presets live inside the package (`throughtunnel/presets/*.json`), so the app and the tests run
   offline.
 
-## 8. Validation (`uv run pytest`, 178 tests, no network)
+## 8. Validation (`uv run pytest`, 187 tests, no network)
 
 | Property | Test |
 |---|---|

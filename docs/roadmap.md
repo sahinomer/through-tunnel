@@ -178,6 +178,29 @@ accuracy. Pitch calibration and grade (R1) remain the dominant risk.
 * *Simplifications:* no banking; the driver ignores the grade; presets stay flat (no offline
   elevation data); the profile is defined over map distance (a few metres from the driven distance).
 
+**Task 6: road-slope experiment, done.** Details, figures and data: [slope_study.md](slope_study.md).
+* *Design:* 8 profiles (flat; steady 2 % climb; tunnel climb +1/+2/+4 %; descent −2 %; underwater
+  V 2/4 %) × 3 presets. Ideal sensors (one run) plus realistic sensors (20 paired runs).
+* *Findings:*
+  * What matters is the grade *change* after calibration. A steady climb along the whole route costs
+    nothing; the same grade only in the tunnel costs 0.4–1.0 km per 1 % at C.
+  * The mechanism is gravity leakage, predicted within about 1 %, linear and sign-symmetric. It is
+    equivalent to a pitch calibration error of atan(Δgrade).
+  * **Heading is unaffected** (≤ 0.06° ideal; unchanged median with realistic sensors), but in plain
+    dead reckoning the speed error still becomes lateral error on curves.
+  * Negative results:
+    * on descents the estimate stops (speed clamped at 0);
+    * the underwater V hides a large position error behind a near-zero speed error at C;
+    * on climbs `route_imu` overruns to the route end D (capped "error");
+    * announcements are 27–58 s early on climbs and 19–26 s late on descents.
+  * Only `route_hold` is immune.
+
+**Finding raised for attention (credibility, most important so far).** The inertial headline accuracy
+needs the tunnel grade to match the approach grade within about 0.03–0.07 %. **As implemented, the
+approach-calibrated IMU speed is not usable in sloped tunnels.** Grade handling (barometer or map
+elevation, or treating slow forward-acceleration offsets as unobservable) is a prerequisite for any
+inertial along-track claim. Turn information survives and remains useful.
+
 **Observation (UI behaviour, pre-existing, not fixed):** NiceGUI runs *async* change handlers as
 background tasks, so the "loading" guard that marks values set from code is already reset when they run.
 Handlers registered with `on_value_change` / `on_change` (switches, mount-preset select) therefore
@@ -300,7 +323,7 @@ are committed (F9).
 ### Phase R: realism and robustness experiments (backlog)
 | ID | Task | Status |
 |---|---|---|
-| R1 | Road grade: elevation profile, pitch in truth and IMU; grade sensitivity of the estimators (D24) | [~] model + editor done (D36, §0.1 task 5); **grade experiment next** |
+| R1 | Road grade: elevation profile, pitch in truth and IMU; grade sensitivity of the estimators (D24) | [x] model + editor (D36) and study ([slope_study.md](slope_study.md)); no grade handling in the estimators yet |
 | R2 | Stop-and-go / slow traffic inside the tunnel (D24) | [ ] |
 | R3 | Map uncertainty: scale error, lateral offsets, local distortions of the estimator's map (D21, D24) | [ ] |
 | R4 | GPS detail: entrance degradation ramp, dropouts, multipath outliers, reacquisition transients, latency (D16) | [ ] |
