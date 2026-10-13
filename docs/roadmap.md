@@ -324,7 +324,7 @@ are committed (F9).
 | ID | Task | Status |
 |---|---|---|
 | R1 | Road grade: elevation profile, pitch in truth and IMU; grade sensitivity of the estimators (D24) | [x] model + editor (D36) and study ([slope_study.md](slope_study.md)); no grade handling in the estimators yet |
-| R2 | Stop-and-go / slow traffic inside the tunnel (D24) | [ ] |
+| R2 | Stop-and-go / slow traffic inside the tunnel (D24) | [~] real-life variants researched, scenarios T1–T6 proposed ([traffic_research.md](traffic_research.md)); awaiting decisions |
 | R3 | Map uncertainty: scale error, lateral offsets, local distortions of the estimator's map (D21, D24) | [ ] |
 | R4 | GPS detail: entrance degradation ramp, dropouts, multipath outliers, reacquisition transients, latency (D16) | [ ] |
 | R5 | IMU error extensions: bias instability/random walk, temperature drift, scale factor, misalignment, vibration + anti-aliasing, timestamp jitter, separate accel/gyro clocks, device profiles (D07) | [ ] |
