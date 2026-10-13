@@ -241,3 +241,4 @@ Later (still required, D16):
    estimators may need decimated inputs or vectorised internals (without breaking causality).
 7. **UI complexity:** `app/page.py` is ~720 lines. Multiple estimate overlays need the single-track
    browser player generalised to N tracks. Split the page into components before adding overlays.
+   *(Done: N-track player in the first phase; page split on 2026-10-13, roadmap §0.1.)*

@@ -26,7 +26,9 @@ RouteProvider ──► RawRoute ──► RoadPath ──► SpeedProfile ─�
   global state, so identical config gives identical arrays (tested bit-for-bit).
 * **The UI is a client of the core.** `app/` imports the core; nothing in the core imports `app/`.
   The playback clock (`app/playback.py`) and the figure builders (`app/plots.py`) are plain Python
-  and unit-tested.
+  and unit-tested. `app/page.py` only orchestrates. Its components are the parameter panels
+  (`controls.py`), the map (`map_view.py`), the A–D click selection (`route_picker.py`) and the HTML
+  readouts (`readouts.py`, pure functions).
 * **Ground truth is separate from observations.** `GroundTruth` is the simulator's hidden state. The
   `sensors/` package reads it and emits an observation stream, `ImuStream` (timestamps, accel[N,3],
   gyro[N,3], axis convention, source label). `ImuStream` carries **no** simulation truth, not even the

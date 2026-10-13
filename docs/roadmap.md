@@ -52,7 +52,7 @@ Problems found and fixed during this phase:
 2. R3 map errors.
 3. A8 probabilistic estimator with covariance (then NEES/coverage in A11).
 4. R2 stop-and-go.
-5. Split `page.py` (P9).
+5. Split `page.py` (P9). *Done 2026-10-13, §0.1 task 2.*
 6. F2/F3 write-up.
 
 ## 0.1 Cleanup and refinement phase (from 2026-10-13)
@@ -86,6 +86,34 @@ estimators; only the announcement metric changed. Results tables regenerated.
    (late can mean a missed exit). We report |error| percentiles and the signed mean.
 5. *Small d.* Near d = 0 a lagging estimator may only reach C − d after GPS returns (3–5 s after C), so
    its "announcement" then reflects GPS reacquisition rather than dead reckoning.
+
+**Task 2: UI page split (P9), done.** `app/page.py` went from 989 to 383 lines and now only
+orchestrates (state, layout, simulation/positioning runs, playback). New components:
+* `controls.py`: parameter panels (drive/road, exit announcement, phone mount, IMU and GPS errors),
+  each converting its controls to/from the config models;
+* `map_view.py`: the Leaflet map, its layers and the browser track player;
+* `route_picker.py`: the A–B–C–D click selection, OSRM routing and validation;
+* `readouts.py`: pure HTML builders (scenario summary, live readouts).
+
+The split preserves behaviour. Validation: one scripted interaction sequence was run through the old
+and the new page (preset load, mount yaw, gyro bias, GPS σ, mount preset, announcement distance,
+estimator toggle, clicked route, seek). The two pages gave identical outputs at all 9 steps:
+scenario config, positioning summary, route info, live readouts, sensor and axes labels, map layer set.
+The real server serves the page without errors. The comparison script was a one-off and is not in the
+repository; new tests cover the readout builders and the panel → simulation wiring (145 tests). The
+browser-side map animation was not re-checked in a real browser: its JavaScript calls are unchanged.
+Minor differences:
+* Choosing a mount preset now only resets the mount controls; before, it also reset the IMU/GPS error
+  controls to their last applied values (identical except for an un-applied edit).
+* Two empty, never-filled labels were removed (`gps_label`; `tunnel_info` in task 1).
+
+**Observation (UI behaviour, pre-existing, not fixed):** NiceGUI runs *async* change handlers as
+background tasks, so the "loading" guard that marks values set from code is already reset when they run.
+Handlers registered with `on_value_change` / `on_change` (switches, mount-preset select) therefore
+also fire after a scenario load. This is harmless in the normal flow: the result is cleared at that
+moment, so only the controls are re-read. However, if a loaded file has a preset mount label with
+modified angles, the preset handler would probably overwrite the displayed angles. That case is
+deduced from the code, not reproduced. A fix would be a synchronous guard or comparing values.
 
 **Observation (test tooling, not fixed):** driving page handlers in NiceGUI's `user_simulation` logs
 `AttributeError: 'AppConfig' object has no attribute 'reconnect_timeout'` from NiceGUI's own outbox
@@ -159,6 +187,7 @@ are committed (F9).
 
   The browser-level checks were ad-hoc Playwright scripts that are **not in the repository**.
 * `[~]` **UI scale.** `app/page.py` is ~720 lines, and the browser track player draws one vehicle only.
+  *(2026-10-13: player draws N tracks; page split into components, §0.1 task 2.)*
 
 ### 1.3 Planned earlier, not implemented
 * `[ ]` Data export (CSV/NPZ of observations and truth). Original milestone 3 item.
@@ -181,7 +210,7 @@ are committed (F9).
 | P6 | Observations builder: `SimulationResult` → `Observations` (measured IMU and GPS, `RouteMap` from the **original polyline**). Leakage tests | P1, P2, P5 | [x] |
 | P7 | Estimator base class, `StateEstimate`, `EstimateTrack`, causal runner + causality test | P6 | [x] |
 | P8 | Evaluation core: truth at estimate times, along/cross/total error vs time and distance, error at C (PD3) + tests | P4, P7 | [x] |
-| P9 | Visualisation of estimates: split `page.py` into components; multi-track browser player; per-estimator toggles; error plot tab | P7, P8 | [~] overlays, toggles, errors tab done; `page.py` **not** split (~1000 lines) |
+| P9 | Visualisation of estimates: split `page.py` into components; multi-track browser player; per-estimator toggles; error plot tab | P7, P8 | [x] overlays, toggles, errors tab done; page split into components (2026-10-13, §0.1) |
 ### Phase A: positioning algorithms and comparison experiments
 | ID | Task | Depends | Status |
 |---|---|---|---|

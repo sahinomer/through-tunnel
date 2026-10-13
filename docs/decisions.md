@@ -71,6 +71,7 @@ are therefore **active**, implemented as described, except where a note says oth
 | ID | Decision | Status | Source |
 |---|---|---|---|
 | D32 | **One exit announcement before the physical tunnel exit C.** Replaces the navigation event inside B–C with two leads (D14, D26). A single parameter `TunnelConfig.announce_before_exit_m` (default 300 m, 0 ≤ d ≤ B–C length; schema v5, older files get min(300 m, tunnel length)). Each estimator announces **once**, the first time its own estimated progress (shared Announcer, PD8) reaches C − d; never from truth. Evaluation: t_announce − t_true(C − d) (+ = late) and the equivalent distance; never reached = missed. **Interpretation of the brief** ("call out an exit inside the tunnel at the right moment"): the call-out is made *inside* the tunnel, while GPS is unavailable, for a maneuver at the tunnel exit. Limitations: roadmap §0.1 (L-ANN). | active | review 6 |
+| D33 | UI structure: `app/page.py` orchestrates only (state, layout, runs, playback). Parameter panels, map, route picker and readouts are separate components that convert to and from the config models and call back into the page. Behaviour-preserving split, verified by an old-vs-new interaction comparison. | active | review 6 |
 
 ## Proposed (historical text, adopted above)
 

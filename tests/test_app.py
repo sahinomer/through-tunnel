@@ -87,3 +87,15 @@ def test_imu_figure():
     lo, hi = fig.layout.yaxis3.range
     assert hi - lo >= MIN_SPAN_ACCEL
     assert lo < res.imu.accel[:, 2].min() and hi > res.imu.accel[:, 2].max()  # measured (noisy) fits
+
+
+def test_readouts_render_for_a_preset():
+    from throughtunnel.app.readouts import estimate_readout_html, route_info_html, state_readout_html
+
+    res = run_scenario(load_preset("synthetic_demo_track"))
+    info = route_info_html(res, res.config.route)
+    assert "Tunnel B–C" in info and "fixes · outage" in info
+    t = 0.5 * res.truth.duration_s
+    state = state_readout_html(res.truth.sample(t), res.imu.at(t), res.imu_ideal.at(t))
+    assert "speed" in state and "phone IMU" in state
+    assert estimate_readout_html([], set(), t) == ""
