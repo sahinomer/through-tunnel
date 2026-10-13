@@ -9,7 +9,7 @@ Contents:
 * ``ImuStream``: accelerometer and gyroscope samples in Android phone axes.
 * ``GnssStream`` / ``GnssFix``: phone-style location fixes (Android ``Location``-like fields).
 * ``RouteMap``: the navigation route as the app knows it. Map geometry, not the driven path. It
-  includes the tunnel entrance/exit and navigation events as distances along the route.
+  includes the tunnel entrance/exit and the exit-announcement distance along the route.
 * ``Observations``: the bundle handed to estimators.
 """
 
@@ -123,15 +123,6 @@ class GnssStream:
 
 
 @dataclass(frozen=True)
-class NavigationEvent:
-    """A navigation target the app knows about, e.g. an exit inside the tunnel (D14)."""
-
-    name: str
-    distance_m: float  # along the route map, from the route start A
-    announce_leads_m: tuple[float, ...] = (300.0, 0.0)  # announce this far before the event
-
-
-@dataclass(frozen=True)
 class RouteMap:
     """The navigation route as the app knows it: original map geometry (D21), not the driven path."""
 
@@ -139,13 +130,16 @@ class RouteMap:
     lon: NDArray[np.float64]
     tunnel_entrance_m: float  # point B, distance from A along this polyline
     tunnel_exit_m: float  # point C
-    events: tuple[NavigationEvent, ...] = ()
+    announce_before_exit_m: float | None = None  # announce the tunnel exit this far before C (D32)
 
     def __post_init__(self) -> None:
         if len(self.lat) < 2 or len(self.lat) != len(self.lon):
             raise ValueError("route needs at least two (lat, lon) vertices")
         if not 0.0 <= self.tunnel_entrance_m <= self.tunnel_exit_m <= self.length_m + 1e-6:
             raise ValueError("require 0 <= tunnel entrance <= tunnel exit <= route length")
+        d = self.announce_before_exit_m
+        if d is not None and not 0.0 <= d <= self.tunnel_exit_m - self.tunnel_entrance_m + 1e-6:
+            raise ValueError("the announcement distance must lie within the tunnel length")
 
     @cached_property
     def frame(self) -> LocalFrame:
@@ -167,11 +161,11 @@ class RouteMap:
     def length_m(self) -> float:
         return float(self.distance_m[-1])
 
-    def announcement_targets(self) -> dict[str, float]:
-        """Route distance of every announcement point, e.g. {'exit@300m': 1950.0, 'exit@0m': 2250.0}."""
-        return {
-            f"{ev.name}@{lead:g}m": ev.distance_m - lead for ev in self.events for lead in ev.announce_leads_m
-        }
+    @property
+    def announcement_m(self) -> float | None:
+        """Route distance from A at which the app announces the tunnel exit (None = no announcement)."""
+        d = self.announce_before_exit_m
+        return None if d is None else self.tunnel_exit_m - d
 
     def enu_at(self, distance_m: float) -> tuple[float, float]:
         d = self.distance_m

@@ -78,8 +78,9 @@ Options: `uv run throughtunnel --port 8090 --host 0.0.0.0 --no-browser`.
    * **Positioning errors tab:** total, along-track and cross-track error over time.
    * **Live readout:** each estimator's current error.
 
-   *Tunnel & navigation exit* moves the exit to announce and the announcement lead. The GPS controls
-   are in *IMU sample rate & errors*.
+   *Tunnel exit announcement* sets how far before the tunnel exit C the app announces the exit (one
+   announcement per estimator, triggered from its own estimate; default 300 m). The GPS controls are
+   in *IMU sample rate & errors*.
 7. **Reproduce it.** *Save scenario* downloads a JSON file with the route geometry *as fetched*, every
    parameter (phone mounting, IMU rate and errors included) and the seeds. *Load scenario* replays it
    bit-for-bit, offline.
@@ -107,7 +108,7 @@ dash = with_imu_config(result, ImuConfig(mount=MOUNT_PRESETS["dash_portrait"])) 
 # Positioning: estimators see only result.observations() (measured IMU, GPS fixes, route map).
 from throughtunnel.evaluation.experiment import compare_estimators
 for ev in compare_estimators(result).evaluations:
-    print(ev.label, ev.summary["exit_total_m"], ev.announcement_time_error_s)
+    print(ev.label, ev.summary["exit_total_m"], ev.announcement_time_error_s)  # + = late, NaN = missed
 ```
 
 Monte-Carlo comparison of all estimators on the presets (as in docs/results.md):

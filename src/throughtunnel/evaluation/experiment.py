@@ -61,9 +61,11 @@ def summary_rows(runs: dict[str, list[TrackEvaluation]]) -> list[dict[str, str]]
         for key, title in SUMMARY_COLUMNS.items():
             vals = np.array([e.summary.get(key, math.nan) for e in evals])
             row[title] = _median_p90(np.abs(vals) if key != "recovery_time_s" else vals)
-        for target in evals[0].announcement_time_error_s:
-            vals = np.array([e.announcement_time_error_s[target] for e in evals])
-            row[f"announce {target} [s]"] = _median_p90(np.abs(vals), signed_mean=float(np.nanmean(vals)))
+        vals = np.array([e.announcement_time_error_s for e in evals])
+        missed = int(np.isnan(vals).sum())
+        row["announcement [s]"] = _median_p90(
+            np.abs(vals), signed_mean=float(np.nanmean(vals)) if missed < len(vals) else None
+        ) + (f", {missed} missed" if missed else "")
         rows.append(row)
     return rows
 

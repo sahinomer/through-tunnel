@@ -1,5 +1,5 @@
 {
- "schema_version": 4,
+ "schema_version": 5,
  "name": "Seattle SR 99 Tunnel (northbound)",
  "description": "1.5 km urban approach (GPS), the real 3.0 km SR 99 bored tunnel as B–C, 0.9 km recovery on Aurora Ave N. Gentle S-shaped tunnel alignment. Geometry: OSM via OSRM.",
  "route": {
@@ -743,11 +743,7 @@
  "tunnel": {
   "entrance_m": 1500.0,
   "exit_m": 4471.485242991443,
-  "exit_event_m": null,
-  "announce_leads_m": [
-   300.0,
-   0.0
-  ]
+  "announce_before_exit_m": 300.0
  },
  "gnss": {
   "enabled": true,

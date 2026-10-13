@@ -1,5 +1,5 @@
 {
- "schema_version": 4,
+ "schema_version": 5,
  "name": "Synthetic demo route",
  "description": "Analytic straights and arcs (R = 150–600 m) sampled every 15 m like a map polyline: 1.6 km approach with turns, 2.0 km curvy tunnel, 0.8 km recovery. Placed at 0°N 0°E (clearly not a real road).",
  "route": {
@@ -1268,11 +1268,7 @@
  "tunnel": {
   "entrance_m": 1599.4222823885398,
   "exit_m": 3556.2806294462434,
-  "exit_event_m": null,
-  "announce_leads_m": [
-   300.0,
-   0.0
-  ]
+  "announce_before_exit_m": 300.0
  },
  "gnss": {
   "enabled": true,

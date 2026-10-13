@@ -29,10 +29,11 @@ def report(
         out.append(f"### {cfg.name}\n")
         out.append(
             f"Tunnel B–C {(rm.tunnel_exit_m - rm.tunnel_entrance_m) / 1000:.2f} km, crossed in "
-            f"{sec.exit_t - sec.entrance_t:.0f} s (preset drive); {len(seeds)} runs, "
+            f"{sec.exit_t - sec.entrance_t:.0f} s (preset drive); exit announced "
+            f"{rm.announce_before_exit_m:g} m before C; {len(seeds)} runs, "
             f"{'a new drive per run, ' if vary_drive else 'same drive, '}(sensor/GPS seeds "
-            f"{seeds.start}–{seeds.stop - 1}), median (90th percentile) of absolute values; announcement "
-            f"columns also give the signed mean (+ = late). Computed in {time.perf_counter() - t0:.0f} s.\n"
+            f"{seeds.start}–{seeds.stop - 1}), median (90th percentile) of absolute values; the announcement "
+            f"column also gives the signed mean (+ = late). Computed in {time.perf_counter() - t0:.0f} s.\n"
         )
         out.append(markdown_table(summary_rows(runs)) + "\n")
     return "\n".join(out)

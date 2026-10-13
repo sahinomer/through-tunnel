@@ -296,11 +296,11 @@ Android-`Location`-style fixes (D16), not raw GNSS. Defaults are in decision D25
 
 ### 6.4 Route structure A–D (`scenario.py`)
 
-* **Definition:** a scenario has a route A→D and a `TunnelConfig`: B and C and the navigation exit as
-  distances along the *map* route (the original OSRM polyline), plus announcement lead distances.
+* **Definition:** a scenario has a route A→D and a `TunnelConfig`: B and C as distances along the *map*
+  route (the original OSRM polyline), plus one exit-announcement distance before C (D32).
 * **What the estimator gets:** `route_map` contains this map knowledge.
 * **Hidden truth:** `SectionTruth` projects the map points onto the smoothed true path (same ENU frame)
-  and gives the true crossing times of B, C and every announcement point. It is used for GPS
+  and gives the true crossing times of B, C and the announcement point. It is used for GPS
   availability and evaluation only.
 * **Checks:** scenario warnings cover the B–C length (0.5–5 km), an approach shorter than 30 s, a short
   recovery, and U-turns. `run_scenario` refuses turns tighter than 3 m radius (not drivable).

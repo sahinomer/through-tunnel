@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
 from numpy.typing import NDArray
@@ -22,14 +22,15 @@ DEFAULT_OUTPUT_RATE_HZ = 20.0
 
 
 class Announcer:
-    """Shared navigation-announcement logic (PD8): fires each target when the estimated distance along
-    the route reaches it. Estimators without an along-route state are map-matched by projection onto the
+    """Shared exit-announcement logic (PD8, D32): fires once, the first time the estimated distance along
+    the route reaches the announcement point (``RouteMap.announcement_m``, a set distance before the
+    tunnel exit C). Estimators without an along-route state are map-matched by projection onto the
     route, searched in a window around the previous projection so a drifting estimate cannot jump."""
 
     def __init__(self, route: RouteMap, search_back_m: float = 100.0, search_ahead_m: float = 500.0) -> None:
         self.route = route
-        self.targets = dict(sorted(route.announcement_targets().items(), key=lambda kv: kv[1]))
-        self.fired: dict[str, float] = {}
+        self.target_m = route.announcement_m
+        self.fired_t = math.nan  # estimate time of the announcement; NaN = not (yet) announced
         self._last_d: float | None = None
         self._back, self._ahead = search_back_m, search_ahead_m
 
@@ -42,15 +43,14 @@ class Announcer:
             lo, hi = self._last_d - self._back, self._last_d + self._ahead
             d = self.route.project_enu(est.east, est.north, lo_m=lo, hi_m=hi)[0]
         self._last_d = d
-        for name, target in self.targets.items():
-            if name not in self.fired and d >= target:
-                self.fired[name] = est.t
+        if self.target_m is not None and math.isnan(self.fired_t) and d >= self.target_m:
+            self.fired_t = est.t
         return d
 
 
 @dataclass(frozen=True)
 class EstimateTrack:
-    """An estimator's output over time, plus the times it announced each navigation target."""
+    """An estimator's output over time, plus the time it announced the tunnel exit."""
 
     name: str
     label: str
@@ -62,7 +62,7 @@ class EstimateTrack:
     mode: NDArray[np.str_]
     route_distance: NDArray[np.float64]  # estimator's own, or the announcer's map-matched value
     position_std_m: NDArray[np.float64]  # NaN where not provided
-    announcements: dict[str, float] = field(default_factory=dict)
+    announcement_t: float = math.nan  # NaN = never announced
 
     def __len__(self) -> int:
         return len(self.t)
@@ -118,7 +118,7 @@ def run_estimator(
         mode=np.asarray(cols[5], dtype=str),
         route_distance=np.asarray(cols[6], dtype=float),
         position_std_m=np.asarray(cols[7], dtype=float),
-        announcements=dict(announcer.fired),
+        announcement_t=announcer.fired_t,
     )
 
 

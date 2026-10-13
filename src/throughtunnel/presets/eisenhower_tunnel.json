@@ -1,5 +1,5 @@
 {
- "schema_version": 4,
+ "schema_version": 5,
  "name": "Eisenhower Tunnel, I-70 (westbound)",
  "description": "1.5 km approach on I-70 (GPS), the real 2.7 km Eisenhower tunnel as B–C, 0.9 km recovery. Nearly straight. The real ~1.6 % grade is ignored (flat-road model).",
  "route": {
@@ -358,11 +358,7 @@
  "tunnel": {
   "entrance_m": 1500.0,
   "exit_m": 4223.789978202285,
-  "exit_event_m": null,
-  "announce_leads_m": [
-   300.0,
-   0.0
-  ]
+  "announce_before_exit_m": 300.0
  },
  "gnss": {
   "enabled": true,

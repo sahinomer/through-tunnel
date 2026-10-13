@@ -21,6 +21,11 @@ the implementation:
   way.
 * **Estimators:** `dr_raw` (declared aligned mount, no calibration), `dr_calibrated`, `dr_filtered`,
   `route_imu`, `route_hold` (naive reference).
+* **Exit announcement simplified** (D32, 2026-10-13): the separate navigation event inside B–C with
+  several lead distances was replaced by **one announcement a configurable distance before the
+  physical tunnel exit C** (`TunnelConfig.announce_before_exit_m`, default 300 m, 0 ≤ d ≤ B–C length).
+  `NavigationEvent` was removed; `RouteMap` carries `announce_before_exit_m`. The sections below
+  describe the current design.
 * **Not yet:** covariance outputs (so no NEES/coverage), probabilistic estimators, map matching beyond
   projection, recovery gating.
 
@@ -34,10 +39,10 @@ the implementation:
                        imu_errors, gnss_ideal  │
                      ─► ImuStream (measured) ──┼──►┐
                      ─► GnssStream (measured) ─┼──►├─ Observations ─► Runner ─► Estimator(s)
-   RawRoute + A..D + nav event ─► RouteMap ────┼──►┘   (static map +     (chronological,  │
+   RawRoute + A..D + announce d ─► RouteMap ───┼──►┘   (static map +     (chronological,  │
                                                │        time series)      incremental)    ▼
  Evaluation ◄── truth at estimate times ◄──────┼───────────────────────── EstimateTrack(s)
-   (errors, announcement timing, recovery)     │                          + announcements
+   (errors, announcement timing, recovery)     │                          + announcement time
 ```
 
 * `Observations` is the **only** input to estimators (D15). It contains the measured IMU stream, the
@@ -47,7 +52,7 @@ the implementation:
   holds:
   * the polyline and cumulative distance;
   * B and C as points with their along-map distances;
-  * the navigation event(s) (D14).
+  * the announcement distance before C (D32).
 * Evaluation is the only place where truth and estimates meet.
 
 ## 2. Types (neutral module `throughtunnel/observations.py`, PD1)
@@ -57,9 +62,8 @@ ImuStream      # moved here unchanged: t[N], accel[N,3] (m/s²), gyro[N,3] (rad/
 GnssFix        # t, lat, lon, horizontal_accuracy_m (68 %), speed_mps, bearing_deg,
                # speed_accuracy_mps, bearing_accuracy_deg  (Android Location fields)
 GnssStream     # time-ordered GnssFix records (arrays internally)
-NavigationEvent  # id, kind ("exit"), map_distance_m (along RouteMap), announce_lead_m
-RouteMap       # polyline lat/lon, cumulative distance, tunnel_entrance / tunnel_exit (point + distance),
-               # events: list[NavigationEvent]
+RouteMap       # polyline lat/lon, cumulative distance, tunnel_entrance / tunnel_exit (distance from A),
+               # announce_before_exit_m (D32); announcement_m = tunnel_exit_m - announce_before_exit_m
 Observations   # imu: ImuStream, gnss: GnssStream, route: RouteMap
 ```
 
@@ -96,9 +100,9 @@ StateEstimate  # t, east/north (route-local ENU) + lat/lon, speed, heading, mode
 
   Stateful probabilistic estimators (EKF, particle filter) are estimators in their own right, not
   pipeline stages.
-* **Announcer** (PD8): one shared component. It projects an estimator's position onto the route map
-  (or uses its along-route state) and fires each navigation event when estimated distance-to-event ≤
-  `announce_lead_m`.
+* **Announcer** (PD8, D32): one shared component. It projects an estimator's position onto the route
+  map (or uses its along-route state) and fires **once**, the first time the estimated distance to the
+  tunnel exit C is ≤ `announce_before_exit_m`.
 
 ## 4. First baseline: GPS-initialised 2-D vehicle dead reckoning ("B0")
 
@@ -176,8 +180,9 @@ White noise is negligible. This is the expected, honest starting point, and it m
   * Total = |e|.
 * Error vs time, and vs true distance travelled since B.
 * Error at the tunnel exit: at the true time of crossing C.
-* Announcement timing error = t_announce − t_true(event − lead) (+ = late), plus the equivalent
-  distance error.
+* Announcement timing error = t_announce − t_true(C − d) (+ = late), where t_true(C − d) is when the
+  vehicle truly reaches the same map point d metres before C; plus the equivalent distance error
+  (true distance travelled past that point at t_announce). Never announced = "missed" (NaN).
 * GPS recovery time: from C (or from the first fix after C) until the error stays below a threshold
   (e.g. 10 m) for a set time.
 * Monte Carlo: same drive, varying sensor/GPS seeds. Report mean, RMS and percentiles per estimator.
@@ -201,7 +206,7 @@ Later (still required, D16):
 * exit reacquisition transients (poor first fixes, jumps);
 * latency.
 
-## 7. Scenario definition A–D (D11, D13, D14)
+## 7. Scenario definition A–D (D11, D13, D32)
 
 * UI: four sequential map clicks (A, B, C, D; the hint says which is next).
 * OSRM computes one route through the four points as waypoints (multi-waypoint request, legs
@@ -209,14 +214,13 @@ Later (still required, D16):
 * The snapped B and C locations are placed on:
   * the map polyline (for `RouteMap`);
   * the smoothed truth path, by projection (for GPS availability and evaluation).
-* The navigation event is a distance after B (slider, constrained to B–C), with an announcement lead
-  distance.
+* The exit announcement is one distance before C (slider, 0 … B–C length, default 300 m).
 * Validation warnings:
   * B–C outside 0.5–5 km (replaces today's whole-route check);
   * approach A–B too short to initialise (e.g. < 30 s at cruise speed);
   * route doubling back at a waypoint (U-turn) or legs much longer than the straight-line distance.
-* Display: tunnel B–C as a thick, semi-transparent grey line under the route, A–D markers, the event
-  marker, and phase colouring.
+* Display: tunnel B–C as a thick, semi-transparent grey line under the route, A–D markers, one
+  "announce" marker at the announcement point, and phase colouring.
 * Presets: rebuilt with approach and recovery sections. Earlier attempts to extend past tunnel portals
   snapped to the opposite carriageway; OSRM's `bearings` parameter or careful point placement should
   avoid this, to be verified. The synthetic track gets B/C by distance.

@@ -33,7 +33,7 @@ implementation and accepted at a later review.
 | D11 | A scenario is defined by **four map-selected points**: A start (GPS available), B tunnel entrance (GPS degrades/stops), C tunnel exit (GPS may reacquire after a delay), D end (recovery observed). A–D follows real OSM roads; B–C is a *simulated* tunnel (ideally 0.5–5 km) and need not be a real tunnel. Keep the selection UI simple. | active | review 4 |
 | D12 | **No OSM tunnel detection.** Replaces the readiness-review idea of using OSM `tunnel=yes` ways and cached OSRM intersection classes. | active (supersedes readiness_review §1.1 tunnel extents, design.md §10 "tunnel extent") | review 4 |
 | D13 | Map display: B–C drawn as a thick, semi-transparent grey line *under* the route; route, points and vehicle stay clearly visible. The three phases (A–B approach, B–C tunnel, C–D recovery) must be distinguishable. | active | review 4 |
-| D14 | Navigation exit announcement = a configurable **navigation event inside B–C** (a distance along the route), separate from the physical tunnel exit C. The estimator decides when to announce from its estimated progress. Evaluation compares with the true crossing. A simple point is enough; no junction model. | active (supersedes readiness_review §1.1 "find a tunnel with an internal exit") | review 4 |
+| D14 | Navigation exit announcement = a configurable **navigation event inside B–C** (a distance along the route), separate from the physical tunnel exit C. The estimator decides when to announce from its estimated progress. Evaluation compares with the true crossing. A simple point is enough; no junction model. | **superseded by D32** (it superseded readiness_review §1.1 "find a tunnel with an internal exit") | review 4 |
 | D15 | Information policy. The estimator **may** use timestamped (imperfect) phone sensor data, GPS observations as they arrive, the navigation route and its road geometry, map information relevant to navigation (B and C locations), and known navigation targets. It **must not** use truth position, velocity, acceleration or orientation, future measurements, hidden simulation parameters (e.g. the injected bias), the actual future trajectory, or crossing/arrival times. | active | review 4 |
 | D16 | GPS = **phone-style location fixes**, not raw GNSS. Eventually: ~1 Hz, temporally correlated errors, degradation near B, no fixes in B–C, configurable reacquisition delay after C. Essential first: realistic pre-tunnel fixes and a clear transition to loss. Estimator initialisation comes from simulated fixes, **never** from the truth state. GPS recovery remains a required later feature. | active | review 4 |
 | D17 | **Causal processing**: a timestamp-ordered runner feeds observations incrementally. Offline (non-real-time) execution is allowed; future information is not. Smoothers that need future samples are not allowed as live estimators. | active | review 4 |
@@ -59,12 +59,18 @@ are therefore **active**, implemented as described, except where a note says oth
 | ID | Decision | Rationale |
 |---|---|---|
 | D25 | GPS defaults: Gauss-Markov 2.5 m / 30 s + 0.5 m white per axis, speed noise 0.2 m/s, bearing noise = speed noise / speed, 1 Hz; loss starts at U(0, 30 m) before B; fixes return 3 s + U(0, 2 s) after C | Typical phone GPS in open sky; PD4 randomisation |
-| D26 | Navigation exit default: middle of B–C, announced 300 m before and at the exit | Two typical navigation prompts |
+| D26 | **Superseded by D32.** Navigation exit default: middle of B–C, announced 300 m before and at the exit | Two typical navigation prompts |
 | D27 | Estimator output 20 Hz; recovery = error < 10 m for ≥ 5 s after C | Open decisions 4 and 6 of the review |
 | D28 | A–D selection by four map clicks via OSRM multi-waypoint routing. B/C = snapped waypoints located on the route; routes that reverse direction are rejected | D11 ("simple selection UI"); U-turns are not drivable in the vehicle model |
 | D29 | Presets built by trimming longer OSRM routes through the real tunnels (portals = B, C), not by routing between clicked end points | Avoids snapping to the opposite carriageway |
 | D30 | Estimator progression for comparisons: raw → calibrated → GPS-blended → route-constrained, plus a naive reference | Each step adds one technique, so its effect is measurable (D18, D22) |
 | D31 | Main results vary the drive *and* the sensor errors; same-drive runs isolate sensor effects | Single-drive comparisons were misleading (results.md §3) |
+
+## Cleanup and refinement phase (review 6)
+
+| ID | Decision | Status | Source |
+|---|---|---|---|
+| D32 | **One exit announcement before the physical tunnel exit C.** Replaces the navigation event inside B–C with two leads (D14, D26). A single parameter `TunnelConfig.announce_before_exit_m` (default 300 m, 0 ≤ d ≤ B–C length; schema v5, older files get min(300 m, tunnel length)). Each estimator announces **once**, the first time its own estimated progress (shared Announcer, PD8) reaches C − d; never from truth. Evaluation: t_announce − t_true(C − d) (+ = late) and the equivalent distance; never reached = missed. **Interpretation of the brief** ("call out an exit inside the tunnel at the right moment"): the call-out is made *inside* the tunnel, while GPS is unavailable, for a maneuver at the tunnel exit. Limitations: roadmap §0.1 (L-ANN). | active | review 6 |
 
 ## Proposed (historical text, adopted above)
 

@@ -56,7 +56,7 @@ def _vline(x: float, **style) -> dict:
 
 
 def phase_shapes(result: SimulationResult) -> list[dict]:
-    """Shaded tunnel (B–C), GPS-outage outline and true announcement times (all subplots)."""
+    """Shaded tunnel (B–C), GPS-outage outline and the true announcement time (all subplots)."""
     sec, ev = result.sections, result.gnss_events
     if sec is None:
         return []
@@ -65,9 +65,8 @@ def phase_shapes(result: SimulationResult) -> list[dict]:
         x1 = min(ev.reacquire_t, float(result.truth.t[-1]))
         outline = {"width": 1, "dash": "dot", "color": "#9e9e9e"}
         shapes.append(_vspan(ev.loss_t, x1, fillcolor="rgba(0,0,0,0)", line=outline))
-    for _, t_true in sec.targets.values():
-        if math.isfinite(t_true):
-            shapes.append(_vline(t_true, line={"color": "#ff6f00", "width": 1, "dash": "dash"}))
+    if math.isfinite(sec.announcement_t):
+        shapes.append(_vline(sec.announcement_t, line={"color": "#ff6f00", "width": 1, "dash": "dash"}))
     return shapes
 
 
@@ -108,7 +107,7 @@ def error_figure(
         uirevision="keep-zoom",
     )
     fig.update_xaxes(
-        title_text="time [s]  (grey: tunnel B–C · dotted: GPS outage · orange: true announcement times)",
+        title_text="time [s]  (grey: tunnel B–C · dotted: GPS outage · orange: true announcement time)",
         row=3,
         col=1,
     )
@@ -116,12 +115,12 @@ def error_figure(
     return fig
 
 
-def summary_html(evaluations: list[TrackEvaluation]) -> str:
+def summary_html(evaluations: list[TrackEvaluation], announce_before_exit_m: float | None) -> str:
     if not evaluations:
         return ""
-    targets = list(evaluations[0].announcement_time_error_s)
     head = ["Estimator", "error at C", "max in tunnel", "RMS in tunnel", "recovered after C"]
-    head += [f"announce {html.escape(t)}" for t in targets]
+    if announce_before_exit_m is not None:
+        head.append(f"announcement ({announce_before_exit_m:g} m before C)")
     rows = []
     for ev in evaluations:
         s = ev.summary
@@ -132,8 +131,8 @@ def summary_html(evaluations: list[TrackEvaluation]) -> str:
             _m(s.get("tunnel_rms_m")),
             _s(s.get("recovery_time_s")),
         ]
-        for t in targets:
-            dt, dd = ev.announcement_time_error_s[t], ev.announcement_distance_error_m[t]
+        if announce_before_exit_m is not None:
+            dt, dd = ev.announcement_time_error_s, ev.announcement_distance_error_m
             cells.append("missed" if not math.isfinite(dt) else f"{dt:+.1f} s ({dd:+.0f} m)")
         rows.append("<tr>" + "".join(f"<td class='pr-3'>{c}</td>" for c in cells) + "</tr>")
     head_html = "".join(f"<th class='pr-3 text-left text-gray-500 font-normal'>{h}</th>" for h in head)

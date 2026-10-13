@@ -5,7 +5,7 @@
 > | Item below | Disposition |
 > |---|---|
 > | §1.1 tunnel extents from OSM `tunnel=yes` | **superseded** by D11/D12 (four map points A–D) → P2 |
-> | §1.1 find a tunnel with an internal exit | **superseded** by D14 (configurable navigation event) → P2, A9 |
+> | §1.1 find a tunnel with an internal exit | **superseded** by D14 (configurable navigation event) → P2, A9; D14 itself superseded by D32 (one announcement before C) |
 > | §1.1 approach/exit sections, OSRM carriageway snapping | kept → P2 (OSRM `bearings` or point placement) |
 > | §1.2 GPS (Android Location-level fixes) | **confirmed** by D16 → P5 (essential subset), R4 (details), A10 (recovery) |
 > | §1.3 observation interface, causal runner | **confirmed** by D15/D17/D18 → P1, P6, P7 |

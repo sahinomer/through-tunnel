@@ -10,9 +10,9 @@ seed (``rng_stream(seed, "driver")``), so adding a new random consumer later
 (e.g. sensor noise) never changes the realisation of existing ones.
 
 Route structure (D11): a route runs from A (start) to D (end). The GPS-denied tunnel is the section B–C,
-given as distances along the *map* route (the original polyline the navigation app knows). The
-navigation exit to announce is a point inside B–C (D14). Where the true (smoothed) path crosses these
-map points, and when, is hidden simulator state (``SectionTruth``).
+given as distances along the *map* route (the original polyline the navigation app knows). The app
+announces the tunnel exit once, a configurable distance before C (D32). Where the true (smoothed) path
+crosses these map points, and when, is hidden simulator state (``SectionTruth``).
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ import numpy as np
 from numpy.typing import ArrayLike
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from throughtunnel.observations import GnssStream, NavigationEvent, Observations, RouteMap
+from throughtunnel.observations import GnssStream, Observations, RouteMap
 from throughtunnel.randomness import rng_stream
 from throughtunnel.road import RoadConfig, RoadPath
 from throughtunnel.routing.base import RawRoute
@@ -44,10 +44,13 @@ from throughtunnel.vehicle.truth import GroundTruth, build_ground_truth
 #     the simulation rate, ideal sensors.
 # v4: added `tunnel` (A-D route structure). Older files meant "the whole route is GPS-denied" (D10) and
 #     are migrated to a tunnel covering the whole route (PD7).
-SCHEMA_VERSION = 4
+# v5: one exit announcement `tunnel.announce_before_exit_m` replaces the navigation event inside the tunnel
+#     (`exit_event_m`, `announce_leads_m`; D32). Older files get the default distance, capped at the tunnel.
+SCHEMA_VERSION = 5
 
 TUNNEL_MIN_LENGTH_M = 500.0
 TUNNEL_MAX_LENGTH_M = 5000.0
+DEFAULT_ANNOUNCE_BEFORE_EXIT_M = 300.0
 MIN_APPROACH_S = 30.0  # GPS time before B that the estimator needs to initialise (warning threshold)
 MIN_RECOVERY_M = 200.0
 MIN_DRIVABLE_RADIUS_M = 3.0  # tighter turns are not drivable in one go (car turning radius ~5 m)
@@ -55,25 +58,24 @@ U_TURN_DEG = 150.0
 
 
 class TunnelConfig(BaseModel):
-    """GPS-denied section B–C and the navigation exit inside it, as distances along the map route from A."""
+    """GPS-denied section B–C as distances along the map route from A, and the exit announcement (D32)."""
 
     model_config = ConfigDict(frozen=True)
 
     entrance_m: float = Field(ge=0.0, description="Point B: tunnel entrance")
     exit_m: float = Field(gt=0.0, description="Point C: tunnel exit (clipped to the route length)")
-    exit_event_m: float | None = Field(
-        None, description="Navigation exit to announce (inside B–C); None = middle of the tunnel"
-    )
-    announce_leads_m: tuple[float, ...] = Field(
-        (300.0, 0.0), description="Announce this far before the navigation exit"
+    announce_before_exit_m: float = Field(
+        DEFAULT_ANNOUNCE_BEFORE_EXIT_M,
+        ge=0.0,
+        description="Announce the tunnel exit once, when the estimate is this far before C (within B–C)",
     )
 
     @model_validator(mode="after")
     def _ordered(self) -> TunnelConfig:
         if not self.entrance_m < self.exit_m:
             raise ValueError("tunnel entrance must come before the tunnel exit")
-        if self.exit_event_m is not None and not self.entrance_m <= self.exit_event_m <= self.exit_m:
-            raise ValueError("the navigation exit must lie inside the tunnel")
+        if self.announce_before_exit_m > self.exit_m - self.entrance_m:
+            raise ValueError("the announcement distance must lie within the tunnel length")
         return self
 
 
@@ -104,6 +106,11 @@ class ScenarioConfig(BaseModel):
             data = {**data, "imu": imu}
         if isinstance(data, dict) and data.get("schema_version", SCHEMA_VERSION) < 4:
             data = {**data, "tunnel": data.get("tunnel") or {"entrance_m": 0.0, "exit_m": 1e9}}
+        if isinstance(data, dict) and data.get("schema_version", SCHEMA_VERSION) < 5 and data.get("tunnel"):
+            tun = {k: v for k, v in data["tunnel"].items() if k not in ("exit_event_m", "announce_leads_m")}
+            length = tun.get("exit_m", 0.0) - tun.get("entrance_m", 0.0)
+            tun.setdefault("announce_before_exit_m", min(DEFAULT_ANNOUNCE_BEFORE_EXIT_M, max(length, 0.0)))
+            data = {**data, "tunnel": tun}
         return data
 
     @field_validator("schema_version")
@@ -122,7 +129,8 @@ class SectionTruth:
     exit_s: float
     entrance_t: float
     exit_t: float
-    targets: dict[str, tuple[float, float]]  # announcement target name -> (true s, true time)
+    announcement_s: float  # where the vehicle truly is at the announcement distance before C
+    announcement_t: float  # when it gets there (the ideal announcement time)
 
 
 @dataclass(frozen=True)
@@ -230,9 +238,10 @@ def build_route_map(config: ScenarioConfig) -> RouteMap:
     if tun is None:
         return RouteMap(lat=lat, lon=lon, tunnel_entrance_m=length, tunnel_exit_m=length)
     entrance, exit_ = min(tun.entrance_m, length), min(tun.exit_m, length)
-    event_m = tun.exit_event_m if tun.exit_event_m is not None else 0.5 * (entrance + exit_)
-    event = NavigationEvent("exit", min(max(event_m, entrance), exit_), tuple(tun.announce_leads_m))
-    return RouteMap(lat=lat, lon=lon, tunnel_entrance_m=entrance, tunnel_exit_m=exit_, events=(event,))
+    announce = min(tun.announce_before_exit_m, exit_ - entrance)  # C may have been clipped to the route end
+    return RouteMap(
+        lat=lat, lon=lon, tunnel_entrance_m=entrance, tunnel_exit_m=exit_, announce_before_exit_m=announce
+    )
 
 
 def section_truth(route_map: RouteMap, path: RoadPath, motion: LongitudinalTrajectory) -> SectionTruth:
@@ -247,12 +256,14 @@ def section_truth(route_map: RouteMap, path: RoadPath, motion: LongitudinalTraje
 
     s_b = true_s(route_map.tunnel_entrance_m)
     s_c = true_s(route_map.tunnel_exit_m, s_lo=s_b)
-    targets = {}
-    for name, d in route_map.announcement_targets().items():
-        s = true_s(d)
-        targets[name] = (s, crossing_time(s))
+    s_a = true_s(route_map.announcement_m, s_lo=s_b) if route_map.announcement_m is not None else math.nan
     return SectionTruth(
-        entrance_s=s_b, exit_s=s_c, entrance_t=crossing_time(s_b), exit_t=crossing_time(s_c), targets=targets
+        entrance_s=s_b,
+        exit_s=s_c,
+        entrance_t=crossing_time(s_b),
+        exit_t=crossing_time(s_c),
+        announcement_s=s_a,
+        announcement_t=crossing_time(s_a) if math.isfinite(s_a) else math.nan,
     )
 
 

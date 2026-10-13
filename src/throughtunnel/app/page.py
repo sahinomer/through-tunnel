@@ -39,6 +39,7 @@ from throughtunnel.positioning import ESTIMATORS
 from throughtunnel.road import RoadConfig
 from throughtunnel.routing import LatLon, OsrmRouteProvider, RawRoute, RoutingError
 from throughtunnel.scenario import (
+    DEFAULT_ANNOUNCE_BEFORE_EXIT_M,
     TUNNEL_MAX_LENGTH_M,
     TUNNEL_MIN_LENGTH_M,
     ScenarioConfig,
@@ -199,18 +200,17 @@ class SimulatorPage:
             self.positioning_summary = ui.html().classes("w-full overflow-x-auto")
 
     def _build_tunnel_card(self) -> None:
-        with ui.expansion("Tunnel & navigation exit", icon="moving", value=False).classes(
+        with ui.expansion("Tunnel exit announcement", icon="campaign", value=False).classes(
             "w-full border rounded"
         ):
-            self.tunnel_info = ui.label().classes("text-sm")
-            self.s_event = self._slider("Exit position after B", 0, 5000, 10, 0, "m")
-            self.s_lead = self._slider("First announcement", 0, 1000, 50, 300, "m before")
+            self.s_announce = self._slider(
+                "Announce before exit C", 0, 5000, 10, DEFAULT_ANNOUNCE_BEFORE_EXIT_M, "m"
+            )
             ui.label(
-                "The navigation exit is a point inside B–C that the app must announce from its own estimate. "
-                "Announcements are made at the lead distance and at the exit itself."
+                "Each estimator triggers one announcement when its own estimate (never the truth) is this "
+                "far before the tunnel exit C. Limited to the tunnel length."
             ).classes("text-xs text-gray-500")
-            for slider in (self.s_event, self.s_lead):
-                slider.on("change", self._on_tunnel_control)
+            self.s_announce.on("change", self._on_tunnel_control)
 
     def _slider(self, label: str, lo: float, hi: float, step: float, value: float, unit: str) -> ui.slider:
         with ui.row().classes("w-full items-center no-wrap gap-2"):
@@ -452,25 +452,16 @@ class SimulatorPage:
         if self.tunnel is None:
             return None
         tun = self.tunnel
-        length = tun.exit_m - tun.entrance_m
-        event = tun.entrance_m + min(float(self.s_event.value), length)
-        lead = float(self.s_lead.value)
-        return tun.model_copy(
-            update={"exit_event_m": event, "announce_leads_m": (lead, 0.0) if lead > 0 else (0.0,)}
-        )
+        announce = min(float(self.s_announce.value), tun.exit_m - tun.entrance_m)
+        return tun.model_copy(update={"announce_before_exit_m": announce})
 
     def _set_tunnel_controls(self, tunnel: TunnelConfig | None) -> None:
         self._loading_controls = True
         try:
             self.tunnel = tunnel
             if tunnel is not None:
-                length = tunnel.exit_m - tunnel.entrance_m
-                self.s_event.props(f"max={length:.0f}")
-                event = (
-                    tunnel.exit_event_m if tunnel.exit_event_m is not None else tunnel.entrance_m + length / 2
-                )
-                self.s_event.value = round(event - tunnel.entrance_m, -1)
-                self.s_lead.value = max(tunnel.announce_leads_m) if tunnel.announce_leads_m else 0.0
+                self.s_announce.props(f"max={math.floor(tunnel.exit_m - tunnel.entrance_m)}")
+                self.s_announce.value = tunnel.announce_before_exit_m
         finally:
             self._loading_controls = False
 
@@ -676,7 +667,8 @@ class SimulatorPage:
         self._clear_selection()
         self.preset_select.set_value(None)
         self.scenario_name = "Custom route"
-        self._set_tunnel_controls(TunnelConfig(entrance_m=b, exit_m=c))
+        announce = min(float(self.s_announce.value), c - b)  # keep the user's distance where it fits
+        self._set_tunnel_controls(TunnelConfig(entrance_m=b, exit_m=c, announce_before_exit_m=announce))
         self._set_route(route)
         await self._generate()
 
@@ -706,15 +698,14 @@ class SimulatorPage:
         self.progress.props(f"max={result.truth.duration_s:.2f}")
         self.progress.value = 0.0
 
-        self._remove_layers("path", "vehicle", "heading", "trail", "link", "gps", "ev_exit", "ev_lead")
+        self._remove_layers("path", "vehicle", "heading", "trail", "link", "gps", "announce")
         self._remove_estimate_layers()
         path_ll = result.path.latlon(step_m=5.0).tolist()
         self.layers["path"] = self.map.generic_layer(name="polyline", args=[path_ll, ROUTE_STYLE_PATH])
         self._draw_gps()
-        for name, d in sorted(result.route_map.announcement_targets().items(), key=lambda kv: kv[1]):
-            label = "exit" if name.endswith("@0m") else name.split("@")[1].replace("m", " m")
+        if result.route_map.announcement_m is not None:
             self._draw_point(
-                "ev_exit" if name.endswith("@0m") else "ev_lead", list(result.route_map.latlon_at(d)), label
+                "announce", list(result.route_map.latlon_at(result.route_map.announcement_m)), "announce"
             )
         self.layers["trail"] = self.map.generic_layer(name="polyline", args=[[], TRAIL_STYLE])
         self.layers["link"] = self.map.generic_layer(name="polyline", args=[[], TRAIL_STYLE])
@@ -796,7 +787,7 @@ class SimulatorPage:
         if self.comparison is None or self.result is None:
             return
         evals = [e for e in self.comparison.evaluations if e.name in self.visible_estimators]
-        self.positioning_summary.content = summary_html(evals)
+        self.positioning_summary.content = summary_html(evals, self.result.route_map.announce_before_exit_m)
         self.err_plot.update_figure(
             error_figure(self.comparison.evaluations, self.result, self.visible_estimators)
         )

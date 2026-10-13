@@ -38,8 +38,8 @@ class TrackEvaluation:
     true_s: NDArray[np.float64]  # true distance along the driven path
     phase: NDArray[np.str_]  # "approach" | "tunnel" | "recovery" | "open" (no tunnel)
     summary: dict[str, float] = field(default_factory=dict)
-    announcement_time_error_s: dict[str, float] = field(default_factory=dict)  # + = late
-    announcement_distance_error_m: dict[str, float] = field(default_factory=dict)  # + = late (vehicle past)
+    announcement_time_error_s: float = math.nan  # + = late; NaN = no tunnel or never announced
+    announcement_distance_error_m: float = math.nan  # + = late (vehicle already past the point)
 
 
 def evaluate_track(
@@ -88,17 +88,13 @@ def evaluate_track(
         )
     summary["final_m"] = float(total[-1]) if len(total) else math.nan
 
-    time_err, dist_err = {}, {}
-    if sec is not None:
-        for name, (s_target, t_target) in sec.targets.items():
-            t_ann = track.announcements.get(name, math.nan)
-            time_err[name] = t_ann - t_target
-            s_at_ann = (
-                float(np.interp(t_ann, result.motion.t, result.motion.s))
-                if math.isfinite(t_ann)
-                else math.nan
-            )
-            dist_err[name] = s_at_ann - s_target
+    # Announcement (D32): the estimator's announcement vs. the vehicle truly reaching the same point.
+    time_err = dist_err = math.nan
+    if sec is not None and math.isfinite(track.announcement_t):
+        time_err = track.announcement_t - sec.announcement_t
+        dist_err = (
+            float(np.interp(track.announcement_t, result.motion.t, result.motion.s)) - sec.announcement_s
+        )
     return TrackEvaluation(
         name=track.name,
         label=track.label,

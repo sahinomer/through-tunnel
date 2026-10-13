@@ -10,7 +10,7 @@ from throughtunnel.evaluation.metrics import _recovery_time, evaluate_track
 from throughtunnel.observations import GnssStream, ImuStream, Observations
 from throughtunnel.positioning import ESTIMATORS, Estimator, StateEstimate, run_estimator
 from throughtunnel.positioning.dead_reckoning import CalibratedDeadReckoning, RawDeadReckoning
-from throughtunnel.positioning.runner import EstimateTrack
+from throughtunnel.positioning.runner import Announcer, EstimateTrack
 from throughtunnel.scenario import load_preset, run_scenario, truth_at, with_sensor_config
 from throughtunnel.sensors.errors import ImuErrorConfig
 from throughtunnel.sensors.gnss import GnssConfig
@@ -42,6 +42,8 @@ def demo():
 def test_estimators_are_causal(demo, name):
     """Changing every observation after t* must not change any estimate (or announcement) before t*."""
     obs = demo.observations()
+    tunnel_m = obs.route.tunnel_exit_m - obs.route.tunnel_entrance_m
+    obs = replace(obs, route=replace(obs.route, announce_before_exit_m=0.75 * tunnel_m))  # announce before t*
     t_star = 0.5 * (demo.sections.entrance_t + demo.sections.exit_t)
     rng = np.random.default_rng(0)
     after_i, after_g = obs.imu.t > t_star, obs.gnss.t > t_star
@@ -60,8 +62,8 @@ def test_estimators_are_causal(demo, name):
     before = a.t <= t_star
     for f in ("east", "north", "speed", "heading", "route_distance"):
         assert np.array_equal(getattr(a, f)[before], getattr(b, f)[: before.sum()]), f
-    early = {k: v for k, v in a.announcements.items() if v <= t_star}
-    assert all(b.announcements[k] == v for k, v in early.items())
+    assert a.announcement_t < t_star
+    assert b.announcement_t == a.announcement_t
 
 
 class Recorder(Estimator):
@@ -184,11 +186,39 @@ def test_route_hold_keeps_the_last_gps_speed(demo):
     assert np.ptp(track.speed[out & (track.t < demo.sections.exit_t)]) == 0.0
 
 
-def test_perfect_information_announces_on_time():
-    res = scenario()
+@pytest.mark.parametrize("before_exit", ["at C", "300 m", "at B"])
+def test_perfect_information_announces_on_time(before_exit):
+    cfg = load_preset("synthetic_demo_track")
+    length = cfg.tunnel.exit_m - cfg.tunnel.entrance_m
+    d = {"at C": 0.0, "300 m": 300.0, "at B": length}[before_exit]
+    imu = cfg.imu.model_copy(update={"errors": ImuErrorConfig.ideal()})
+    tunnel = cfg.tunnel.model_copy(update={"announce_before_exit_m": d})
+    res = run_scenario(cfg.model_copy(update={"imu": imu, "gnss": GnssConfig.ideal(), "tunnel": tunnel}))
     ev = evaluate_track(run_estimator(CalibratedDeadReckoning(res.route_map), res.observations()), res)
-    for name, err in ev.announcement_time_error_s.items():
-        assert abs(err) < 0.1, name  # within two output samples
+    assert abs(ev.announcement_time_error_s) < 0.1  # within two output samples
+    assert abs(ev.announcement_distance_error_m) < 3.0
+
+
+def test_announcer_fires_once_from_the_estimated_progress(demo):
+    target = demo.route_map.announcement_m
+    ann = Announcer(demo.route_map)
+    progress = (target - 50.0, target - 1.0, target + 0.5, target - 10.0, target + 5.0)
+    for t, d in enumerate(progress):
+        est = StateEstimate(t=float(t), east=0.0, north=0.0, speed=0.0, heading=0.0, mode="dead_reckoning",
+                            route_distance=d)  # fmt: skip
+        ann.update(est)
+    assert ann.fired_t == 2.0  # first crossing only: falling back and crossing again does not re-announce
+
+
+def test_announcement_error_signs(demo):
+    sec = demo.sections
+    late = evaluate_track(replace(shifted_truth_track(demo), announcement_t=sec.announcement_t + 2.0), demo)
+    assert late.announcement_time_error_s == pytest.approx(2.0)
+    s_late = float(np.interp(sec.announcement_t + 2.0, demo.motion.t, demo.motion.s))
+    assert late.announcement_distance_error_m == pytest.approx(s_late - sec.announcement_s)
+    assert late.announcement_distance_error_m > 0
+    missed = evaluate_track(shifted_truth_track(demo), demo)  # never announced
+    assert math.isnan(missed.announcement_time_error_s) and math.isnan(missed.announcement_distance_error_m)
 
 
 # ------------------------------------------------------------------ evaluation definitions

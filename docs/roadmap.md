@@ -1,6 +1,6 @@
 # Roadmap and task tracking
 
-Last reviewed: 2026-10-12, after the first positioning phase (see §0); §1 is the pre-positioning review. This file tracks status, remaining work and open
+Last reviewed: 2026-10-13, cleanup phase (see §0.1); §0 is the first positioning phase; §1 is the pre-positioning review. This file tracks status, remaining work and open
 decisions. Decisions live in [decisions.md](decisions.md), and the proposed positioning architecture in
 [positioning_design.md](positioning_design.md). The earlier [readiness_review.md](readiness_review.md) is
 kept for history; its items are mapped to the tasks below.
@@ -28,8 +28,9 @@ The user delegated the open choices (PD1–PD8 adopted, see decisions.md). Imple
 * **UI**: tunnel band, GPS track, estimate overlays with toggles, errors tab.
 
 Initial results: [results.md](results.md). The best estimator (route + filtered IMU speed) ends the
-tunnel at 16–34 m median error and announces the exit 0.1–0.6 s late (median), under the simplifying
-assumptions.
+tunnel at 16–34 m median error and announced the old mid-tunnel exit 0.1–0.6 s late (median), under
+the simplifying assumptions. With the D32 announcement (300 m before C, i.e. near the end of the
+outage) its median timing error is 0.7–1.4 s.
 
 **Findings raised for attention** (per the user's request to flag findings that affect credibility):
 
@@ -53,6 +54,44 @@ Problems found and fixed during this phase:
 4. R2 stop-and-go.
 5. Split `page.py` (P9).
 6. F2/F3 write-up.
+
+## 0.1 Cleanup and refinement phase (from 2026-10-13)
+
+Working mode set by the user: **one task at a time**; each task is completed, validated, summarised and
+committed, then work stops for review. No automatic follow-up improvements. Findings go into the notes.
+
+**Task 1: simplified exit announcement (D32), done.** The navigation event inside B–C with two
+announcements (300 m before and at the event) was replaced by one announcement a configurable distance
+`d` before the physical tunnel exit C (default 300 m, 0 ≤ d ≤ B–C length). One shared Announcer, one
+trigger per estimator per run, from the estimate only. Schema v5 (older files migrate). Validation:
+positioning outputs and error metrics are bit-identical before and after on all three presets × five
+estimators; only the announcement metric changed. Results tables regenerated.
+
+**Limitations of the simplified announcement (L-ANN; documented, not requirements):**
+1. *Interpretation of the brief.* "Call out an exit inside the tunnel at the right moment" is read as:
+   the call-out happens inside the tunnel, without GPS, for a maneuver at the tunnel exit C. **No exit
+   ramp or junction inside the tunnel is modelled.** In real long urban tunnels with internal exits
+   (e.g. Stockholm Norra länken, Madrid M-30, Boston I-93), the maneuver itself lies in the outage: the
+   app must also time the "now" instruction and later decide whether the driver took the exit. That
+   is not evaluated; route-constrained estimators assume the vehicle stays on the route.
+2. *What is not lost.* d ranges over the whole tunnel, so the announcement can be placed at any time into
+   the outage (d = B–C length is at B, d = 0 at C). The timing error is essentially the along-track
+   error at that point divided by speed, the same quantity the old event measured. The old defaults
+   (event at mid-tunnel, leads 300 m / 0 m) correspond to d = L/2 + 300 m and d = L/2.
+3. *One sample per run.* Each run gives one timing error per estimator (previously two). Multi-stage
+   prompts (e.g. 1 km / 400 m / now) are not represented; a sweep over d (one run per value) would give
+   timing error vs. time-into-outage. Possible experiment, not implemented.
+4. *Trigger rule.* A pure distance threshold. Real apps schedule prompts by estimated time-to-maneuver
+   (speed-dependent) and account for speech duration; early and late errors are not equally harmful
+   (late can mean a missed exit). We report |error| percentiles and the signed mean.
+5. *Small d.* Near d = 0 a lagging estimator may only reach C − d after GPS returns (3–5 s after C), so
+   its "announcement" then reflects GPS reacquisition rather than dead reckoning.
+
+**Observation (test tooling, not fixed):** driving page handlers in NiceGUI's `user_simulation` logs
+`AttributeError: 'AppConfig' object has no attribute 'reconnect_timeout'` from NiceGUI's own outbox
+(test harness vs. installed NiceGUI version); the handlers still complete. The map's JS
+`initialized()` never fires there, so the default preset does not auto-load. Relevant if UI flow tests
+are committed (F9).
 
 ## 1. Verified status (checked against code and tests, not just documentation)
 
@@ -127,16 +166,16 @@ Problems found and fixed during this phase:
 * `[ ]` Import-boundary test for positioning (design.md §1). Blocked by PD1.
 * `[ ]` Batch / Monte-Carlo command-line runner (readiness review §1.4).
 * superseded: tunnel extents from OSM `tunnel=yes` (readiness review §1.1), replaced by D11/D12.
-* superseded: finding a real tunnel with an internal exit, replaced by D14.
+* superseded: finding a real tunnel with an internal exit, replaced by D14 (itself replaced by D32).
 
 ## 2. Plan
 
 ### Phase P: essential prerequisites for initial positioning
 | ID | Task | Depends | Status |
 |---|---|---|---|
-| P1 | Neutral observation module (`ImuStream` moved, `GnssFix/GnssStream`, `RouteMap`, `NavigationEvent`, `Observations`) + subprocess import-boundary test (PD1) | – | [x] |
-| P2 | A–D scenario model: four points; OSRM multi-waypoint route; B/C distances on the map polyline and on the truth path; navigation event (distance after B, lead); validation (B–C 0.5–5 km, approach long enough, U-turn/detour); schema v4 + legacy migration (PD7); update tests and presets | P1 | [x] |
-| P3 | A–D map UI: 4 sequential clicks, B–C thick translucent grey under the route, A–D and event markers, event/lead sliders, distinguishable phases (D13) | P2 | [x] |
+| P1 | Neutral observation module (`ImuStream` moved, `GnssFix/GnssStream`, `RouteMap`, `NavigationEvent`, `Observations`) + subprocess import-boundary test (PD1) | – | [x] (`NavigationEvent` removed by D32) |
+| P2 | A–D scenario model: four points; OSRM multi-waypoint route; B/C distances on the map polyline and on the truth path; navigation event (distance after B, lead); validation (B–C 0.5–5 km, approach long enough, U-turn/detour); schema v4 + legacy migration (PD7); update tests and presets | P1 | [x] (event → one announcement distance before C, schema v5, D32) |
+| P3 | A–D map UI: 4 sequential clicks, B–C thick translucent grey under the route, A–D and event markers, event/lead sliders, distinguishable phases (D13) | P2 | [x] (now one "announce before exit C" slider and one marker, D32) |
 | P4 | Phone-position truth at arbitrary times (reference point + lever arm, exact via `motion.at`) (PD2) | – | [x] |
 | P5 | GPS phone-location simulation, essential subset (D16, PD4): ~1 Hz fixes with correlated error, speed/bearing/accuracy; availability A–B on, B–C off, after C + delay; randomised loss point; ideal kept; seeds; GPS display (fixes on the map, a GPS plot); tests | P1, P2, P4 | [x] essential subset |
 | P6 | Observations builder: `SimulationResult` → `Observations` (measured IMU and GPS, `RouteMap` from the **original polyline**). Leakage tests | P1, P2, P5 | [x] |
@@ -154,7 +193,7 @@ Problems found and fixed during this phase:
 | A6 | Route-constrained estimator (along-track dead reckoning on the route map) + naive reference "last GPS speed along the route" | A2, P6 | [x] |
 | A7 | Yaw-rate vs map-curvature matching (along-track correction in curved tunnels) | A6 | [ ] |
 | A8 | Probabilistic estimator (e.g. EKF on the route; particle filter if justified) with covariance. Only after A2–A6 are measured (D22) | A6 | [ ] |
-| A9 | Exit announcement: shared Announcer (PD8) + timing-error evaluation (D14) | P8, A2 | [~] shared Announcer + timing evaluation; threshold crossing only |
+| A9 | Exit announcement: shared Announcer (PD8) + timing-error evaluation (D14 → D32) | P8, A2 | [~] one announcement d before C, fired once from the estimate; timing evaluation; distance threshold only (limitations L-ANN, §0.1) |
 | A10 | GPS recovery handling (reacquisition, outlier gating, convergence) + recovery metrics | P5, A2 | [~] recovery = reset to first fix + recovery metric; no gating (needs R4) |
 | A11 | Experiment runner: N estimators × Monte-Carlo seeds on identical observations (D19); tables; uncertainty calibration (NEES/coverage) | P8 | [~] Monte Carlo + `evaluation.report`; no covariance yet, so no NEES |
 ### Phase R: realism and robustness experiments (backlog)
@@ -218,7 +257,7 @@ data loader (F7), unless real phone data becomes available early.
 4. Estimator output rate and the required state fields (proposal: 20 Hz; position, speed, heading,
    mode; covariance optional).
 5. Navigation event defaults: position (e.g. middle of B–C) and announcement lead distances (e.g.
-   300 m and 0 m).
+   300 m and 0 m). *Resolved: D26, then D32 (one announcement 300 m before C).*
 6. Recovery-time definition (proposal: error < 10 m for ≥ 5 s).
 7. Which real roads to use for A–D presets (any road; B–C need not be a real tunnel, D11).
 8. Whether to commit a browser smoke-test script (needs a local Edge/Chrome).
