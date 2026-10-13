@@ -80,7 +80,10 @@ Options: `uv run throughtunnel --port 8090 --host 0.0.0.0 --no-browser`.
 
    *Tunnel exit announcement* sets how far before the tunnel exit C the app announces the exit (one
    announcement per estimator, triggered from its own estimate; default 300 m). The GPS controls are
-   in *IMU sample rate & errors*. *Calibration error (assumed orientation)* rotates the phone-to-vehicle
+   in *IMU sample rate & errors*. *Road profile (elevation)* sets the road's height: drag the points
+   up or down, or start from a template (steady climb, climb inside the tunnel, underwater tunnel).
+   The grade never exceeds the limit (default 6%), and the drive re-simulates.
+   *Calibration error (assumed orientation)* rotates the phone-to-vehicle
    orientation the estimators use (yaw, pitch, roll) without changing the actual mount or any sensor
    data. Only positioning re-runs, so with/without comparisons are exactly paired
    ([docs/calibration_error.md](docs/calibration_error.md)).
@@ -189,7 +192,8 @@ suspension dynamics; the driver never stops; the phone is rigidly mounted. The w
 currently treated as GPS-denied (to be replaced by A–D sections, roadmap P2). The road is smoothed so
 the path has continuous curvature, and the deviation from the map polyline is bounded and reported.
 These assumptions isolate error sources for the first positioning experiments. They are not a
-complete model of real driving; road grade, stop-and-go traffic and map errors are on the roadmap.
+complete model of real driving. Road grade can now be set (*Road profile*, default flat).
+Stop-and-go traffic and map errors are on the roadmap.
 
 ## Roadmap
 
@@ -199,7 +203,9 @@ complete model of real driving; road grade, stop-and-go traffic and map errors a
   toggles/sliders, ideal vs. measured, independent seeded streams.
 - **Positioning phase 1** (done). A–D scenarios, phone GPS, causal estimator framework, five
   estimators, evaluation, Monte-Carlo report, UI overlays.
-- **Next:** road grade (the most important open caveat), map errors, a probabilistic estimator with
+- **Road grade** (done, 2026-10-13). Editable elevation profile, 3-D vehicle kinematics. The study
+  of its effect on the estimators is next.
+- **Next:** grade experiments, map errors, a probabilistic estimator with
   covariance, stop-and-go, then the write-up. Tracked in [docs/roadmap.md](docs/roadmap.md).
 
 ## Data and services

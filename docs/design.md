@@ -84,8 +84,8 @@ cause before changing anything:
 | Units | SI everywhere internally (m, s, rad). km/h and degrees only in UI labels and config fields named `*_kmh`. |
 
 The flat-earth (tangent-plane) approximation is accurate to well under a metre over the ≤ 10 km extent
-of a scenario. The tangent plane drops below the Earth's surface by about 2 m at 5 km, which the
-flat-road model ignores anyway.
+of a scenario. The tangent plane drops below the Earth's surface by about 2 m at 5 km. Road height
+(D36) is measured from the tangent plane, and the geodetic altitude adds that curvature.
 
 ## 4. Road geometry: from map polyline to a drivable path
 
@@ -177,8 +177,34 @@ on sharp corners, ~0% in tunnels).
 
 **5.3 Ground truth (`truth.py`).** Everything is evaluated from (s, v, a, j) and the path:
 position r(s), yaw ψ(s), yaw rate κv, yaw acceleration κ′v² + κa, lateral acceleration κv²,
-`acc_enu = a·t̂ + κv²·n̂`, `acc_body = (a, κv², 0)` and `omega_body = (0, 0, κv)`. Roll and pitch
-are zero (flat road).
+`acc_enu = a·t̂ + κv²·n̂`, `acc_body = (a, κv², 0)` and `omega_body = (0, 0, κv)` on a flat road.
+
+**5.4 Road elevation (`road_profile.py`, D36).** A road can have a height profile z(s) over the same
+horizontal distance s.
+* *Definition:* heights at points along the route (an even grid of ~200 m plus B and C). Between them
+  the road follows a quintic Hermite curve:
+  * slopes from a shape-preserving PCHIP fit, so the curve passes through every point and does not
+    overshoot;
+  * zero vertical curvature at the points, so grade and vertical curvature are continuous (C2) and
+    the pitch rate never jumps.
+* *Grade limit:* the grade is limited (default 6%) along the whole curve. The editor clamps dragged
+  points to stay within it.
+* *Kinematics:* s, v, a stay horizontal, so the map, B, C and the driver's speed profile are
+  unchanged. With G = z′:
+  * velocity v·(cos ψ, sin ψ, G);
+  * vertical acceleration G·a + G′·v²;
+  * pitch θ = −atan G (ISO, + = nose down);
+  * attitude C_nb = Rz(ψ)·Ry(θ), body x along the 3-D velocity, no banking (roll = 0);
+  * ω = (−sin θ·ψ̇, θ̇, cos θ·ψ̇), and α as its derivative.
+
+  The IMU model needed no change: it already used the full attitude and the lever-arm terms.
+* *Validation:* numerical differentiation of the phone pose on an underwater profile matches the
+  IMU output to 0.005 m/s² and 3·10⁻⁷ rad/s.
+* *Flat roads* (no points, or all heights equal) take exactly the old code path: bit-identical
+  results.
+* *Simplifications:* no banking; the driver's speed does not react to the grade; the profile is
+  defined over map distance and applied over the driven path's distance (they differ by a few metres);
+  the 2-D route map gives the estimators no height information.
 
 **Driver presets** (comfort-oriented passenger-car values):
 
@@ -319,7 +345,7 @@ Android-`Location`-style fixes (D16), not raw GNSS. Defaults are in decision D25
 * Presets live inside the package (`throughtunnel/presets/*.json`), so the app and the tests run
   offline.
 
-## 8. Validation (`uv run pytest`, 136 tests, no network)
+## 8. Validation (`uv run pytest`, 178 tests, no network)
 
 | Property | Test |
 |---|---|
@@ -350,6 +376,7 @@ Android-`Location`-style fixes (D16), not raw GNSS. Defaults are in decision D25
 | Observation boundary | importing positioning loads no simulator module (subprocess); observation types have no truth fields |
 | Positioning | causality of every estimator (perturb the future, past unchanged); runner order and tie rule; zero-error dead reckoning < 1 m; forward-bias error = analytic vector integral (1 %); gyro-bias heading error linear (5 %); calibration removes > 95 % / > 80 % of bias errors; tilted mount recovered < 1°; gyro-bias calibration < 0.02 °/s on the hardest approach; GPS blending improves the hand-over state; route estimators stay on the route; on-time announcements with perfect data |
 | Evaluation | along/cross sign conventions on shifted truth; recovery-time definition |
+| Road elevation (D36) | curve passes through the points without overshoot; grade and vertical curvature continuous (C2); grade limit validated and enforced by the drag clamp (lands exactly on the limit); templates within the limit and gentle (< 0.3 m/s² at 90 km/h); truth height/grade/pitch follow the profile, body x along the 3-D velocity; flat profile bit-identical to no profile; the IMU end-to-end test also runs on an underwater profile; a grade change after calibration leaks gravity, a constant grade does not; editor: drag events parsed, only points draggable, simulated drag clamped and re-simulated |
 | App logic | playback clock (play/pause/seek/end/restart), figure decimation and cursor, browser track payload, IMU figure ranges |
 
 **Evidence note.** The table above is enforced by tests. These figures are *one-off measurements*
@@ -413,7 +440,5 @@ console errors.
 * **IMU error model is first-order.** White noise and constant bias only. Natural next steps are bias
   instability and random walk (Gauss-Markov), temperature drift, scale factor and misalignment,
   vibration, per-device profiles, timestamp jitter, and separate accel/gyro rates.
-* **Flat road → no pitch or roll.** On real grades (e.g. the Eisenhower tunnel at ~1.6%), gravity would
-  leak into the forward accelerometer axis (0.16 m/s² at 1.6%), which matters for dead reckoning.
-  Adding road elevation is a natural extension: the frames and the IMU model already handle a full
-  3-D attitude (`rotation_enu_from_body`).
+* **Road grade is modelled (D36), banking is not.** The presets are still flat: their real profiles
+  are unknown offline. The driver ignores the grade, and the estimators get no height information.

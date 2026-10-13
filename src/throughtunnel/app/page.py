@@ -30,15 +30,18 @@ from throughtunnel.app.plots import (
     imu_figure,
 )
 from throughtunnel.app.positioning_view import color_of, error_figure, summary_html
+from throughtunnel.app.profile_editor import ProfileEditor
 from throughtunnel.app.readouts import estimate_readout_html, route_info_html, state_readout_html
 from throughtunnel.app.route_picker import RoutePicker
 from throughtunnel.evaluation.experiment import Comparison, compare_estimators
 from throughtunnel.positioning import ESTIMATORS
 from throughtunnel.road import RoadConfig
+from throughtunnel.road_profile import RoadProfileConfig
 from throughtunnel.routing import OsrmRouteProvider, RawRoute
 from throughtunnel.scenario import (
     ScenarioConfig,
     SimulationResult,
+    build_route_map,
     list_presets,
     load_preset,
     run_scenario,
@@ -92,6 +95,7 @@ class SimulatorPage:
                 self._build_positioning_card()
                 self.tunnel_panel = TunnelPanel(self._on_tunnel_change)
                 self.drive_panel = DrivePanel(self._generate, DRIVER_PRESETS["normal"], RoadConfig())
+                self.profile_editor = ProfileEditor(self._on_profile_change)
                 self.mount_panel = MountPanel(self._apply_sensors, self.base_imu)
                 self.calibration_panel = CalibrationPanel(self._apply_calibration, CalibrationErrorConfig())
                 self.sensor_panel = SensorPanel(self._apply_sensors, self.base_imu, self.base_gnss)
@@ -190,6 +194,9 @@ class SimulatorPage:
         self.sensor_panel.set_imu(cfg.imu)
         self.sensor_panel.set_gnss(cfg.gnss)
         self.tunnel_panel.set(cfg.tunnel)
+        rm = build_route_map(cfg)
+        b, c = (rm.tunnel_entrance_m, rm.tunnel_exit_m) if cfg.tunnel is not None else (None, None)
+        self.profile_editor.set(cfg.road_profile, rm.length_m, b, c)
         self.scenario_name = cfg.name
         self._set_route(cfg.route)
         await self._generate()
@@ -198,6 +205,11 @@ class SimulatorPage:
         self.preset_select.set_value(None)
         self.scenario_name = "Custom route"
         self.tunnel_panel.set(self.tunnel_panel.for_route(entrance_m, exit_m))
+        length = build_route_map(ScenarioConfig(route=route)).length_m
+        limit = self.profile_editor.max_grade_pct
+        self.profile_editor.set(
+            RoadProfileConfig(max_grade_pct=limit), length, entrance_m, exit_m
+        )  # new road: flat
         self._set_route(route)
         await self._generate()
 
@@ -230,6 +242,7 @@ class SimulatorPage:
                 name=self.scenario_name,
                 route=self.route,
                 road=self.drive_panel.road(),
+                road_profile=self.profile_editor.config(),
                 driver=self.drive_panel.driver(),
                 imu=self._imu_from_controls(),
                 calibration=self.calibration_panel.config(),
@@ -253,6 +266,10 @@ class SimulatorPage:
         self._update_route_info()
         self._render(force=True)
         await self._run_positioning()
+
+    async def _on_profile_change(self) -> None:
+        if self.result is not None:
+            await self._generate()
 
     async def _on_tunnel_change(self) -> None:
         if self.result is not None:

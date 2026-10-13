@@ -23,6 +23,6 @@ def stationary_truth(
         t=np.arange(n) / rate,
         s=z, x=z, y=z, z=z, lat=np.full(n, lat), lon=np.full(n, lon), alt=z,
         speed=z, accel_long=z, accel_lat=z, jerk=z, yaw=np.full(n, np.radians(yaw_deg)),
-        yaw_rate=z, yaw_accel=z, curvature=z, roll=z, pitch=z,
+        yaw_rate=z, yaw_accel=z, curvature=z, roll=z, pitch=z, grade=z, pitch_rate=z, pitch_accel=z,
         acc_enu=np.zeros((n, 3)), acc_body=np.zeros((n, 3)), omega_body=np.zeros((n, 3)),
     )  # fmt: skip

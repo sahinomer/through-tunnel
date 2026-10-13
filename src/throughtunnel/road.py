@@ -36,6 +36,7 @@ reported so the approximation is always visible.
 
 from __future__ import annotations
 
+import copy
 import math
 from dataclasses import dataclass, field
 
@@ -49,6 +50,7 @@ from scipy.ndimage import maximum_filter1d
 from scipy.sparse.linalg import spsolve
 
 from throughtunnel.geodesy import LocalFrame
+from throughtunnel.road_profile import ElevationProfile
 from throughtunnel.routing.base import RawRoute
 
 MIN_ROAD_LENGTH_M = 20.0
@@ -97,7 +99,10 @@ class PathState:
 
 
 class RoadPath:
-    """A smooth, arc-length-parametrised road centreline in a local ENU frame."""
+    """A smooth, arc-length-parametrised road centreline in a local ENU frame.
+
+    ``elevation`` (optional, D36) is the road's height profile over the same horizontal arc length;
+    None = flat. The centreline itself stays horizontal (the map is 2-D)."""
 
     def __init__(
         self,
@@ -113,6 +118,7 @@ class RoadPath:
         self.length_m = float(length_m)
         self.reference_enu = reference_enu  # cleaned map polyline (for display / deviation)
         self.diagnostics = diagnostics
+        self.elevation: ElevationProfile | None = None
         n = max(2, math.ceil(self.length_m / grid_step_m) + 1)
         self.grid_s = np.linspace(0.0, self.length_m, n)
         d1 = self._spline(self.grid_s, 1)
@@ -147,6 +153,12 @@ class RoadPath:
 
         diag = _diagnostics(spline, length, reference, raw, n_dupes, n_spikes, raw_length, cfg)
         return cls(frame, spline, length, reference, diag, cfg.resample_step_m)
+
+    def with_elevation(self, elevation: ElevationProfile | None) -> RoadPath:
+        """The same centreline with a height profile (shallow copy; the spline is shared)."""
+        out = copy.copy(self)
+        out.elevation = elevation
+        return out
 
     # ------------------------------------------------------------------ evaluation
     def evaluate(self, s: ArrayLike) -> PathState:

@@ -159,6 +159,25 @@ pitch (acceleration, braking, load) is a further unmodelled source of the same e
 is used (calibration from noisy GPS, hand-over state). That, not the IMU model, limits the current
 accuracy. Pitch calibration and grade (R1) remain the dominant risk.
 
+**Task 5: road slope (R1, D36), implementation done; experiment not yet.**
+* *Model:* an editable elevation profile (points dragged vertically, smooth C2 curve, grade limit
+  enforced, templates) and 3-D vehicle kinematics (height, pitch, pitch rate, vertical acceleration).
+  The IMU follows automatically.
+* *Checks:*
+  * flat roads are bit-identical to before (IMU, GPS, truth and all estimator tracks);
+  * on an underwater profile, numerical differentiation of the phone pose matches the IMU;
+  * the real-browser drag works (point clamped at exactly the 6% limit, re-simulation, no console
+    errors).
+* *First sanity numbers* (ideal sensors, synthetic route, `dr_calibrated` at C):
+  * steady 2% climb along the whole route: ≈ 0 m (the levelling absorbs it);
+  * 3% climb only in the tunnel: +1.2 km;
+  * underwater V: −0.74 km (the speed error recovers on the climb, the position error does not).
+* *Noted for the experiment:* `route_imu` is clamped at the route end D when it runs far ahead, which
+  caps its error. Its +0.73 km on the tunnel climb is therefore not comparable with plain dead
+  reckoning.
+* *Simplifications:* no banking; the driver ignores the grade; presets stay flat (no offline
+  elevation data); the profile is defined over map distance (a few metres from the driven distance).
+
 **Observation (UI behaviour, pre-existing, not fixed):** NiceGUI runs *async* change handlers as
 background tasks, so the "loading" guard that marks values set from code is already reset when they run.
 Handlers registered with `on_value_change` / `on_change` (switches, mount-preset select) therefore
@@ -281,7 +300,7 @@ are committed (F9).
 ### Phase R: realism and robustness experiments (backlog)
 | ID | Task | Status |
 |---|---|---|
-| R1 | Road grade: elevation profile, pitch in truth and IMU; grade sensitivity of the estimators (D24) | [ ] **raised: most important caveat of the current results (results.md §3.1)** |
+| R1 | Road grade: elevation profile, pitch in truth and IMU; grade sensitivity of the estimators (D24) | [~] model + editor done (D36, §0.1 task 5); **grade experiment next** |
 | R2 | Stop-and-go / slow traffic inside the tunnel (D24) | [ ] |
 | R3 | Map uncertainty: scale error, lateral offsets, local distortions of the estimator's map (D21, D24) | [ ] |
 | R4 | GPS detail: entrance degradation ramp, dropouts, multipath outliers, reacquisition transients, latency (D16) | [ ] |

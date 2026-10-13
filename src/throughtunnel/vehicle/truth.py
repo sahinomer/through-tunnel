@@ -1,11 +1,14 @@
 """Ground-truth vehicle state: the simulator's hidden reality.
 
 Everything here is derived from one integrated longitudinal state (s, v, a, j)
-plus the path geometry, so all quantities are mutually consistent:
+plus the path geometry and the road's height profile z(s), so all quantities are mutually consistent.
+s, v, a are the horizontal distance along the road and its derivatives (the map and the driver's
+speed profile are horizontal); G = z'(s) is the grade.
 
-    position  = r(s)                       yaw       = ψ(s)
+    position  = (r(s), z(s))               yaw       = ψ(s)
     yaw_rate  = κ(s) v                     yaw_accel = κ'(s) v^2 + κ(s) a
-    accel_lat = κ(s) v^2   (centripetal)   accel_long = a
+    velocity  = v (cos ψ, sin ψ, G)        acceleration (ENU) = a T + κ v^2 N + (G a + G' v^2) e_z
+    pitch θ   = -atan(G)                   (ISO 8855: rotation about body y = left, + = nose down)
 
 Frames
 ------
@@ -14,9 +17,11 @@ Frames
 * yaw ψ: angle from East to body-x, counter-clockwise positive (continuous,
   unwrapped). Compass bearing = 90° - ψ.
 
-Flat-road assumptions: roll = pitch = 0, z = 0, no side-slip (velocity along
-body-x). ``acc_body``/``omega_body`` are the kinematic inputs the sensor model
-of the next milestone turns into specific force and angular rate.
+Body attitude: C_nb = Rz(ψ) Ry(θ). Body x points along the 3-D velocity (no side-slip, the vehicle
+pitches with the road), body y stays horizontal: no road banking, so roll = 0. Angular velocity in
+body axes: ω = (-sin θ ψ', θ', cos θ ψ'). ``acc_body``/``omega_body``/``alpha_body`` are the
+kinematic inputs the sensor models turn into specific force and angular rate. With a flat road
+(no profile) every quantity is computed exactly as before slope was modelled.
 
 This object must never be handed to a positioning algorithm.
 """
@@ -42,7 +47,7 @@ SCALAR_CHANNELS: dict[str, tuple[str, str]] = {
     "lat": ("deg", "WGS84 latitude"),
     "lon": ("deg", "WGS84 longitude"),
     "alt": ("m", "WGS84 ellipsoidal height"),
-    "speed": ("m/s", "speed over ground"),
+    "speed": ("m/s", "horizontal speed over ground"),
     "accel_long": ("m/s^2", "longitudinal acceleration (body x)"),
     "accel_lat": ("m/s^2", "lateral (centripetal) acceleration (body y, + = left)"),
     "jerk": ("m/s^3", "longitudinal jerk"),
@@ -51,8 +56,10 @@ SCALAR_CHANNELS: dict[str, tuple[str, str]] = {
     "yaw_rate": ("rad/s", "yaw rate (body z, + = left turn)"),
     "yaw_accel": ("rad/s^2", "yaw angular acceleration"),
     "curvature": ("1/m", "path curvature (+ = left)"),
-    "roll": ("rad", "roll angle (0: flat road)"),
-    "pitch": ("rad", "pitch angle (0: flat road)"),
+    "roll": ("rad", "roll angle (0: no road banking)"),
+    "pitch": ("rad", "pitch angle, ISO 8855 (+ = nose down; -atan(grade))"),
+    "grade": ("-", "road grade dz/ds (+ = uphill)"),
+    "pitch_rate": ("rad/s", "pitch rate (body y)"),
 }
 
 
@@ -77,6 +84,9 @@ class GroundTruth:
     curvature: NDArray[np.float64]
     roll: NDArray[np.float64]
     pitch: NDArray[np.float64]
+    grade: NDArray[np.float64]
+    pitch_rate: NDArray[np.float64]
+    pitch_accel: NDArray[np.float64]
     acc_enu: NDArray[np.float64]  # (N, 3) kinematic acceleration in ENU [m/s^2]
     acc_body: NDArray[np.float64]  # (N, 3) kinematic acceleration in body axes [m/s^2]
     omega_body: NDArray[np.float64]  # (N, 3) angular velocity of body w.r.t. ENU, body axes [rad/s]
@@ -99,12 +109,17 @@ class GroundTruth:
     @property
     def vel_enu(self) -> NDArray[np.float64]:
         """(N, 3) velocity of the reference point in ENU [m/s] (no side-slip: along the heading)."""
-        return np.column_stack([self.speed * np.cos(self.yaw), self.speed * np.sin(self.yaw), self.z * 0.0])
+        v = self.speed
+        return np.column_stack([v * np.cos(self.yaw), v * np.sin(self.yaw), v * self.grade])
 
     @property
     def alpha_body(self) -> NDArray[np.float64]:
-        """(N, 3) angular acceleration of the body w.r.t. ENU, body axes [rad/s^2]."""
-        return np.column_stack([self.roll * 0.0, self.pitch * 0.0, self.yaw_accel])
+        """(N, 3) angular acceleration of the body w.r.t. ENU, body axes [rad/s^2] (d/dt of omega_body)."""
+        if not np.any(self.pitch):
+            return np.column_stack([self.roll * 0.0, self.pitch * 0.0, self.yaw_accel])
+        c, s = np.cos(self.pitch), np.sin(self.pitch)
+        q, r, dr = self.pitch_rate, self.yaw_rate, self.yaw_accel
+        return np.column_stack([-c * q * r - s * dr, self.pitch_accel, -s * q * r + c * dr])
 
     def point_enu(self, lever_body: ArrayLike) -> NDArray[np.float64]:
         """(N, 3) ENU position of a body-fixed point (e.g. the phone) at ``lever_body`` from the reference."""
@@ -114,13 +129,20 @@ class GroundTruth:
         )
 
     def rotation_enu_from_body(self) -> NDArray[np.float64]:
-        """(N, 3, 3) rotation matrices C such that v_enu = C @ v_body (yaw-only on a flat road)."""
+        """(N, 3, 3) rotation matrices C = Rz(yaw) Ry(pitch) such that v_enu = C @ v_body."""
         c, s = np.cos(self.yaw), np.sin(self.yaw)
         rot = np.zeros((len(self), 3, 3))
         rot[:, 0, 0], rot[:, 0, 1] = c, -s
         rot[:, 1, 0], rot[:, 1, 1] = s, c
         rot[:, 2, 2] = 1.0
-        return rot
+        if not np.any(self.pitch):
+            return rot
+        cp, sp = np.cos(self.pitch), np.sin(self.pitch)
+        ry = np.zeros((len(self), 3, 3))
+        ry[:, 0, 0], ry[:, 0, 2] = cp, sp
+        ry[:, 1, 1] = 1.0
+        ry[:, 2, 0], ry[:, 2, 2] = -sp, cp
+        return rot @ ry
 
     def scalar_columns(self) -> dict[str, NDArray[np.float64]]:
         out = {f.name: getattr(self, f.name) for f in fields(self) if f.name in SCALAR_CHANNELS}
@@ -147,24 +169,46 @@ def build_ground_truth(motion: LongitudinalTrajectory, path: RoadPath) -> Ground
     n = len(motion.t)
     zeros = np.zeros(n)
     c, s = np.cos(yaw), np.sin(yaw)
-    acc_enu = np.column_stack([a * c - accel_lat * s, a * s + accel_lat * c, zeros])
-    acc_body = np.column_stack([a, accel_lat, zeros])
-    omega_body = np.column_stack([zeros, zeros, yaw_rate])
+    if path.elevation is None:  # flat road: exactly the original arithmetic
+        z, grade, pitch, pitch_rate, pitch_accel = (
+            zeros,
+            zeros.copy(),
+            zeros.copy(),
+            zeros.copy(),
+            zeros.copy(),
+        )
+        acc_enu = np.column_stack([a * c - accel_lat * s, a * s + accel_lat * c, zeros])
+        acc_body = np.column_stack([a, accel_lat, zeros])
+        omega_body = np.column_stack([zeros, zeros, yaw_rate])
+        accel_long = a
+    else:
+        z, grade, g1, g2 = path.elevation.evaluate(motion.s)  # height, grade, dG/ds, d2G/ds2
+        a_up = grade * a + g1 * v**2  # vertical acceleration
+        acc_enu = np.column_stack([a * c - accel_lat * s, a * s + accel_lat * c, a_up])
+        k = 1.0 + grade**2
+        pitch = -np.arctan(grade)
+        pitch_rate = -g1 * v / k
+        pitch_accel = -(g2 * v**2 + g1 * a) / k + 2.0 * grade * (g1 * v) ** 2 / k**2
+        cp, sp = np.cos(pitch), np.sin(pitch)
+        # Body x = cos(-θ) T + sin(-θ) e_z (along the road), body z = sin θ T + cos θ e_z: project.
+        acc_body = np.column_stack([cp * a - sp * a_up, accel_lat, sp * a + cp * a_up])
+        omega_body = np.column_stack([-sp * yaw_rate, pitch_rate, cp * yaw_rate])
+        accel_long = acc_body[:, 0]
 
     x, y = geo.xy[:, 0], geo.xy[:, 1]
-    lat, lon, alt = path.frame.to_geodetic(np.column_stack([x, y, zeros]))
+    lat, lon, alt = path.frame.to_geodetic(np.column_stack([x, y, z]))
     return GroundTruth(
         frame=path.frame,
         t=motion.t,
         s=motion.s,
         x=x,
         y=y,
-        z=zeros,
+        z=z,
         lat=lat,
         lon=lon,
         alt=alt,
         speed=v,
-        accel_long=a,
+        accel_long=accel_long,
         accel_lat=accel_lat,
         jerk=motion.jerk,
         yaw=yaw,
@@ -172,7 +216,10 @@ def build_ground_truth(motion: LongitudinalTrajectory, path: RoadPath) -> Ground
         yaw_accel=yaw_accel,
         curvature=kappa,
         roll=zeros.copy(),
-        pitch=zeros.copy(),
+        pitch=pitch,
+        grade=grade,
+        pitch_rate=pitch_rate,
+        pitch_accel=pitch_accel,
         acc_enu=acc_enu,
         acc_body=acc_body,
         omega_body=omega_body,

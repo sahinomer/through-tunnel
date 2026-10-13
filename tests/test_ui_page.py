@@ -66,3 +66,28 @@ async def test_calibration_panel_reaches_the_estimators_only():
         assert cal.enabled and cal.pitch_deg == 0.25
         assert page.result.imu is before.imu and page.result.gnss is before.gnss  # nothing re-simulated
         assert "Calibration error" in page.route_info.content
+
+
+@pytest.mark.anyio
+async def test_profile_drag_is_clamped_and_reaches_the_simulation():
+    import gc
+
+    import numpy as np
+
+    from throughtunnel.scenario import load_preset
+
+    async with user_simulation(root=SimulatorPage) as user:
+        await user.open("/")
+        page = next(o for o in gc.get_objects() if isinstance(o, SimulatorPage))
+        editor = page.profile_editor
+        with user.client:
+            await page._load_scenario(load_preset("synthetic_demo_track"))
+            assert page.result.config.road_profile.is_flat and len(editor.distances) > 10
+            i = len(editor.distances) // 2
+            await editor._on_relayout(type("E", (), {"args": {f"shapes[{i}].yanchor": 500.0}})())
+        assert 0.0 < editor.heights[i] < 500.0  # clamped to the 6 % limit
+        cfg = page.result.config.road_profile
+        assert not cfg.is_flat and np.ptp(page.result.truth.z) > 1.0  # the drive now goes over a hill
+        with user.client:
+            await editor._apply_template("underwater")
+        assert page.result.truth.z.min() < -20.0

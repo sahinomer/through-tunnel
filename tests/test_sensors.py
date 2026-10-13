@@ -34,6 +34,19 @@ def demo():
     return run_scenario(cfg.model_copy(update={"imu": ideal_at_sim_rate()}))
 
 
+@pytest.fixture(scope="module")
+def sloped_demo():
+    """The demo drive on an underwater-tunnel profile (descent, bottom, climb; grades up to ~4 %)."""
+    from throughtunnel.road_profile import RoadProfileConfig, point_distances, template_heights
+
+    cfg = load_preset("synthetic_demo_track")
+    length = run_scenario(cfg).route_map.length_m
+    d = point_distances(length, cfg.tunnel.entrance_m, cfg.tunnel.exit_m)
+    z = template_heights("underwater", d, cfg.tunnel.entrance_m, cfg.tunnel.exit_m, 0.06)
+    profile = RoadProfileConfig(points=tuple(zip(d.tolist(), z.tolist(), strict=True)))
+    return run_scenario(cfg.model_copy(update={"imu": ideal_at_sim_rate(), "road_profile": profile}))
+
+
 def central_diff(y: np.ndarray, dt: float) -> np.ndarray:
     return (y[2:] - y[:-2]) / (2.0 * dt)
 
@@ -139,10 +152,15 @@ def test_mounting_changes_sensor_axes_but_not_vehicle_motion():
     assert np.allclose(b.imu.gyro @ r_bs.T, a.imu.gyro, atol=1e-15)
 
 
-def test_imu_matches_numerical_differentiation_of_phone_pose(demo):
+@pytest.mark.parametrize("road", ["flat", "sloped"])
+def test_imu_matches_numerical_differentiation_of_phone_pose(request, road):
     """End-to-end check independent of the closed-form model: differentiate the phone's actual
-    trajectory (vehicle pose + lever arm) and orientation, then compare with the IMU output."""
+    trajectory (vehicle pose + lever arm) and orientation, then compare with the IMU output. On the
+    sloped road this checks the 3-D kinematics: height, pitch, pitch rate and their lever-arm terms."""
+    demo = request.getfixturevalue("demo" if road == "flat" else "sloped_demo")
     tr = demo.truth
+    if road == "sloped":
+        assert np.ptp(tr.z) > 20.0 and np.abs(tr.pitch).max() > np.radians(2.0)
     imu = with_imu_config(demo, ideal_at_sim_rate(mount=TILTED)).imu
     dt = 1.0 / tr.sample_rate_hz
     c_nb = tr.rotation_enu_from_body()
@@ -159,7 +177,12 @@ def test_imu_matches_numerical_differentiation_of_phone_pose(demo):
     dc = (c_ns[2:] - c_ns[:-2]) / (2 * dt)
     skew = np.einsum("nji,njk->nik", c_ns[1:-1], dc)  # C^T dC/dt = [ω×] in phone axes
     omega_s = np.column_stack([skew[:, 2, 1], skew[:, 0, 2], skew[:, 1, 0]])
-    assert np.abs(omega_s - imu.gyro[1:-1]).max() < 5e-6
+    # The profile is C2, so the pitch *acceleration* steps at each profile point. A central difference
+    # across such a step is off by ~1e-5 rad/s, so samples within 1 m of a point are excluded (9 of
+    # 23 000); everywhere else the agreement is ~3e-7 rad/s.
+    points = np.array([d for d, _ in demo.config.road_profile.points] or [-1e9])
+    away = np.abs(tr.s[1:-1, None] - points[None, :]).min(axis=1) > 1.0
+    assert np.abs(omega_s - imu.gyro[1:-1])[away].max() < 5e-6
 
 
 def test_lever_arm_in_steady_turn():

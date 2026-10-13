@@ -30,6 +30,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from throughtunnel.observations import GnssStream, Observations, RouteMap
 from throughtunnel.randomness import rng_stream
 from throughtunnel.road import RoadConfig, RoadPath
+from throughtunnel.road_profile import VERTICAL_ACCEL_WARNING, ElevationProfile, RoadProfileConfig
 from throughtunnel.routing.base import RawRoute
 from throughtunnel.sensors.errors import ImuErrorConfig, ImuErrorRealization, apply_imu_errors
 from throughtunnel.sensors.gnss import GnssConfig, GnssEvents, gnss_timestamps, simulate_gnss
@@ -48,7 +49,8 @@ from throughtunnel.vehicle.truth import GroundTruth, build_ground_truth
 # v5: one exit announcement `tunnel.announce_before_exit_m` replaces the navigation event inside the tunnel
 #     (`exit_event_m`, `announce_leads_m`; D32). Older files get the default distance, capped at the tunnel.
 # v6: added `calibration` (orientation error of the estimators' phone calibration, D34); default off.
-SCHEMA_VERSION = 6
+# v7: added `road_profile` (road elevation, D36); default flat.
+SCHEMA_VERSION = 7
 
 TUNNEL_MIN_LENGTH_M = 500.0
 TUNNEL_MAX_LENGTH_M = 5000.0
@@ -89,6 +91,9 @@ class ScenarioConfig(BaseModel):
     description: str = ""
     route: RawRoute
     road: RoadConfig = Field(default_factory=RoadConfig)
+    road_profile: RoadProfileConfig = Field(
+        default_factory=RoadProfileConfig, description="Road elevation along the route (D36); default flat"
+    )
     driver: DriverConfig = Field(default_factory=DriverConfig)
     imu: ImuConfig = Field(default_factory=ImuConfig)
     calibration: CalibrationErrorConfig = Field(
@@ -169,7 +174,8 @@ class SimulationResult:
 
 
 def build_path(config: ScenarioConfig) -> RoadPath:
-    return RoadPath.from_route(config.route, config.road)
+    path = RoadPath.from_route(config.route, config.road)
+    return path.with_elevation(ElevationProfile.from_config(config.road_profile))
 
 
 def run_scenario(config: ScenarioConfig, path: RoadPath | None = None) -> SimulationResult:
@@ -292,6 +298,12 @@ def scenario_warnings(result: SimulationResult) -> list[str]:
         out.append(
             f"The approach A–B lasts only {sec.entrance_t:.0f} s with GPS; "
             "the estimator may not initialise well."
+        )
+    peak_vertical = float(np.abs(result.truth.acc_enu[:, 2]).max())
+    if peak_vertical > VERTICAL_ACCEL_WARNING:
+        out.append(
+            f"The road profile has abrupt dips or crests: up to {peak_vertical:.2f} m/s² vertical "
+            f"acceleration (above {VERTICAL_ACCEL_WARNING:g} m/s²)."
         )
     if rm.length_m - rm.tunnel_exit_m < MIN_RECOVERY_M:
         out.append(f"The recovery section C–D is only {rm.length_m - rm.tunnel_exit_m:.0f} m long.")
