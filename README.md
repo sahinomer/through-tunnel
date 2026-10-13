@@ -85,7 +85,8 @@ Options: `uv run throughtunnel --port 8090 --host 0.0.0.0 --no-browser`.
    *Road profile (elevation)* sets the road's height: drag the points
    up or down, or start from a template (steady climb, climb inside the tunnel, underwater tunnel).
    The grade never exceeds the limit (default 6%), and the drive re-simulates.
-   *Calibration error (assumed orientation)* rotates the phone-to-vehicle
+   Two optional realism effects (off by default): *Bias drift (in-run)* per IMU sensor, and *Degradation
+   before the tunnel* for GPS (multipath, jumps). *Calibration error (assumed orientation)* rotates the phone-to-vehicle
    orientation the estimators use (yaw, pitch, roll) without changing the actual mount or any sensor
    data. Only positioning re-runs, so with/without comparisons are exactly paired
    ([docs/calibration_error.md](docs/calibration_error.md)).
@@ -127,6 +128,7 @@ uv run python -m throughtunnel.evaluation.calibration_study --seeds 10   # docs/
 uv run python -m throughtunnel.evaluation.factor_study --seeds 20         # docs/factor_study.md (+ figures)
 uv run python -m throughtunnel.evaluation.slope_study --seeds 20          # docs/slope_study.md (+ figures)
 uv run python -m throughtunnel.evaluation.traffic_study --seeds 20        # docs/traffic_study.md (+ figures)
+uv run python -m throughtunnel.evaluation.realism_check --seeds 10        # docs/realism_check/tables.md
 ```
 
 The figures need matplotlib, a dev dependency (installed by `uv sync`). The simulator does not need it.
@@ -212,6 +214,9 @@ Stop-and-go traffic and map errors are on the roadmap.
   breaks the IMU speed (0.4–1 km per 1 %); the heading survives.
 - **Traffic** (done, 2026-10-13). Portal slowdown, speed limit, stop-and-go, exit queue and congested
   flow with real stops, and a study ([docs/traffic_study.md](docs/traffic_study.md)).
+- **Simulator scope frozen** (D38) after two optional realism effects (IMU bias drift, GPS degradation
+  before the portal). What is not simulated is listed with its expected effect in
+  [docs/limitations.md](docs/limitations.md).
 - **Next:** an estimator that handles standstills, time-driven drift and grade; map errors; a
   probabilistic estimator with covariance; then the write-up. Tracked in [docs/roadmap.md](docs/roadmap.md).
 

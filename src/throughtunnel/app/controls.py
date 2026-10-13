@@ -417,19 +417,30 @@ class SensorPanel(Panel):
             self.s_acc_nd = slider("Noise density", 0, 1000, 10, acc.noise_density / UG, "µg/√Hz")
             self.acc_bias_on = ui.switch("Constant bias", value=acc.bias_enabled)
             self.s_acc_bias = slider("Bias magnitude", 0, 100, 1, acc.bias_magnitude / MG, "mg")
+            self.acc_drift_on = ui.switch("Bias drift (in-run)", value=acc.drift_enabled)
+            self.s_acc_drift = slider("Drift σ", 0, 5, 0.1, acc.drift_sigma / MG, "mg")
             ui.label("Gyroscope").classes("text-sm font-bold mt-1")
             self.gyr_noise_on = ui.switch("White noise", value=gyr.noise_enabled)
             self.s_gyr_nd = slider("Noise density", 0, 50, 0.5, gyr.noise_density / MDPS, "mdps/√Hz")
             self.gyr_bias_on = ui.switch("Constant bias", value=gyr.bias_enabled)
             self.s_gyr_bias = slider("Bias magnitude", 0, 2, 0.01, gyr.bias_magnitude / DEG, "°/s")
+            self.gyr_drift_on = ui.switch("Bias drift (in-run)", value=gyr.drift_enabled)
+            self.s_gyr_drift = slider("Drift σ", 0, 50, 0.5, gyr.drift_sigma / MDPS, "mdps")
+            self.s_drift_tau = slider("Drift correlation time", 10, 1800, 10, acc.drift_tau_s, "s")
             self.errors_label = ui.html().classes("text-sm")
             ui.label(
                 "Noise density N: per-sample σ = N·√rate (rate-independent after averaging). Bias: constant "
-                "vector with the given norm, direction drawn from the seed."
+                "vector with the given norm, direction drawn from the seed. Bias drift: a slowly wandering "
+                "bias (Gauss-Markov, σ and correlation time per axis), e.g. temperature; the approach "
+                "calibration cannot remove it."
             ).classes("text-xs text-gray-500")
-            for switch in (self.acc_noise_on, self.acc_bias_on, self.gyr_noise_on, self.gyr_bias_on):
+            switches = (self.acc_noise_on, self.acc_bias_on, self.acc_drift_on, self.gyr_noise_on,
+                        self.gyr_bias_on, self.gyr_drift_on)  # fmt: skip
+            for switch in switches:
                 switch.on_value_change(self._changed)
-            for s in (self.s_acc_nd, self.s_acc_bias, self.s_gyr_nd, self.s_gyr_bias):
+            sliders = (self.s_acc_nd, self.s_acc_bias, self.s_acc_drift, self.s_gyr_nd, self.s_gyr_bias,
+                       self.s_gyr_drift, self.s_drift_tau)  # fmt: skip
+            for s in sliders:
                 s.on("change", self._changed)
             for number in (self.imu_rate, self.sensor_seed):
                 number.on("blur", self._changed)
@@ -441,14 +452,25 @@ class SensorPanel(Panel):
             self.s_gps_speed = slider("Speed noise σ", 0, 1, 0.05, gnss.speed_sigma_mps, "m/s")
             self.s_gps_window = slider("Loss up to … before B", 0, 200, 10, gnss.loss_window_m, "m")
             self.s_gps_delay = slider("Reacquisition delay", 0, 20, 0.5, gnss.reacquisition_delay_s, "s")
+            self.deg_on = ui.switch(
+                "Degradation before the tunnel (multipath)", value=gnss.portal_degradation
+            )
+            self.s_deg_len = slider("Degradation zone before B", 0, 500, 10, gnss.degradation_length_m, "m")
+            self.s_deg_sigma = slider("Extra error σ at B", 0, 30, 0.5, gnss.degradation_sigma_m, "m")
+            self.s_deg_outlier = slider(
+                "Jump probability at B", 0, 50, 1, 100 * gnss.outlier_probability, "%"
+            )
+            ui.label(
+                "Degradation grows linearly over the zone and reaches these values at B: extra correlated "
+                "position error, extra speed noise and occasional multipath jumps (not reflected in the "
+                "reported accuracy)."
+            ).classes("text-xs text-gray-500")
             self.gps_on.on_value_change(self._changed)
-            for s in (
-                self.s_gps_sigma,
-                self.s_gps_tau,
-                self.s_gps_speed,
-                self.s_gps_window,
-                self.s_gps_delay,
-            ):
+            self.deg_on.on_value_change(self._changed)
+            gps_sliders = (self.s_gps_sigma, self.s_gps_tau, self.s_gps_speed, self.s_gps_window,
+                           self.s_gps_delay, self.s_deg_len, self.s_deg_sigma,
+                           self.s_deg_outlier)  # fmt: skip
+            for s in gps_sliders:
                 s.on("change", self._changed)
 
     def imu(self, base: ImuConfig) -> ImuConfig:
@@ -456,21 +478,22 @@ class SensorPanel(Panel):
         rate = self.imu_rate.value
         rate = float(min(max(rate, 10.0), 2000.0)) if rate is not None else base.rate_hz
         seed = self.sensor_seed.value
-        errors = ImuErrorConfig(
-            accel=_sensor_errors(
-                base.errors.accel, self.acc_noise_on, self.s_acc_nd, UG, self.acc_bias_on, self.s_acc_bias, MG
-            ),
-            gyro=_sensor_errors(
-                base.errors.gyro,
-                self.gyr_noise_on,
-                self.s_gyr_nd,
-                MDPS,
-                self.gyr_bias_on,
-                self.s_gyr_bias,
-                DEG,
-            ),
-            seed=int(seed) if seed is not None else None,
-        )
+        tau = float(self.s_drift_tau.value)
+
+        def drift(on, s_sigma, unit) -> dict:
+            return {
+                "drift_enabled": bool(on.value),
+                "drift_sigma": float(s_sigma.value) * unit,
+                "drift_tau_s": tau,
+            }
+
+        accel = _sensor_errors(
+            base.errors.accel, self.acc_noise_on, self.s_acc_nd, UG, self.acc_bias_on, self.s_acc_bias, MG
+        ).model_copy(update=drift(self.acc_drift_on, self.s_acc_drift, MG))
+        gyro = _sensor_errors(
+            base.errors.gyro, self.gyr_noise_on, self.s_gyr_nd, MDPS, self.gyr_bias_on, self.s_gyr_bias, DEG
+        ).model_copy(update=drift(self.gyr_drift_on, self.s_gyr_drift, MDPS))
+        errors = ImuErrorConfig(accel=accel, gyro=gyro, seed=int(seed) if seed is not None else None)
         return base.model_copy(update={"rate_hz": rate, "errors": errors})
 
     def gnss(self, base: GnssConfig) -> GnssConfig:
@@ -482,6 +505,10 @@ class SensorPanel(Panel):
                 "speed_sigma_mps": float(self.s_gps_speed.value),
                 "loss_window_m": float(self.s_gps_window.value),
                 "reacquisition_delay_s": float(self.s_gps_delay.value),
+                "portal_degradation": bool(self.deg_on.value),
+                "degradation_length_m": float(self.s_deg_len.value),
+                "degradation_sigma_m": float(self.s_deg_sigma.value),
+                "outlier_probability": float(self.s_deg_outlier.value) / 100.0,
             }
         )
 
@@ -494,6 +521,9 @@ class SensorPanel(Panel):
             self.s_acc_nd.value, self.s_acc_bias.value = acc.noise_density / UG, acc.bias_magnitude / MG
             self.gyr_noise_on.value, self.gyr_bias_on.value = gyr.noise_enabled, gyr.bias_enabled
             self.s_gyr_nd.value, self.s_gyr_bias.value = gyr.noise_density / MDPS, gyr.bias_magnitude / DEG
+            self.acc_drift_on.value, self.s_acc_drift.value = acc.drift_enabled, acc.drift_sigma / MG
+            self.gyr_drift_on.value, self.s_gyr_drift.value = gyr.drift_enabled, gyr.drift_sigma / MDPS
+            self.s_drift_tau.value = acc.drift_tau_s
 
     def set_gnss(self, gnss: GnssConfig) -> None:
         with self._quiet():
@@ -501,6 +531,9 @@ class SensorPanel(Panel):
             self.s_gps_sigma.value, self.s_gps_tau.value = gnss.position_sigma_m, gnss.position_tau_s
             self.s_gps_speed.value, self.s_gps_window.value = gnss.speed_sigma_mps, gnss.loss_window_m
             self.s_gps_delay.value = gnss.reacquisition_delay_s
+            self.deg_on.value, self.s_deg_len.value = gnss.portal_degradation, gnss.degradation_length_m
+            self.s_deg_sigma.value = gnss.degradation_sigma_m
+            self.s_deg_outlier.value = 100.0 * gnss.outlier_probability
 
     def show_applied_errors(self, result: SimulationResult) -> None:
         """The per-sample noise σ and the bias actually drawn for this run (hidden simulation state)."""
@@ -512,6 +545,13 @@ class SensorPanel(Panel):
             f"({real.accel.noise_std:.4f} m/s²), gyro {real.gyro.noise_std / DEG:.3f} °/s<br>"
             f"Applied bias (phone x, y, z): accel [{acc_b}] mg, gyro [{gyr_b}] °/s"
         )
+        drift = []
+        if real.accel.drift is not None:
+            drift.append(f"accel up to {np.abs(real.accel.drift).max() / MG:.2f} mg")
+        if real.gyro.drift is not None:
+            drift.append(f"gyro up to {np.abs(real.gyro.drift).max() / MDPS:.1f} mdps")
+        if drift:
+            self.errors_label.content += "<br>Bias drift over the run: " + ", ".join(drift)
 
 
 def _sensor_errors(

@@ -247,7 +247,10 @@ def gnss_events(
     loss_t = float(np.interp(loss_s, motion.s, motion.t))
     reacquire = sections.exit_t + config.reacquisition_delay_s + u_reacq * config.reacquisition_jitter_s
     return GnssEvents(
-        loss_s=loss_s, loss_t=loss_t, reacquire_t=reacquire if math.isfinite(reacquire) else math.inf
+        loss_s=loss_s,
+        loss_t=loss_t,
+        reacquire_t=reacquire if math.isfinite(reacquire) else math.inf,
+        entrance_s=sections.entrance_s,
     )
 
 

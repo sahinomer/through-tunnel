@@ -316,6 +316,13 @@ bit-identical. Each IMU axis gets its own plot row, because gravity moves betwee
 Each row has a minimum y-span (1 m/s², 0.1 rad/s) so physically negligible variations are not blown up
 by autoscaling, e.g. the ~1e-5 m/s² change of normal gravity along a 3 km route.
 
+**Bias drift (D38, optional).** On top of the constant bias, each axis can carry a slowly wandering bias:
+a stationary first-order Gauss-Markov process, x[k] = φ·x[k−1] + σ·√(1−φ²)·w[k] with φ = exp(−dt/τ),
+generated exactly with a linear filter. Defaults when enabled: accelerometer σ = 0.5 mg, gyroscope
+σ = 5 mdps, τ = 300 s. These are order-of-magnitude assumptions for in-run instability and temperature
+drift of a phone in a car mount. The drift has its own random streams (`imu.accel.drift`,
+`imu.gyro.drift`); off, the measurements are bit-identical to before.
+
 ### 6.3 Phone GPS (`sensors/gnss.py`)
 
 Android-`Location`-style fixes (D16), not raw GNSS. Defaults are in decision D25.
@@ -336,6 +343,16 @@ Android-`Location`-style fixes (D16), not raw GNSS. Defaults are in decision D25
   * error σ, time correlation and 68 % coverage;
   * availability around B–C;
   * independence from IMU errors.
+
+**Degradation before the portal (D38, optional).** Cuttings and urban canyons in front of portals cause
+multipath. With the option enabled, the fixes over the last `degradation_length_m` (default 150 m) before
+B receive additional errors, scaled by a ramp r from 0 at the start of the zone to 1 at B (and 0 after B):
+* r·(a Gauss-Markov position error, 8 m per axis, τ = 5 s);
+* r·0.5 m/s of extra speed noise (the bearing noise follows);
+* multipath jumps with probability r·5 % per fix, 25 m per axis.
+
+The reported horizontal accuracy and speed accuracy grow with the correlated part. The jumps are not
+reported, as on real phones. Own random streams; off = bit-identical.
 
 ### 6.4 Route structure A–D (`scenario.py`)
 
@@ -360,7 +377,7 @@ Android-`Location`-style fixes (D16), not raw GNSS. Defaults are in decision D25
 * Presets live inside the package (`throughtunnel/presets/*.json`), so the app and the tests run
   offline.
 
-## 8. Validation (`uv run pytest`, 202 tests, no network)
+## 8. Validation (`uv run pytest`, 214 tests, no network)
 
 | Property | Test |
 |---|---|
@@ -388,6 +405,7 @@ Android-`Location`-style fixes (D16), not raw GNSS. Defaults are in decision D25
 | UI construction | the page builds in NiceGUI's in-process user simulation (this caught a control-ordering bug) |
 | A–D structure | route map = original polyline; B/C located on the true path within 1 m of the map point at the true crossing time; ordered crossing times; warnings; U-turn rejection |
 | GPS | see §6.3 |
+| Bias drift and portal degradation (D38) | Gauss-Markov statistics (σ within 5 %, correlation e⁻¹ at τ); drift adds exactly on top of noise and bias (other realisations unchanged); seeded; a drifting accelerometer bias defeats the approach calibration; degradation confined to the zone before B (fixes elsewhere bit-identical), larger errors near B, accuracy reported larger, jumps only in the zone; UI controls reach the simulation |
 | Observation boundary | importing positioning loads no simulator module (subprocess); observation types have no truth fields |
 | Positioning | causality of every estimator (perturb the future, past unchanged); runner order and tie rule; zero-error dead reckoning < 1 m; forward-bias error = analytic vector integral (1 %); gyro-bias heading error linear (5 %); calibration removes > 95 % / > 80 % of bias errors; tilted mount recovered < 1°; gyro-bias calibration < 0.02 °/s on the hardest approach; GPS blending improves the hand-over state; route estimators stay on the route; on-time announcements with perfect data |
 | Evaluation | along/cross sign conventions on shifted truth; recovery-time definition |

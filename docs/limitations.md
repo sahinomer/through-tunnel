@@ -1,0 +1,76 @@
+# Modelling scope and known limitations
+
+What the simulator and the experiments deliberately leave out, and what each omission probably does to
+the results. It is kept for the write-up's limitations section and as a list of future work. Status
+values:
+* **modelled**: always simulated;
+* **optional**: available, off by default (UI and config);
+* **not modelled**: not simulated; the expected effect is stated instead.
+
+"Direction" says whether including the effect would most likely make the results **better** (the
+current numbers are pessimistic) or **worse** (the current numbers are optimistic), and for which
+methods.
+
+## Vehicle and road
+
+| Effect | Status | Direction if included | Notes |
+|---|---|---|---|
+| Road grade (elevation profile) | optional (D36) | worse for IMU methods | Studied in [slope_study.md](slope_study.md). |
+| Traffic: slowdowns, speed limits, stop-and-go, exit queues, congestion | optional (D37) | worse for speed hold; somewhat worse for IMU (longer outages) | Studied in [traffic_study.md](traffic_study.md). |
+| Long incident stop (minutes) | not modelled | as stop-and-go, with one long outage | Skipped by decision; stop-and-go and exit queues already cover stopping. |
+| Body pitch and roll on the suspension (braking, accelerating, load) | not modelled | worse for IMU methods | Acts like a few-% accelerometer scale error during speed changes and disturbs the approach calibration; mostly cancels over a stop/start cycle. |
+| Road banking (roll in curves) | not modelled | slightly worse for unconstrained dead reckoning | Tilts the yaw axis like a cos(roll) factor; negligible for the route-constrained estimators. |
+| Interacting vehicles (emergent traffic waves) | not modelled | unknown | Traffic is imposed on one vehicle as speed zones and stops, with plausible but uncalibrated parameters. |
+| Driver reacting to grade (slowing on climbs) | not modelled | worse for speed hold | Would couple slope and traffic effects. |
+| Real elevation profiles of the presets | not modelled | — | Presets stay flat; slope experiments use templates. |
+| Tunnel lengths outside 2–3 km | covered by the editor, not by the studies | worse for long tunnels, better for short ones | The brief allows 0.5–5 km; errors grow with t² or faster. |
+| Lane changes, multi-lane tunnels | not modelled | — | The brief assumes single-lane tunnels. |
+
+## Phone sensors
+
+| Effect | Status | Direction if included | Notes |
+|---|---|---|---|
+| White noise, constant bias | modelled | — | Studied in [factor_study.md](factor_study.md). |
+| In-run bias drift (instability, temperature) | optional (D38) | worse for IMU methods, growing with outage length | Gauss-Markov per axis. See the realism check. |
+| Calibration (orientation) residual | optional (D34) | worse for IMU methods | Studied in [calibration_error.md](calibration_error.md). |
+| Vehicle and engine vibration | not modelled | neutral for today's estimators; needed for standstill detection | Without it, a stopped car and a car at constant speed look the same to the IMU; a standstill detector would be unrealistically easy or impossible. |
+| Scale factor and cross-axis errors | not modelled | slightly worse | Small next to the dominant effects. |
+| Timestamp jitter, separate accelerometer/gyro clocks | not modelled | slightly worse | |
+| Phone moved or handled during the tunnel | not modelled | much worse (any method using the IMU orientation) | Scenario-specific; breaks the calibration. |
+| Magnetometer | not modelled | — | Unreliable in tunnels (steel, electrical installations). |
+| Barometer | not modelled | could make IMU methods better (grade) | Tunnel ventilation and the pressure wave pushed by traffic disturb pressure by tens of pascals (1 Pa ≈ 8 cm); needs research. |
+
+## GPS
+
+| Effect | Status | Direction if included | Notes |
+|---|---|---|---|
+| Correlated position errors, speed and bearing noise, loss before B, delayed reacquisition | modelled | — | |
+| Degradation approaching the portal (multipath, jumps) | optional (D38) | worse for all methods (hand-over state) | Linear ramp over the last ~150 m before B. |
+| Poor first fixes after reacquisition at C | not modelled | worse recovery | The "recovered after C" metric then means more than the reacquisition delay. |
+| Time-correlated Doppler speed/bearing errors | not modelled | slightly worse (hand-over) | The model uses white noise. |
+| The phone's own fused location (OS smoothing, map matching) | not modelled | unknown | Apps usually receive fused locations, not raw GNSS. |
+| GNSS repeaters inside tunnels | not modelled | much better | Exists in some tunnels; an infrastructure answer. |
+
+## Map
+
+| Effect | Status | Direction if included | Notes |
+|---|---|---|---|
+| Map geometry, length scale and elevation errors | not modelled (map = OSM polyline) | worse for route-constrained and map-grade methods | To be tested as a sensitivity sweep inside the map-grade experiment. |
+| Driver leaving the route (missed exit, detour) | not modelled | much worse for route-constrained methods | They assume the route is followed. |
+| Exit or junction inside the tunnel | not modelled | — | Interpreted as an announcement before C (D32). |
+
+## Information outside the phone (discussed, not simulated)
+
+| Source | What it would give | Notes |
+|---|---|---|
+| Vehicle speed (OBD, Android Auto / CarPlay) | direct speed: immune to grade, traffic and stops; error ∝ distance (scale ~1–3 %, quantisation 1 km/h) | Excluded from the main solution (D20); planned as a "what if" reference experiment. |
+| Bluetooth beacons in tunnels (e.g. the Waze Beacons programme) | absolute position fixes inside the tunnel | Installed in some cities' tunnels; an infrastructure answer. |
+| Cellular / Wi-Fi positioning | coarse fixes | Coverage in tunnels varies; accuracy typically tens to hundreds of metres. |
+
+## Experiments and validation
+
+* **No real data.** Parameters come from datasheets and the literature, not from a real phone in a
+  real tunnel. The simulator is checked for internal consistency (numerical differentiation, closed-form
+  predictions), not against field recordings.
+* **One drive per preset in most studies.** 10–20 sensor seeds; the percentiles are indicative.
+* **Estimator tuning matches the simulated defaults** (PD6 tuning-mismatch experiments not run).

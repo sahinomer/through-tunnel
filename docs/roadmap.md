@@ -225,6 +225,20 @@ Improvement candidates, none implemented:
 * bounding time-driven along-track drift;
 * grade information.
 
+**Task 9: simulator scope frozen (D38), done.**
+* *Added* two optional realism effects, both off by default and controllable in the UI:
+  * IMU bias drift (Gauss-Markov per axis);
+  * GPS degradation before the portal (correlated error ramp + multipath jumps).
+
+  Everything else not simulated is listed with its expected direction in
+  [limitations.md](limitations.md).
+* *A bug found by the check:* preset files had no drift size, so enabling drift did nothing. Fixed:
+  loaded files get the per-sensor default. Regression test added.
+* *Realism check* ([realism_check.md](realism_check.md)): no conclusion changes.
+  * GPS degradation moves the IMU estimates by 24–87 m in free flow (the hand-over dominance is
+    confirmed).
+  * Drift adds p90 tails of 0.3–0.6 km in long stop-and-go outages.
+
 **Observation (UI behaviour, pre-existing, not fixed):** NiceGUI runs *async* change handlers as
 background tasks, so the "loading" guard that marks values set from code is already reset when they run.
 Handlers registered with `on_value_change` / `on_change` (switches, mount-preset select) therefore
@@ -350,8 +364,8 @@ are committed (F9).
 | R1 | Road grade: elevation profile, pitch in truth and IMU; grade sensitivity of the estimators (D24) | [x] model + editor (D36) and study ([slope_study.md](slope_study.md)); no grade handling in the estimators yet |
 | R2 | Stop-and-go / slow traffic inside the tunnel (D24) | [x] research, model T1/T2/T3/T5/T6 (D37) and study ([traffic_study.md](traffic_study.md)); T4 skipped by decision |
 | R3 | Map uncertainty: scale error, lateral offsets, local distortions of the estimator's map (D21, D24) | [ ] |
-| R4 | GPS detail: entrance degradation ramp, dropouts, multipath outliers, reacquisition transients, latency (D16) | [ ] |
-| R5 | IMU error extensions: bias instability/random walk, temperature drift, scale factor, misalignment, vibration + anti-aliasing, timestamp jitter, separate accel/gyro clocks, device profiles (D07) | [ ] |
+| R4 | GPS detail: entrance degradation ramp, dropouts, multipath outliers, reacquisition transients, latency (D16) | [~] degradation ramp + multipath jumps before B (D38, optional); others in [limitations.md](limitations.md) |
+| R5 | IMU error extensions: bias instability/random walk, temperature drift, scale factor, misalignment, vibration + anti-aliasing, timestamp jitter, separate accel/gyro clocks, device profiles (D07) | [~] bias drift (Gauss-Markov, D38, optional); others in [limitations.md](limitations.md) |
 | R6 | Optional external vehicle-speed experiment, separate from the main solution (D20) | [ ] |
 | R7 | Estimator tuning mismatch (PD6) | [ ] |
 | R8 | Scenario library: curved vs straight, 0.5–5 km tunnels, different mounts and driver styles | [ ] |

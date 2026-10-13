@@ -112,3 +112,28 @@ async def test_traffic_panel_reaches_the_simulation():
         assert page.result.config.traffic.scenario == "stop_and_go" and len(page.result.traffic.stops) == 2
         assert (page.result.motion.v == 0.0).any()
         assert "standing" in page.route_info.content
+
+
+@pytest.mark.anyio
+async def test_bias_drift_and_gps_degradation_controls_reach_the_simulation():
+    import gc
+
+    from throughtunnel.scenario import load_preset
+
+    async with user_simulation(root=SimulatorPage) as user:
+        await user.open("/")
+        page = next(o for o in gc.get_objects() if isinstance(o, SimulatorPage))
+        panel = page.sensor_panel
+        with user.client:
+            await page._load_scenario(load_preset("synthetic_demo_track"))
+            assert panel.s_acc_drift.value == pytest.approx(0.5)  # preset gets the default drift size (mg)
+            panel.acc_drift_on.value = True
+            panel.s_acc_drift.value = 2.0
+            panel.deg_on.value = True
+            panel.s_deg_sigma.value = 12.0
+            await panel._changed()
+        cfg = page.result.config
+        assert cfg.imu.errors.accel.drift_enabled and cfg.imu.errors.accel.drift_sigma > 0
+        assert cfg.gnss.portal_degradation and cfg.gnss.degradation_sigma_m == 12.0
+        assert page.result.imu_errors.accel.drift is not None
+        assert "Bias drift over the run" in panel.errors_label.content
