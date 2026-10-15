@@ -317,6 +317,10 @@ estimators must receive finished data, with no calibration-error argument.
   including the reference.
 * Found by its own tests before the first run: the ladder tunnels were 5 % too long (segment shares
   added up to 105 %), and numpy floats were written as `np.float64(...)` to the CSV. Both fixed.
+* *Baseline done* (`docs/benchmark/baseline/`, commit 36904cb, 9 600 records in 42 min). Summary in
+  [benchmark/README.md](benchmark/README.md): reference 5 m median everywhere. Best phone-only with map
+  grade: 39 m median, p90 544 m. Error grows with tunnel length (5 → 231 m from 0.5 to 5 km, flat, free
+  flow); 2–6 of 20 runs fail in stop-and-go from 2 km upwards.
 
 **Observation (UI behaviour, pre-existing, not fixed):** NiceGUI runs *async* change handlers as
 background tasks, so the "loading" guard that marks values set from code is already reset when they run.
