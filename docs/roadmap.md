@@ -312,6 +312,12 @@ estimators must receive finished data, with no calibration-error argument.
   "−0" to "+0" or the last digit of a median. Checked: the old and the new code give identical tables
   from the same CSV.
 
+**Task 15: benchmark and baseline (D43).**
+* 48 scenarios × 20 seeds; realism options on; map grade off/on for sloped roads; all estimators
+  including the reference.
+* Found by its own tests before the first run: the ladder tunnels were 5 % too long (segment shares
+  added up to 105 %), and numpy floats were written as `np.float64(...)` to the CSV. Both fixed.
+
 **Observation (UI behaviour, pre-existing, not fixed):** NiceGUI runs *async* change handlers as
 background tasks, so the "loading" guard that marks values set from code is already reset when they run.
 Handlers registered with `on_value_change` / `on_change` (switches, mount-preset select) therefore

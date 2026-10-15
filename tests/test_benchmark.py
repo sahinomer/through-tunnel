@@ -1,0 +1,61 @@
+"""Benchmark (D43): the scenario set is what it says, runs are reproducible, comparisons flag regressions."""
+
+import pytest
+
+from throughtunnel.evaluation.benchmark import (
+    LADDER_KM,
+    PRESETS,
+    Case,
+    cases,
+    compare_markdown,
+    ladder_config,
+    read_runs,
+    run_case,
+    run_config,
+    write_runs,
+)
+from throughtunnel.positioning import ESTIMATORS
+from throughtunnel.scenario import build_route_map
+
+
+def test_scenario_set():
+    all_cases = cases()
+    assert len(all_cases) == (len(LADDER_KM) + len(PRESETS)) * 3 * 2 == 48
+    assert len({c.key for c in all_cases}) == 48
+
+
+@pytest.mark.parametrize("km", LADDER_KM)
+def test_ladder_tunnel_lengths(km):
+    rm = build_route_map(ladder_config(km))
+    assert rm.tunnel_exit_m - rm.tunnel_entrance_m == pytest.approx(1000.0 * km, rel=0.01)
+    assert rm.tunnel_entrance_m == pytest.approx(1600.0, abs=10.0)
+
+
+def test_run_config_turns_the_realism_options_on_and_seeds_everything():
+    cfg = run_config(Case("ladder_1km", "underwater", "stop_and_go"), seed=7)
+    assert cfg.imu.errors.accel.drift_enabled and cfg.imu.errors.gyro.drift_enabled
+    assert cfg.gnss.portal_degradation
+    assert (cfg.imu.errors.seed, cfg.gnss.seed, cfg.traffic.seed, cfg.seed) == (7, 7, 7, 1007)
+    assert cfg.traffic.scenario == "stop_and_go" and not cfg.road_profile.is_flat
+
+
+def test_run_case_records_and_csv_round_trip(tmp_path):
+    case = Case("ladder_0.5km", "climb3", "free")
+    records = run_case(case, [0])
+    assert len(records) == 2 * len(ESTIMATORS)  # map grade off and on
+    write_runs(records, tmp_path / "runs.csv")
+    again = read_runs(tmp_path / "runs.csv")
+    assert again == records  # full precision, so a baseline compares exactly
+    assert run_case(case, [0]) == records  # reproducible
+
+
+def test_comparison_flags_regressions_only():
+    base = [{"case": "g/flat/free", "road": "flat", "traffic": "free", "map_grade": False, "seed": s,
+             "estimator": "route_imu", "exit_total_m": 20.0} for s in range(5)]  # fmt: skip
+    same = compare_markdown(base, base, {"commit": "b"}, {"commit": "a"})
+    assert "**Regressions:** none" in same
+    worse = [r | {"exit_total_m": 30.0} for r in base]
+    text = compare_markdown(worse, base, {"commit": "b"}, {"commit": "a"})
+    assert "20 → 30 ⚠" in text and "Route + filtered IMU speed, flat / free" in text
+    slightly = [r | {"exit_total_m": 23.0} for r in base]  # 3 m worse: below the 5 m threshold
+    assert "**Regressions:** none" in compare_markdown(slightly, base, {}, {})
