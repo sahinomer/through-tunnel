@@ -1,21 +1,27 @@
-"""Causal, timestamp-ordered replay of observations into estimators (D17).
+"""Causal, timestamp-ordered replay of observations through the positioning pipeline (D17, D40).
 
-The runner is the only component that sees whole streams. It hands each estimator one observation
-at a time in time order (ties: the IMU sample before the GPS fix with the same timestamp) and samples
-the estimator's state at a fixed output rate. Estimators therefore cannot look ahead. Execution is
-offline (faster than real time), but information flow is strictly causal.
+Pipeline: observations → alignment stage → estimator. The runner is the only component that sees
+whole streams. It hands each stage, then each estimator, one observation at a time in time order
+(ties: the IMU sample before the GPS fix with the same timestamp) and samples the estimator's state at
+a fixed output rate. Nothing can look ahead. Execution is offline (faster than real time), but
+information flow is strictly causal.
+
+Each alignment stage runs once per run; its vehicle-axis samples are shared by every estimator that
+uses it (a stage depends only on the observations, not on the estimator). The calibration error is an
+experiment setting applied inside the stage (``alignment.py``); estimators never receive it.
 """
 
 from __future__ import annotations
 
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
 from numpy.typing import NDArray
 
 from throughtunnel.observations import Observations, RouteMap
+from throughtunnel.positioning.alignment import ALIGNMENTS, AlignmentStage, VehicleImu
 from throughtunnel.positioning.base import Estimator, StateEstimate
 
 DEFAULT_OUTPUT_RATE_HZ = 20.0
@@ -68,12 +74,69 @@ class EstimateTrack:
         return len(self.t)
 
 
-def run_estimator(
-    estimator: Estimator, obs: Observations, output_rate_hz: float = DEFAULT_OUTPUT_RATE_HZ
-) -> EstimateTrack:
+def align_imu(stage: AlignmentStage, obs: Observations) -> list[VehicleImu | None]:
+    """Feed the observations through an alignment stage in time order; one output per IMU sample."""
     imu_t = obs.imu.t.tolist()
     accel = obs.imu.accel.tolist()
     gyro = obs.imu.gyro.tolist()
+    fixes = [obs.gnss.fix(i) for i in range(len(obs.gnss))]
+    out: list[VehicleImu | None] = []
+    j = 0
+    for i, t in enumerate(imu_t):
+        while j < len(fixes) and fixes[j].t < t:  # fixes strictly before this sample
+            stage.on_gnss(fixes[j])
+            j += 1
+        out.append(stage.on_imu(t, accel[i], gyro[i]))
+        while j < len(fixes) and fixes[j].t <= t:  # fixes at the same timestamp come after the IMU sample
+            stage.on_gnss(fixes[j])
+            j += 1
+    return out
+
+
+def aligned_streams(
+    names: Sequence[str | None], obs: Observations, calibration_error: NDArray[np.float64] | None = None
+) -> dict[str | None, list[VehicleImu | None]]:
+    """One vehicle-axis stream per alignment stage name (None = no stage: no IMU, time ticks only)."""
+    streams: dict[str | None, list[VehicleImu | None]] = {}
+    for name in names:
+        if name not in streams:
+            streams[name] = (
+                [None] * len(obs.imu)
+                if name is None
+                else align_imu(ALIGNMENTS[name](obs.route, calibration_error), obs)
+            )
+    return streams
+
+
+def run_estimator(
+    estimator: Estimator,
+    obs: Observations,
+    output_rate_hz: float = DEFAULT_OUTPUT_RATE_HZ,
+    calibration_error: NDArray[np.float64] | None = None,
+) -> EstimateTrack:
+    """Run one estimator behind its alignment stage (``estimator.alignment``)."""
+    return run_estimators([estimator], obs, output_rate_hz, calibration_error)[0]
+
+
+def run_estimators(
+    estimators: Sequence[Estimator],
+    obs: Observations,
+    output_rate_hz: float = DEFAULT_OUTPUT_RATE_HZ,
+    calibration_error: NDArray[np.float64] | None = None,
+) -> list[EstimateTrack]:
+    """Run several estimators on the *same* observations (D19), each alignment stage once."""
+    streams = aligned_streams([e.alignment for e in estimators], obs, calibration_error)
+    return [replay(e, obs, streams[e.alignment], output_rate_hz) for e in estimators]
+
+
+def replay(
+    estimator: Estimator,
+    obs: Observations,
+    imu: Sequence[VehicleImu | None],
+    output_rate_hz: float = DEFAULT_OUTPUT_RATE_HZ,
+) -> EstimateTrack:
+    """Feed one estimator its vehicle-axis IMU stream and the GPS fixes in time order."""
+    imu_t = obs.imu.t.tolist()
     fixes = [obs.gnss.fix(i) for i in range(len(obs.gnss))]
     announcer = Announcer(obs.route)
 
@@ -85,7 +148,7 @@ def run_estimator(
         while j < len(fixes) and fixes[j].t < t:  # fixes strictly before this sample
             estimator.on_gnss(fixes[j])
             j += 1
-        estimator.on_imu(t, accel[i], gyro[i])
+        estimator.on_imu(t, imu[i])
         while j < len(fixes) and fixes[j].t <= t:  # fixes at the same timestamp come after the IMU sample
             estimator.on_gnss(fixes[j])
             j += 1
@@ -120,12 +183,3 @@ def run_estimator(
         position_std_m=np.asarray(cols[7], dtype=float),
         announcement_t=announcer.fired_t,
     )
-
-
-def run_estimators(
-    factories: Sequence[Callable[[RouteMap], Estimator]],
-    obs: Observations,
-    output_rate_hz: float = DEFAULT_OUTPUT_RATE_HZ,
-) -> list[EstimateTrack]:
-    """Run several estimators on the *same* observations (D19)."""
-    return [run_estimator(make(obs.route), obs, output_rate_hz) for make in factories]

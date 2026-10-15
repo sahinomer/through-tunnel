@@ -31,9 +31,11 @@ uv run python -m throughtunnel.evaluation.calibration_study --seeds 10
   * the phone shifting in its holder.
 
   The injected residual stands in for all of these without modelling the cause.
-* **Information policy.** The error is an experiment hook (`Estimator(..., calibration_error=R)`) set
-  by the harness. It is not an observation, so the estimator applies it blindly and cannot observe
-  or correct it. The sensor data is identical with or without the error (tested). Only positioning
+* **Information policy.** The error is an experiment setting applied by the harness. Since D40
+  (2026-10-15) it rotates the orientation of the *alignment stage*, the step between the
+  observations and the estimators; originally it was an estimator argument
+  (`Estimator(..., calibration_error=R)`), with bit-identical results. It is not an observation, so
+  the estimators cannot observe or correct it. The sensor data is identical with or without the error (tested). Only positioning
   re-runs.
 
 ## 2. Experiment

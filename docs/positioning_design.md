@@ -8,7 +8,8 @@ the implementation:
 * **Code:**
   * `throughtunnel/observations.py`: types;
   * `positioning/base.py`, `runner.py`: contract, runner, Announcer;
-  * `positioning/alignment.py`: mount alignment and calibration;
+  * `positioning/alignment.py`: the alignment stage (D40) and its methods;
+  * `positioning/mount_estimation.py`: the GPS + IMU mount solver (levelling, yaw, gyro bias);
   * `positioning/dead_reckoning.py`, `route_constrained.py`: estimators;
   * `evaluation/`: metrics, Monte Carlo, report.
 * **Gyro bias** is estimated by a weighted regression of the accumulated gyro-minus-GPS heading over
@@ -26,9 +27,24 @@ the implementation:
   physical tunnel exit C** (`TunnelConfig.announce_before_exit_m`, default 300 m, 0 ≤ d ≤ B–C length).
   `NavigationEvent` was removed; `RouteMap` carries `announce_before_exit_m`. The sections below
   describe the current design.
-* **Calibration error hook** (D34, 2026-10-13): `Estimator(route, calibration_error=R)` rotates the
-  phone-to-vehicle orientation the estimator uses (declared or estimated). It is an experiment
-  fault-injection, not an observation. Study: [calibration_error.md](calibration_error.md).
+* **Calibration error** (D34, 2026-10-13): rotates the phone-to-vehicle orientation in use (declared
+  or estimated). It is an experiment fault-injection, not an observation. Study:
+  [calibration_error.md](calibration_error.md). Since D40 it is applied in the alignment stage, not
+  passed to the estimators.
+* **Pipeline with an alignment stage** (D40, 2026-10-15):
+
+  ```
+  observations (measured IMU, GPS fixes, route map ± grade)
+     → alignment stage   declared | GPS + IMU | future methods; calibration error applied here
+                         output: IMU in vehicle axes (3 axes, noise and bias kept), gyro bias removed
+                         from the yaw rate, φ_cal; None until an orientation is known
+     → estimator         dead reckoning / route-constrained / future filters
+  ```
+
+  Each estimator names its stage (`Estimator.alignment`; `route_hold` uses none). The runner runs each
+  stage once per run and shares its stream. An experiment can swap the stage on an estimator, so
+  alignment methods and estimators can be compared independently. `dr_raw` and `dr_calibrated` are
+  the same dead reckoning behind the declared and the GPS + IMU stage.
 * **Map grade** (D39, 2026-10-15): `RouteMap.road_grade` (optional, assumed exact) is real map
   information, not a hook. Every IMU estimator then removes the gravity leakage of the grade change
   since calibration (`positioning/map_grade.py`). Study: [map_grade_study.md](map_grade_study.md).

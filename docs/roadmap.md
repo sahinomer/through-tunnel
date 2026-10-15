@@ -257,6 +257,17 @@ Improvement candidates, none implemented:
 * *Backlog (user, 2026-10-15):* UI polish: group the road grade and the other map data for the
   estimators in one place.
 
+**Task 11: refactor, positioning pipeline with an alignment stage (D40), done.** User request: the
+estimators must receive finished data, with no calibration-error argument.
+* *Structure:* observations → alignment stage (declared / GPS + IMU, swappable) → estimator. The
+  calibration error rotates the stage's orientation. The solver moved to `mount_estimation.py`.
+* *Validation:* bit-identical tracks on 21 cases. The only differences are millimetres after GPS
+  reacquisition with map grade on, from a latent bug the stage fixes: the grade lookup at the first
+  fix after an outage searched near the estimator's own drifted position and could be clamped to a
+  wrong point. Positioning is ~30 % faster (one alignment per run instead of four).
+* *Not changed:* the holder shift (a physical mount change after calibration) stays out, by user
+  decision (R11).
+
 **Observation (UI behaviour, pre-existing, not fixed):** NiceGUI runs *async* change handlers as
 background tasks, so the "loading" guard that marks values set from code is already reset when they run.
 Handlers registered with `on_value_change` / `on_change` (switches, mount-preset select) therefore
@@ -388,7 +399,7 @@ are committed (F9).
 | R7 | Estimator tuning mismatch (PD6) | [ ] |
 | R8 | Scenario library: curved vs straight, 0.5–5 km tunnels, different mounts and driver styles | [ ] |
 | R9 | Re-check road smoothing defaults on new real roads (D03) | [ ] |
-| R10 | Calibration error: injected orientation residual + controlled study (D34, calibration_error.md) | [x] model + study; no correction methods (by request) |
+| R10 | Calibration error: injected orientation residual + controlled study (D34, calibration_error.md) | [x] model + study; no correction methods (by request); applied in the alignment stage since D40 |
 | R11 | Calibration error from physical causes instead of injection: body pitch under acceleration/braking/load, phone shifting in the holder, grade during calibration (with R1); random per-drive residuals | [ ] |
 
 ### Phase F: final evaluation and deliverables

@@ -4,13 +4,10 @@ from __future__ import annotations
 
 import math
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
 from dataclasses import dataclass
 
-import numpy as np
-from numpy.typing import NDArray
-
 from throughtunnel.observations import GnssFix, RouteMap
+from throughtunnel.positioning.alignment import VehicleImu
 
 
 @dataclass(frozen=True)
@@ -30,27 +27,28 @@ class StateEstimate:
 class Estimator(ABC):
     """A live positioning algorithm: receives observations one at a time, in time order (D17).
 
-    Subclasses implement the three methods; reusable processing (alignment, filtering, map matching)
-    is composed in as plain objects (D18). An estimator gets the route map at construction and must
-    not use any other information (D15).
+    Pipeline (D40): observations → alignment stage → estimator. The IMU reaches the estimator only
+    through its alignment stage, as vehicle-axis samples (``VehicleImu``, or None while the stage has
+    no orientation yet). GPS fixes and the route map arrive unchanged. An estimator gets the route map
+    at construction and must not use any other information (D15). Reusable processing (map matching,
+    grade compensation) is composed in as plain objects (D18).
 
-    ``calibration_error`` is an experiment hook (D34), not information: a rotation (vehicle axes) that
-    the experiment harness injects into the phone-to-vehicle orientation the estimator uses, to model a
-    residual calibration error. The estimator applies it blindly and cannot observe or correct it.
-    Estimators that do not use the IMU orientation ignore it.
+    ``alignment`` names the stage that feeds the estimator (``alignment.ALIGNMENTS``); None = the
+    estimator uses no IMU and receives None samples (time ticks only). Experiments may set another
+    stage on an instance to compare alignment methods on the same estimator.
     """
 
     name: str = "estimator"
     label: str = "Estimator"
+    alignment: str | None = "gps_imu"
 
-    def __init__(self, route: RouteMap, calibration_error: NDArray[np.float64] | None = None) -> None:
+    def __init__(self, route: RouteMap) -> None:
         self.route = route
         self.frame = route.frame
-        self.calibration_error = calibration_error
 
     @abstractmethod
-    def on_imu(self, t: float, accel: Sequence[float], gyro: Sequence[float]) -> None:
-        """One IMU sample: specific force [m/s^2] and angular rate [rad/s] in phone axes."""
+    def on_imu(self, t: float, imu: VehicleImu | None) -> None:
+        """One IMU sample from the alignment stage (vehicle axes), or None (no orientation yet)."""
 
     @abstractmethod
     def on_gnss(self, fix: GnssFix) -> None:

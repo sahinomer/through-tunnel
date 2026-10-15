@@ -10,7 +10,8 @@ import pytest
 from throughtunnel.evaluation.experiment import compare_estimators
 from throughtunnel.evaluation.slope_study import PROFILES, ideal_sensors, profile_config
 from throughtunnel.observations import RouteMap
-from throughtunnel.positioning import ESTIMATORS, run_estimator
+from throughtunnel.positioning import ESTIMATORS, align_imu, run_estimator
+from throughtunnel.positioning.alignment import GpsImuAlignment
 from throughtunnel.positioning.map_grade import GradeCompensation, grade_compensation
 from throughtunnel.scenario import (
     MapDataConfig,
@@ -105,9 +106,9 @@ def test_map_grade_on_a_flat_road_changes_no_estimate():
 
 def test_alignment_reports_the_grade_it_calibrated_in():
     res = with_map_data(sloped("synthetic_demo_track", "steady"), ON)
-    est = ESTIMATORS["dr_calibrated"](res.route_map)
-    run_estimator(est, res.observations())
-    assert est.alignment.calibration_grade_angle == pytest.approx(math.atan(0.02), rel=1e-3)
+    stage = GpsImuAlignment(res.route_map)
+    align_imu(stage, res.observations())
+    assert stage.alignment.calibration_grade_angle == pytest.approx(math.atan(0.02), rel=1e-3)
 
 
 @pytest.mark.parametrize("key", ["up2", "down2", "v4", "steady"])

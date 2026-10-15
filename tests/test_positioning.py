@@ -8,7 +8,8 @@ import pytest
 
 from throughtunnel.evaluation.metrics import _recovery_time, evaluate_track
 from throughtunnel.observations import GnssStream, ImuStream, Observations
-from throughtunnel.positioning import ESTIMATORS, Estimator, StateEstimate, run_estimator
+from throughtunnel.positioning import ESTIMATORS, Estimator, StateEstimate, align_imu, run_estimator
+from throughtunnel.positioning.alignment import GpsImuAlignment
 from throughtunnel.positioning.dead_reckoning import CalibratedDeadReckoning, RawDeadReckoning
 from throughtunnel.positioning.runner import Announcer, EstimateTrack
 from throughtunnel.scenario import load_preset, run_scenario, truth_at, with_sensor_config
@@ -74,7 +75,7 @@ class Recorder(Estimator):
         self.events = []
         self.t = None
 
-    def on_imu(self, t, accel, gyro):
+    def on_imu(self, t, imu):
         self.events.append(("imu", t))
         self.t = t
 
@@ -152,9 +153,8 @@ def test_calibration_removes_most_of_the_bias_errors():
 def test_alignment_recovers_an_unknown_mount():
     mount = MOUNT_PRESETS["dash_portrait_tilted"]
     res = scenario(mount=mount)
-    est = CalibratedDeadReckoning(res.route_map)
-    ev = evaluate_track(run_estimator(est, res.observations()), res)
-    axes = est.alignment
+    ev = evaluate_track(run_estimator(CalibratedDeadReckoning(res.route_map), res.observations()), res)
+    axes = calibrated_alignment(res)
     r_bs = mount.rotation_body_from_phone()
     fwd_true, up_true = r_bs.T @ [1.0, 0.0, 0.0], r_bs.T @ [0.0, 0.0, 1.0]
     assert math.degrees(math.acos(min(1.0, axes.forward @ fwd_true))) < 1.0
@@ -266,6 +266,13 @@ def test_empty_gnss_means_no_estimate(demo):
 
 
 # ------------------------------------------------------------------ calibration accuracy and GPS blending
+def calibrated_alignment(res):
+    """The GPS + IMU alignment stage's orientation after the whole run (what the estimators used)."""
+    stage = GpsImuAlignment(res.route_map)
+    align_imu(stage, res.observations())
+    return stage.alignment
+
+
 def handover_state(cls, res):
     """Estimator speed/heading error at the last output before GPS loss."""
     est = cls(res.route_map)
@@ -284,9 +291,8 @@ def test_gyro_bias_calibration_survives_a_slow_turn_in_the_approach():
     for seed in (3, 12, 14):  # the worst seeds of the earlier version
         imu = cfg.imu.model_copy(update={"errors": cfg.imu.errors.model_copy(update={"seed": seed})})
         res = with_sensor_config(base, imu=imu, gnss=cfg.gnss.model_copy(update={"seed": seed}))
-        est, _, _ = handover_state(CalibratedDeadReckoning, res)
         true_bias = float(up_true @ res.imu_errors.gyro.bias)
-        assert abs(math.degrees(est.alignment.gyro_bias_up - true_bias)) < 0.02
+        assert abs(math.degrees(calibrated_alignment(res).gyro_bias_up - true_bias)) < 0.02
 
 
 def test_gps_blending_improves_the_handover_state():

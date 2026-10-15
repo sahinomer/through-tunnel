@@ -1,8 +1,8 @@
-"""Calibration error (D34): the estimators' assumed phone orientation vs. the actual mount.
+"""Calibration error (D34, D40): the orientation the alignment stage uses vs. the actual mount.
 
-The error is injected into the orientation each estimator uses; it must not touch the simulation, and
-its effect must follow the analytic error mechanisms (gravity leakage for pitch, lateral-acceleration
-leakage for yaw, negligible roll on a flat road).
+The error is applied to the alignment stage's orientation, before any sample reaches an estimator; it
+must not touch the simulation, and its effect must follow the analytic error mechanisms (gravity
+leakage for pitch, lateral-acceleration leakage for yaw, negligible roll on a flat road).
 """
 
 import math
@@ -14,7 +14,8 @@ from pydantic import ValidationError
 from throughtunnel.evaluation.experiment import compare_estimators
 from throughtunnel.evaluation.metrics import evaluate_track
 from throughtunnel.positioning import ESTIMATORS, run_estimator
-from throughtunnel.positioning.alignment import ALIGNED, with_orientation_error
+from throughtunnel.positioning.alignment import with_orientation_error
+from throughtunnel.positioning.mount_estimation import ALIGNED
 from throughtunnel.routing.synthetic import Straight, synthetic_route
 from throughtunnel.scenario import (
     ScenarioConfig,
@@ -43,7 +44,7 @@ def ideal(cfg: ScenarioConfig):
 
 def run(res, name, cal):
     obs = res.observations()
-    return run_estimator(ESTIMATORS[name](obs.route, calibration_error=cal.rotation_error()), obs)
+    return run_estimator(ESTIMATORS[name](obs.route), obs, calibration_error=cal.rotation_error())
 
 
 def last_fix_before_loss(res) -> float:

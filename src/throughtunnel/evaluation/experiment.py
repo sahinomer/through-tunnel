@@ -9,7 +9,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from throughtunnel.evaluation.metrics import TrackEvaluation, evaluate_track
-from throughtunnel.positioning import ESTIMATORS, EstimateTrack, run_estimator
+from throughtunnel.positioning import ESTIMATORS, EstimateTrack, run_estimators
 from throughtunnel.scenario import ScenarioConfig, SimulationResult, run_scenario, with_sensor_config
 
 
@@ -21,13 +21,10 @@ class Comparison:
 
 def compare_estimators(result: SimulationResult, names: Sequence[str] | None = None) -> Comparison:
     """Run the named estimators (default: all registered) on the result's observations, with the
-    scenario's calibration error injected into each estimator's phone orientation (D34)."""
+    scenario's calibration error applied in the alignment stages (D34, D40)."""
     obs = result.observations()
-    error = result.config.calibration.rotation_error()
-    tracks = [
-        run_estimator(ESTIMATORS[n](obs.route, calibration_error=error), obs)
-        for n in (names or list(ESTIMATORS))
-    ]
+    estimators = [ESTIMATORS[n](obs.route) for n in (names or list(ESTIMATORS))]
+    tracks = run_estimators(estimators, obs, calibration_error=result.config.calibration.rotation_error())
     return Comparison(tracks=tracks, evaluations=[evaluate_track(tr, result) for tr in tracks])
 
 

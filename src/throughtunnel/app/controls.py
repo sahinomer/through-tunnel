@@ -362,7 +362,7 @@ class MountPanel(Panel):
 
 
 class CalibrationPanel(Panel):
-    """Calibration error: the phone orientation the estimators use vs. the actual mount (D34)."""
+    """Calibration error: the phone orientation the alignment stage uses vs. the actual mount (D34, D40)."""
 
     def __init__(self, on_change: Callback, calibration: CalibrationErrorConfig) -> None:
         super().__init__(on_change)
@@ -375,8 +375,9 @@ class CalibrationPanel(Panel):
             self.s_pitch = slider("Pitch error", -2, 2, 0.05, c.pitch_deg, "°")
             self.s_roll = slider("Roll error", -5, 5, 0.1, c.roll_deg, "°")
             ui.label(
-                "Each estimator uses the phone-to-vehicle orientation from its own calibration, rotated "
-                "by these angles (vehicle axes). The actual mount and all sensor data stay unchanged. "
+                "The alignment step before the estimators uses the phone-to-vehicle orientation from its "
+                "calibration, rotated by these angles (vehicle axes). The actual mount and all sensor data "
+                "stay unchanged. "
                 "+ yaw: assumed forward to the left; + pitch: assumed forward nose-down (gravity leaks in "
                 "as −g·sin pitch); + roll: assumed up tilted to the right."
             ).classes("text-xs text-gray-500")

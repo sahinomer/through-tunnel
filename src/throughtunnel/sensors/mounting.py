@@ -105,15 +105,16 @@ DEFAULT_CALIBRATION_ROLL_DEG = 0.5
 
 
 class CalibrationErrorConfig(BaseModel):
-    """Residual error of the phone-to-vehicle orientation that the estimators use (D34).
+    """Residual error of the phone-to-vehicle orientation of the alignment stage (D34, D40).
 
     The actual mounting (``PhoneMount``) drives the sensor simulation and is never changed by this.
-    Each estimator obtains its own phone-to-vehicle orientation: ``dr_raw`` declares it (aligned), the
-    calibrated estimators estimate it from approach GPS (levelling + yaw). With the error enabled, the
-    orientation an estimator *uses* is additionally rotated: its assumed vehicle axes are the axes it
-    would otherwise use, rotated by ``R_err = Rz(yaw) Ry(pitch) Rx(roll)`` in vehicle axes. This models
-    what a real calibration leaves behind (vehicle pitch under load or acceleration during calibration,
-    grade, the phone shifting in its holder) without modelling the cause. Constant during a run.
+    The alignment stage obtains the phone-to-vehicle orientation (declared for ``dr_raw``, estimated
+    from approach GPS for the others). With the error enabled, the orientation the stage *uses* is
+    additionally rotated, before any sample reaches an estimator: its assumed vehicle axes are the
+    axes it would otherwise use, rotated by ``R_err = Rz(yaw) Ry(pitch) Rx(roll)`` in vehicle axes.
+    This models what a real calibration leaves behind (vehicle pitch under load or acceleration
+    during calibration, grade, the phone shifting in its holder) without modelling the cause.
+    Constant during a run.
 
     Sign conventions (ISO 8855 vehicle axes, x forward, y left, z up):
     * + yaw: the assumed forward axis points to the left of the true one;

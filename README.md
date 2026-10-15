@@ -87,8 +87,8 @@ Options: `uv run throughtunnel --port 8090 --host 0.0.0.0 --no-browser`.
    The grade never exceeds the limit (default 6%), and the drive re-simulates.
    Two optional realism effects (off by default): *Bias drift (in-run)* per IMU sensor, and *Degradation
    before the tunnel* for GPS (multipath, jumps). *Calibration error (assumed orientation)* rotates the phone-to-vehicle
-   orientation the estimators use (yaw, pitch, roll) without changing the actual mount or any sensor
-   data. Only positioning re-runs, so with/without comparisons are exactly paired
+   orientation of the alignment step that feeds the estimators (yaw, pitch, roll) without changing the
+   actual mount or any sensor data. Only positioning re-runs, so with/without comparisons are exactly paired
    ([docs/calibration_error.md](docs/calibration_error.md)). *Map data (estimators)* → *Road grade from
    the map* gives the estimators the road grade along the route (assumed exact); the IMU estimators
    then remove the gravity it adds to the forward accelerometer axis. Again only positioning re-runs

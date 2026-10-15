@@ -4,6 +4,7 @@ Import rule (tested): nothing in this package may import ``throughtunnel.vehicle
 ``scenario``, ``sensors``, ``routing``, ``app`` or ``evaluation``.
 """
 
+from throughtunnel.positioning.alignment import ALIGNMENTS, AlignmentStage, VehicleImu
 from throughtunnel.positioning.base import Estimator, StateEstimate
 from throughtunnel.positioning.dead_reckoning import (
     CalibratedDeadReckoning,
@@ -11,9 +12,10 @@ from throughtunnel.positioning.dead_reckoning import (
     RawDeadReckoning,
 )
 from throughtunnel.positioning.route_constrained import RouteImuDeadReckoning, RouteSpeedHold
-from throughtunnel.positioning.runner import EstimateTrack, run_estimator, run_estimators
+from throughtunnel.positioning.runner import EstimateTrack, align_imu, run_estimator, run_estimators
 
 # Registry used by the UI and experiments: name -> estimator class (constructed with the route map).
+# Each class names its alignment stage (``Estimator.alignment``; registry ``ALIGNMENTS``), D40.
 ESTIMATORS: dict[str, type[Estimator]] = {
     cls.name: cls
     for cls in (
@@ -26,10 +28,14 @@ ESTIMATORS: dict[str, type[Estimator]] = {
 }
 
 __all__ = [
+    "ALIGNMENTS",
     "ESTIMATORS",
+    "AlignmentStage",
     "EstimateTrack",
     "Estimator",
     "StateEstimate",
+    "VehicleImu",
+    "align_imu",
     "run_estimator",
     "run_estimators",
 ]

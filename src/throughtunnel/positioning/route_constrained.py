@@ -4,10 +4,12 @@ The state is one-dimensional: the distance d travelled along the route map, plus
 heading come from the map. This removes cross-track error and heading drift entirely: what remains is
 along-track error (speed error integrated over time) and the map's own deviation from the road.
 
-* ``RouteImuDeadReckoning``: speed is integrated from the calibrated forward accelerometer, using the
-  same alignment component as the calibrated vehicle dead reckoning. While GPS is available the speed
-  is blended towards the GPS speed (complementary filter, 5 s), as in ``dr_filtered``.
-* ``RouteSpeedHold``: the naive reference. Keep the last GPS speed. Inertial methods must beat this.
+* ``RouteImuDeadReckoning``: speed is integrated from the forward specific force of the GPS + IMU
+  alignment stage (D40), the same stage as the calibrated vehicle dead reckoning. While GPS is
+  available the speed is blended towards the GPS speed (complementary filter, 5 s), as in
+  ``dr_filtered``.
+* ``RouteSpeedHold``: the naive reference. Keep the last GPS speed. Uses no IMU (no alignment stage).
+  Inertial methods must beat this.
 
 If the route map provides the road grade (D39), ``RouteImuDeadReckoning`` subtracts the gravity
 leakage predicted from it at the estimated distance d (``map_grade.GradeCompensation``).
@@ -19,13 +21,9 @@ value, so a fix cannot snap to a far-away part of the route).
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
-
-import numpy as np
-from numpy.typing import NDArray
 
 from throughtunnel.observations import GnssFix, RouteMap
-from throughtunnel.positioning.alignment import Alignment, MountAlignmentEstimator, with_orientation_error
+from throughtunnel.positioning.alignment import VehicleImu
 from throughtunnel.positioning.base import Estimator, StateEstimate
 from throughtunnel.positioning.map_grade import grade_compensation
 
@@ -40,10 +38,9 @@ class RouteConstrained(Estimator):
     label = "Route-constrained"
     use_imu_speed = True
 
-    def __init__(self, route: RouteMap, calibration_error: NDArray[np.float64] | None = None) -> None:
-        super().__init__(route, calibration_error)
-        self._aligner = MountAlignmentEstimator()
-        self._axes: Alignment | None = None
+    def __init__(self, route: RouteMap) -> None:
+        super().__init__(route)
+        self._aligned = False  # the last IMU sample came with an orientation
         self._t: float | None = None
         self._last_fix_t = -math.inf
         self._d: float | None = None
@@ -58,24 +55,16 @@ class RouteConstrained(Estimator):
             self._d = self.route.project_enu(
                 e, n, lo_m=self._d - SEARCH_BACK_M, hi_m=self._d + SEARCH_AHEAD_M
             )[0]
-        blending = (
-            self.use_imu_speed and self._axes is not None and fix.t - self._last_fix_t <= GNSS_TIMEOUT_S
-        )
+        blending = self.use_imu_speed and self._aligned and fix.t - self._last_fix_t <= GNSS_TIMEOUT_S
         if blending:
             self._v += min(1.0, (fix.t - self._last_fix_t) / BLEND_SPEED_TAU_S) * (fix.speed_mps - self._v)
         else:
             self._v = fix.speed_mps
         self._last_fix_t = fix.t
         self._t = fix.t
-        self._aligner.add_fix(fix, self._grade.angle_at(self._d) if self._grade is not None else 0.0)
-        solved = self._aligner.solve()
-        if solved is not None and solved.ready:
-            self._axes = with_orientation_error(solved, self.calibration_error)
 
-    def on_imu(self, t: float, accel: Sequence[float], gyro: Sequence[float]) -> None:
-        gnss = t - self._last_fix_t <= GNSS_TIMEOUT_S
-        if gnss:
-            self._aligner.add_imu(accel, gyro)
+    def on_imu(self, t: float, imu: VehicleImu | None) -> None:
+        self._aligned = imu is not None
         if self._d is None:
             return
         dt = t - self._t if self._t is not None else 0.0
@@ -83,11 +72,10 @@ class RouteConstrained(Estimator):
         if dt <= 0.0:
             return
         v_new = self._v
-        if self.use_imu_speed and self._axes is not None:
-            f = self._axes.forward
-            a_fwd = f[0] * accel[0] + f[1] * accel[1] + f[2] * accel[2]
+        if self.use_imu_speed and imu is not None:
+            a_fwd = imu.accel[0]
             if self._grade is not None:
-                a_fwd -= self._grade.forward_gravity(self._d, self._axes.calibration_grade_angle)
+                a_fwd -= self._grade.forward_gravity(self._d, imu.calibration_grade_angle)
             v_new = max(self._v + a_fwd * dt, 0.0)
         self._d = min(self._d + 0.5 * (self._v + v_new) * dt, self.route.length_m)
         self._v = v_new
@@ -117,3 +105,4 @@ class RouteSpeedHold(RouteConstrained):
     name = "route_hold"
     label = "Route + last GPS speed (naive)"
     use_imu_speed = False
+    alignment = None
