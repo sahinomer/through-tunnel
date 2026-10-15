@@ -326,6 +326,11 @@ estimators must receive finished data, with no calibration-error argument.
   data-quality flag. Recomputed from the saved data. Best phone-only with map grade: 21 % gross
   errors (7 % before).
 
+**Task 16: error-source benchmark (D45).** One scenario (5 km tunnel, flat), free flow and
+stop-and-go, 18 one-at-a-time conditions plus the cause-side handover diagnostics. Built while
+validating it: the forward-offset diagnostic, because the pitch misalignment alone misleads under an
+accelerometer bias (the levelling cancels the bias by tilting the axes).
+
 **Observation (UI behaviour, pre-existing, not fixed):** NiceGUI runs *async* change handlers as
 background tasks, so the "loading" guard that marks values set from code is already reset when they run.
 Handlers registered with `on_value_change` / `on_change` (switches, mount-preset select) therefore

@@ -493,11 +493,13 @@ def _scenario_groups(keys: list[str]) -> str:
     return geometries + (f" ({'; '.join(extra)})" if extra else "")
 
 
-def config_markdown(snapshot: dict, meta: dict) -> str:
-    """Readable summary: values shared by all scenarios, then the ones that differ (by scenario)."""
+def config_markdown(snapshot: dict, meta: dict, group=None, notes=OPTIMISTIC_NOTES, title="Benchmark") -> str:
+    """Readable summary: values shared by all scenarios, then the ones that differ (by scenario).
+    ``group`` turns a list of scenario keys into a short description (default: geometry/road/traffic)."""
+    group = group or _scenario_groups
     cases_ = snapshot["cases"]
     out = [
-        "# Benchmark configuration\n",
+        f"# {title} configuration\n",
         f"The settings behind `runs.csv` in this directory (commit `{meta.get('commit', '?')}`). "
         f"{len(cases_)} scenarios × {len(snapshot['seeds'])} runs. Seed rule: {snapshot['seed_rule']}. "
         "The complete effective configuration of every scenario is in `config.json`.\n",
@@ -526,11 +528,12 @@ def config_markdown(snapshot: dict, meta: dict) -> str:
         groups: dict[str, list[str]] = {}
         for key, value in values.items():
             groups.setdefault(value, []).append(key)
-        table = [{"value": v, "scenarios": _scenario_groups(keys)} for v, keys in groups.items()]
+        table = [{"value": v, "scenarios": group(keys)} for v, keys in groups.items()]
         out.append(markdown_table(table) + "\n")
-    out.append("## Where this setup is optimistic\n")
-    out += [f"{i}. {note}" for i, note in enumerate(OPTIMISTIC_NOTES, 1)]
-    out.append("")
+    if notes:
+        out.append("## Where this setup is optimistic\n")
+        out += [f"{i}. {note}" for i, note in enumerate(notes, 1)]
+        out.append("")
     return "\n".join(out)
 
 
@@ -554,13 +557,14 @@ def write_runs(records, path: Path) -> None:
             writer.writerow({k: (repr(float(v)) if isinstance(v, float) else v) for k, v in r.items()})
 
 
-def read_runs(path: Path) -> list[dict]:
+def read_runs(path: Path, text: tuple[str, ...] = TEXT) -> list[dict]:
+    """Records of a ``runs.csv``; ``text`` = the columns kept as strings (others: flags, seed, floats)."""
     out = []
     with open(path, encoding="utf-8") as f:
         for row in csv.DictReader(f):
             rec: dict = {}
             for k, v in row.items():
-                if k in TEXT:
+                if k in text:
                     rec[k] = v
                 elif k in FLAGS:
                     rec[k] = v == "True"

@@ -144,6 +144,7 @@ uv run python -m throughtunnel.evaluation.realism_check --seeds 10        # docs
 uv run python -m throughtunnel.evaluation.map_grade_study --seeds 20      # docs/map_grade_study.md (+ figures)
 uv run python -m throughtunnel.evaluation.benchmark --seeds 20 --out docs/benchmark/baseline   # the baseline (D43)
 uv run python -m throughtunnel.evaluation.benchmark --quick --out out/dev --compare docs/benchmark/baseline
+uv run python -m throughtunnel.evaluation.error_sources --seeds 20 --out docs/benchmark/error_sources  # D45
 ```
 
 The figures need matplotlib, a dev dependency (installed by `uv sync`). The simulator does not need it.
