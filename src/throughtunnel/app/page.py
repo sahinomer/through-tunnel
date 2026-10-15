@@ -43,6 +43,7 @@ from throughtunnel.app.plots import (
 )
 from throughtunnel.app.positioning_view import color_of, error_figure, summary_html
 from throughtunnel.app.profile_editor import ProfileEditor
+from throughtunnel.app.profile_overlay import ProfileOverlay
 from throughtunnel.app.readouts import estimate_readout_html, route_info_html, state_readout_html
 from throughtunnel.app.route_picker import RoutePicker
 from throughtunnel.evaluation.experiment import Comparison, compare_estimators
@@ -103,7 +104,9 @@ class SimulatorPage:
         # cards and settings on the right, so scrolling the settings never moves the map or the plots.
         with ui.row().classes("w-full no-wrap items-stretch gap-4").style(f"height: {COLUMNS_HEIGHT}"):
             with ui.column().classes("gap-1 h-full overflow-y-auto").style("flex: 3 1 0; min-width: 0"):
-                self.map_view = MapView()
+                with ui.element("div").classes("relative w-full"):  # the profile overlays the map
+                    self.map_view = MapView()
+                    self.profile_overlay = ProfileOverlay()
                 self.picker = RoutePicker(self.map_view, OsrmRouteProvider(), self._on_picked_route)
                 self._build_plots()
 
@@ -312,6 +315,7 @@ class SimulatorPage:
         self.progress.props(f"max={result.truth.duration_s:.2f}")
         self.progress.value = 0.0
         self.map_view.show_result(result)
+        self.profile_overlay.show_result(result)
         self.plot.update_figure(ground_truth_figure(result))
         self.imu_plot.update_figure(imu_figure(result))
         self.imu_panel.show_applied_errors(result)
@@ -369,6 +373,7 @@ class SimulatorPage:
             return
         self.comparison = comparison
         self.map_view.show_estimates(comparison.tracks, result, self.visible_estimators)
+        self.profile_overlay.show_estimates(comparison.tracks, self.visible_estimators)
         self._update_positioning_views()
         self._render(force=True)
 
@@ -384,7 +389,9 @@ class SimulatorPage:
     def _on_estimator_toggle(self, _: Any = None) -> None:
         self.visible_estimators = {n for n, box in self.est_toggles.items() if box.value}
         self.map_view.set_estimate_visibility(ESTIMATORS, self.visible_estimators)
+        self.profile_overlay.set_visible_estimators(self.visible_estimators)
         self._update_positioning_views()
+        self._render(force=True)
 
     def _update_route_info(self) -> None:
         if self.result is None or self.route is None:
@@ -445,6 +452,7 @@ class SimulatorPage:
             plot = self._visible_plot()
             if plot is not None:
                 plot.run_plot_method("relayout", cursor_relayout(t))
+            self.profile_overlay.update(t)
         if force or self._tick_count % SLIDER_EVERY == 0 or not self.playback.playing:
             self.progress.value = round(t, 1)
         self.time_label.text = f"{t:6.1f} / {tr.duration_s:.1f} s"

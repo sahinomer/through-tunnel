@@ -55,7 +55,10 @@ Options: `uv run throughtunnel --port 8090 --host 0.0.0.0 --no-browser`.
    The panel shows the lengths, the GPS outage, the smoothing deviation and any warnings.
 2. **Play it back.** Use play/pause, restart, playback speed (0.5×–20×), and seek with the slider or by
    clicking a plot. The vehicle (yellow) moves along the road with a heading tick, the travelled trail
-   is drawn in orange, and the readouts and plot cursor follow the simulation time.
+   is drawn in orange, and the readouts and plot cursor follow the simulation time. The *Road profile* panel at
+   the bottom of the map (hide it with ×, bring it back with *Profile*) shows the road height along the
+   route, the tunnel B–C and the announcement point, with the vehicle and every visible estimator moving
+   on it, and the grade at the vehicle.
 3. **Change the scenario.** Under *Drive and simulation* (the last settings group) you can set the driver style (calm / normal /
    sporty), cruise speed, speed variability, the lateral/longitudinal acceleration and jerk limits, the
    road smoothing settings, the random seed and the sample rate. Then press **Generate**.

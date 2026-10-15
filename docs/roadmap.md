@@ -285,6 +285,10 @@ estimators must receive finished data, with no calibration-error argument.
   in the profile editor ("estimators get no height information", wrong since D39) was corrected.
 * *Test fix:* UI tests found their page with `gc.get_objects()` and could pick a page of an earlier
   test; they now pick the page of their own client.
+* *Step 2:* map and plots on the left, cards and settings on the right; each column scrolls on its own.
+* *Step 3:* a hidable, semi-transparent road-profile panel on the map shows the height along the route
+  with B–C, the announcement point, and the vehicle and visible estimators moving on it (display only).
+  Checked in a browser: seek, playback, hide and show.
 
 **Observation (UI behaviour, pre-existing, not fixed):** NiceGUI runs *async* change handlers as
 background tasks, so the "loading" guard that marks values set from code is already reset when they run.
