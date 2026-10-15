@@ -21,6 +21,12 @@ causal complementary filter, x += (dt_fix / tau) * (x_gps - x). Between fixes th
 carries them. This averages GPS speed/bearing noise over ~tau seconds, so the state handed over to
 pure dead reckoning at the tunnel entrance is better than a single fix. Position is still reset to
 each fix: GPS position errors are time-correlated, so averaging them gains little.
+
+Map grade (D39): if the route map provides the road grade, the gravity leakage predicted from it is
+subtracted from the forward channel (``map_grade.GradeCompensation``). The grade is looked up at an
+along-route distance the estimator keeps for this purpose only: each fix projected onto the route
+(searched near the previous value), advanced by the estimated speed in between. Without map grade
+nothing changes.
 """
 
 from __future__ import annotations
@@ -41,6 +47,10 @@ from throughtunnel.positioning.alignment import (
     with_orientation_error,
 )
 from throughtunnel.positioning.base import Estimator, StateEstimate
+from throughtunnel.positioning.map_grade import grade_compensation
+
+SEARCH_BACK_M = 50.0  # window for projecting a fix onto the route near the previous distance
+SEARCH_AHEAD_M = 200.0
 
 
 @dataclass(frozen=True)
@@ -72,6 +82,8 @@ class VehicleDeadReckoning(Estimator):
         self._last_fix_t = -math.inf
         self._e = self._n = self._v = self._psi = 0.0
         self._initialised = False
+        self._grade = grade_compensation(route)
+        self._d: float | None = None  # along-route distance, used only for the map-grade lookup
 
     # ------------------------------------------------------------------ observations
     def on_gnss(self, fix: GnssFix) -> None:
@@ -96,8 +108,16 @@ class VehicleDeadReckoning(Estimator):
         self._last_fix_t = fix.t
         self._t = fix.t
         self._initialised = True
+        grade_angle = 0.0
+        if self._grade is not None:
+            if self._d is None:
+                self._d = self.route.project_enu(self._e, self._n)[0]
+            else:
+                lo, hi = self._d - SEARCH_BACK_M, self._d + SEARCH_AHEAD_M
+                self._d = self.route.project_enu(self._e, self._n, lo_m=lo, hi_m=hi)[0]
+            grade_angle = self._grade.angle_at(self._d)
         if self._aligner is not None:
-            self._aligner.add_fix(fix)
+            self._aligner.add_fix(fix, grade_angle)
             solved = self._aligner.solve()
             if solved is not None and solved.ready:
                 self._axes = with_orientation_error(solved, self.calibration_error)
@@ -115,9 +135,12 @@ class VehicleDeadReckoning(Estimator):
         if axes is None:  # alignment not ready yet: coast with the last GPS velocity
             self._e += self._v * math.cos(self._psi) * dt
             self._n += self._v * math.sin(self._psi) * dt
+            self._advance_route_distance(self._v * dt)
             return
         f, u = axes.forward, axes.up
         a_fwd = f[0] * accel[0] + f[1] * accel[1] + f[2] * accel[2]
+        if self._grade is not None and self._d is not None:
+            a_fwd -= self._grade.forward_gravity(self._d, axes.calibration_grade_angle)
         w_up = u[0] * gyro[0] + u[1] * gyro[1] + u[2] * gyro[2]
         if self.config.calibrate_gyro_bias:
             w_up -= axes.gyro_bias_up
@@ -127,6 +150,11 @@ class VehicleDeadReckoning(Estimator):
         self._e += v_mid * math.cos(psi_mid) * dt
         self._n += v_mid * math.sin(psi_mid) * dt
         self._v, self._psi = v_new, psi_new
+        self._advance_route_distance(v_mid * dt)
+
+    def _advance_route_distance(self, ds: float) -> None:
+        if self._d is not None:
+            self._d = min(self._d + ds, self.route.length_m)
 
     def state(self) -> StateEstimate | None:
         if not self._initialised or self._t is None:

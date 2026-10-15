@@ -475,4 +475,5 @@ console errors.
   instability and random walk (Gauss-Markov), temperature drift, scale factor and misalignment,
   vibration, per-device profiles, timestamp jitter, and separate accel/gyro rates.
 * **Road grade is modelled (D36), banking is not.** The presets are still flat: their real profiles
-  are unknown offline. The driver ignores the grade, and the estimators get no height information.
+  are unknown offline. The driver ignores the grade. The estimators get the grade only if the map
+  provides it (D39, optional, assumed exact).

@@ -131,6 +131,10 @@ class RouteMap:
     tunnel_entrance_m: float  # point B, distance from A along this polyline
     tunnel_exit_m: float  # point C
     announce_before_exit_m: float | None = None  # announce the tunnel exit this far before C (D32)
+    # Optional road grade from the map provider (D39): dz/ds (+ = uphill) every ``grade_step_m`` along
+    # this polyline, starting at A. None = the map has no grade data.
+    road_grade: NDArray[np.float64] | None = None
+    grade_step_m: float = 10.0
 
     def __post_init__(self) -> None:
         if len(self.lat) < 2 or len(self.lat) != len(self.lon):
@@ -140,6 +144,30 @@ class RouteMap:
         d = self.announce_before_exit_m
         if d is not None and not 0.0 <= d <= self.tunnel_exit_m - self.tunnel_entrance_m + 1e-6:
             raise ValueError("the announcement distance must lie within the tunnel length")
+        if self.road_grade is not None and (len(self.road_grade) < 2 or self.grade_step_m <= 0.0):
+            raise ValueError("grade data needs at least two samples and a positive step")
+
+    @property
+    def has_grade(self) -> bool:
+        return self.road_grade is not None
+
+    @cached_property
+    def _grade_samples(self) -> list[float]:
+        return np.asarray(self.road_grade, dtype=float).tolist()
+
+    def grade_at(self, distance_m: float) -> float:
+        """Road grade dz/ds (+ = uphill) at ``distance_m`` along the route, from the map's grade data.
+
+        Linear interpolation on the uniform grid, in plain Python: estimators call it per IMU sample.
+        Beyond the data the end values are held. Raises if the map has no grade data."""
+        g = self._grade_samples
+        x = distance_m / self.grade_step_m
+        if x <= 0.0:
+            return g[0]
+        i = int(x)
+        if i >= len(g) - 1:
+            return g[-1]
+        return g[i] + (x - i) * (g[i + 1] - g[i])
 
     @cached_property
     def frame(self) -> LocalFrame:

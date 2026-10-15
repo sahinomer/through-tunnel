@@ -16,7 +16,12 @@ import numpy as np
 from nicegui import events, ui
 
 from throughtunnel.road import RoadConfig
-from throughtunnel.scenario import DEFAULT_ANNOUNCE_BEFORE_EXIT_M, SimulationResult, TunnelConfig
+from throughtunnel.scenario import (
+    DEFAULT_ANNOUNCE_BEFORE_EXIT_M,
+    MapDataConfig,
+    SimulationResult,
+    TunnelConfig,
+)
 from throughtunnel.sensors.errors import DEG, MDPS, MG, UG, ImuErrorConfig, SensorErrorConfig
 from throughtunnel.sensors.gnss import GnssConfig
 from throughtunnel.sensors.imu import ImuConfig
@@ -393,6 +398,30 @@ class CalibrationPanel(Panel):
             self.s_yaw.value = calibration.yaw_deg
             self.s_pitch.value = calibration.pitch_deg
             self.s_roll.value = calibration.roll_deg
+
+
+class MapDataPanel(Panel):
+    """What the navigation map gives the estimators beyond the route geometry (D39)."""
+
+    def __init__(self, on_change: Callback, map_data: MapDataConfig) -> None:
+        super().__init__(on_change)
+        with ui.expansion("Map data (estimators)", icon="terrain", value=False).classes(
+            "w-full border rounded"
+        ):
+            self.grade_on = ui.switch("Road grade from the map", value=map_data.road_grade)
+            ui.label(
+                "The map provides the road grade along the route (assumed exact). The IMU estimators "
+                "subtract the gravity it adds to the forward accelerometer axis, relative to the grade "
+                "they were calibrated in. Only positioning re-runs; the simulated data stay unchanged."
+            ).classes("text-xs text-gray-500")
+            self.grade_on.on_value_change(self._changed)
+
+    def config(self) -> MapDataConfig:
+        return MapDataConfig(road_grade=bool(self.grade_on.value))
+
+    def set(self, map_data: MapDataConfig) -> None:
+        with self._quiet():
+            self.grade_on.value = map_data.road_grade
 
 
 class SensorPanel(Panel):

@@ -29,6 +29,9 @@ the implementation:
 * **Calibration error hook** (D34, 2026-10-13): `Estimator(route, calibration_error=R)` rotates the
   phone-to-vehicle orientation the estimator uses (declared or estimated). It is an experiment
   fault-injection, not an observation. Study: [calibration_error.md](calibration_error.md).
+* **Map grade** (D39, 2026-10-15): `RouteMap.road_grade` (optional, assumed exact) is real map
+  information, not a hook. Every IMU estimator then removes the gravity leakage of the grade change
+  since calibration (`positioning/map_grade.py`). Study: [map_grade_study.md](map_grade_study.md).
 * **Not yet:** covariance outputs (so no NEES/coverage), probabilistic estimators, map matching beyond
   projection, recovery gating.
 
@@ -99,6 +102,7 @@ StateEstimate  # t, east/north (route-local ENU) + lat/lon, speed, heading, mode
   * `CausalLowPass`;
   * `BiasCalibrator`;
   * `RouteProjector`: map matching;
+  * `GradeCompensation`: gravity leakage predicted from the map grade (D39);
   * `LocalFrame`, which reuses `geodesy.py`.
 
   Stateful probabilistic estimators (EKF, particle filter) are estimators in their own right, not

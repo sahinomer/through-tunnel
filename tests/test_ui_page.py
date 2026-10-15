@@ -69,6 +69,26 @@ async def test_calibration_panel_reaches_the_estimators_only():
 
 
 @pytest.mark.anyio
+async def test_map_grade_switch_reaches_the_estimators_only():
+    import gc
+
+    from throughtunnel.scenario import load_preset
+
+    async with user_simulation(root=SimulatorPage) as user:
+        await user.open("/")
+        page = next(o for o in gc.get_objects() if isinstance(o, SimulatorPage))
+        with user.client:
+            await page._load_scenario(load_preset("synthetic_demo_track"))
+            before = page.result
+            assert not before.route_map.has_grade and not page.map_data_panel.grade_on.value
+            page.map_data_panel.grade_on.value = True
+            await page.map_data_panel._changed()
+        assert page.result.config.map_data.road_grade and page.result.route_map.has_grade
+        assert page.result.imu is before.imu and page.result.gnss is before.gnss  # nothing re-simulated
+        assert "route + road grade" in page.route_info.content
+
+
+@pytest.mark.anyio
 async def test_profile_drag_is_clamped_and_reaches_the_simulation():
     import gc
 

@@ -9,7 +9,10 @@ Method (per GPS interval of ~1 s, using the mean phone specific force f̄ and an
 1. Up axis: direction of the mean specific force (gravity dominates), refined by first subtracting the
    vehicle acceleration predicted from GPS (step 3). On a level road this also absorbs the horizontal
    accelerometer bias: a bias tilts the estimated up axis so the forward specific force is unbiased,
-   to first order. With road grade this cancellation breaks (roadmap R1).
+   to first order. With road grade this cancellation breaks (roadmap R1): the levelling calibrates in
+   the mean approach grade. If the map provides the grade (D39), the estimator passes the grade angle
+   at each fix and the alignment reports the mean over the intervals it used
+   (``calibration_grade_angle``), so the estimator can remove the grade *change* later.
 2. Forward axis: in the horizontal plane, find the rotation θ that best maps the vehicle acceleration
    predicted from GPS and gyro, (a_long = Δv_GPS/Δt, a_lat = v·ω_up), onto the phone's horizontal
    specific force (2-D Procrustes, means removed). ω_up = up·ω does not depend on θ. θ is observable
@@ -48,6 +51,7 @@ class Alignment:
     intervals: int
     excitation: float  # rms of predicted horizontal vehicle acceleration [m/s^2]
     correlation: float  # cosine similarity predicted vs measured horizontal acceleration
+    calibration_grade_angle: float = 0.0  # mean map grade angle over the intervals used [rad] (D39)
 
 
 ALIGNED = Alignment(
@@ -71,14 +75,16 @@ class MountAlignmentEstimator:
         self._sum_w = np.zeros(3)
         self._n = 0
         self._prev: GnssFix | None = None
-        self._rows: list[tuple] = []  # (f̄(3), ω̄(3), dt, v0, v1, yaw0, yaw1)
+        self._prev_grade_angle = 0.0
+        self._rows: list[tuple] = []  # (f̄(3), ω̄(3), dt, v0, v1, yaw0, yaw1, t, σ_bearing, grade angle)
 
     def add_imu(self, accel, gyro) -> None:
         self._sum_f += accel
         self._sum_w += gyro
         self._n += 1
 
-    def add_fix(self, fix: GnssFix) -> None:
+    def add_fix(self, fix: GnssFix, grade_angle: float = 0.0) -> None:
+        """``grade_angle``: the map's road grade angle at this fix [rad] (0 without map grade)."""
         prev = self._prev
         if prev is not None and self._n > 0 and 0.0 < fix.t - prev.t <= self._max_gap:
             yaw0 = math.radians(90.0 - prev.bearing_deg)
@@ -94,9 +100,11 @@ class MountAlignmentEstimator:
                     yaw1,
                     fix.t,
                     max(math.radians(fix.bearing_accuracy_deg), 1e-4),
+                    0.5 * (self._prev_grade_angle + grade_angle),
                 )
             )
         self._prev = fix
+        self._prev_grade_angle = grade_angle
         self._sum_f = np.zeros(3)
         self._sum_w = np.zeros(3)
         self._n = 0
@@ -163,6 +171,7 @@ class MountAlignmentEstimator:
             intervals=len(self._rows),
             excitation=excitation,
             correlation=corr,
+            calibration_grade_angle=float(np.mean([r[9] for r in self._rows])),
         )
 
 

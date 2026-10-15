@@ -239,6 +239,18 @@ Improvement candidates, none implemented:
     confirmed).
   * Drift adds p90 tails of 0.3–0.6 km in long stop-and-go outages.
 
+**Task 10: map grade for the estimators (D39), done (realistic-sensor study pending).**
+* *Model:* the map optionally provides the road grade (assumed exact, user decision; map grade errors
+  are listed in [limitations.md](limitations.md)). Every IMU estimator removes the gravity leakage of
+  the grade change since calibration. UI switch *Map data (estimators)*; only positioning re-runs.
+* *Validation (ideal sensors):* sloped tunnels go from 0.9–2.2 km to 0.2–7.6 m at C; flat roads are
+  bit-identical. Details: [map_grade_study.md](map_grade_study.md).
+* *Found during validation:* map heights differentiated over map distance give false grade dips at
+  polyline corners (driven path cuts them), which biased the calibration grade. The map now carries
+  the grade itself.
+* *Backlog (user, 2026-10-15):* UI polish: group the road grade and the other map data for the
+  estimators in one place.
+
 **Observation (UI behaviour, pre-existing, not fixed):** NiceGUI runs *async* change handlers as
 background tasks, so the "loading" guard that marks values set from code is already reset when they run.
 Handlers registered with `on_value_change` / `on_change` (switches, mount-preset select) therefore
@@ -361,7 +373,7 @@ are committed (F9).
 ### Phase R: realism and robustness experiments (backlog)
 | ID | Task | Status |
 |---|---|---|
-| R1 | Road grade: elevation profile, pitch in truth and IMU; grade sensitivity of the estimators (D24) | [x] model + editor (D36) and study ([slope_study.md](slope_study.md)); no grade handling in the estimators yet |
+| R1 | Road grade: elevation profile, pitch in truth and IMU; grade sensitivity of the estimators (D24) | [x] model + editor (D36) and study ([slope_study.md](slope_study.md)); map-grade option in the estimators (D39, [map_grade_study.md](map_grade_study.md)) |
 | R2 | Stop-and-go / slow traffic inside the tunnel (D24) | [x] research, model T1/T2/T3/T5/T6 (D37) and study ([traffic_study.md](traffic_study.md)); T4 skipped by decision |
 | R3 | Map uncertainty: scale error, lateral offsets, local distortions of the estimator's map (D21, D24) | [ ] |
 | R4 | GPS detail: entrance degradation ramp, dropouts, multipath outliers, reacquisition transients, latency (D16) | [~] degradation ramp + multipath jumps before B (D38, optional); others in [limitations.md](limitations.md) |

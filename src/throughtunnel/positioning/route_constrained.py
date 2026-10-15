@@ -9,6 +9,9 @@ along-track error (speed error integrated over time) and the map's own deviation
   is blended towards the GPS speed (complementary filter, 5 s), as in ``dr_filtered``.
 * ``RouteSpeedHold``: the naive reference. Keep the last GPS speed. Inertial methods must beat this.
 
+If the route map provides the road grade (D39), ``RouteImuDeadReckoning`` subtracts the gravity
+leakage predicted from it at the estimated distance d (``map_grade.GradeCompensation``).
+
 While GPS is available, d is the projection of each fix onto the route (searched near the previous
 value, so a fix cannot snap to a far-away part of the route).
 """
@@ -24,6 +27,7 @@ from numpy.typing import NDArray
 from throughtunnel.observations import GnssFix, RouteMap
 from throughtunnel.positioning.alignment import Alignment, MountAlignmentEstimator, with_orientation_error
 from throughtunnel.positioning.base import Estimator, StateEstimate
+from throughtunnel.positioning.map_grade import grade_compensation
 
 GNSS_TIMEOUT_S = 1.5
 BLEND_SPEED_TAU_S = 5.0
@@ -44,6 +48,7 @@ class RouteConstrained(Estimator):
         self._last_fix_t = -math.inf
         self._d: float | None = None
         self._v = 0.0
+        self._grade = grade_compensation(route) if self.use_imu_speed else None
 
     def on_gnss(self, fix: GnssFix) -> None:
         e, n = self.fix_enu(fix)
@@ -62,7 +67,7 @@ class RouteConstrained(Estimator):
             self._v = fix.speed_mps
         self._last_fix_t = fix.t
         self._t = fix.t
-        self._aligner.add_fix(fix)
+        self._aligner.add_fix(fix, self._grade.angle_at(self._d) if self._grade is not None else 0.0)
         solved = self._aligner.solve()
         if solved is not None and solved.ready:
             self._axes = with_orientation_error(solved, self.calibration_error)
@@ -81,6 +86,8 @@ class RouteConstrained(Estimator):
         if self.use_imu_speed and self._axes is not None:
             f = self._axes.forward
             a_fwd = f[0] * accel[0] + f[1] * accel[1] + f[2] * accel[2]
+            if self._grade is not None:
+                a_fwd -= self._grade.forward_gravity(self._d, self._axes.calibration_grade_angle)
             v_new = max(self._v + a_fwd * dt, 0.0)
         self._d = min(self._d + 0.5 * (self._v + v_new) * dt, self.route.length_m)
         self._v = v_new

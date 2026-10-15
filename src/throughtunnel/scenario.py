@@ -13,6 +13,10 @@ Route structure (D11): a route runs from A (start) to D (end). The GPS-denied tu
 given as distances along the *map* route (the original polyline the navigation app knows). The app
 announces the tunnel exit once, a configurable distance before C (D32). Where the true (smoothed) path
 crosses these map points, and when, is hidden simulator state (``SectionTruth``).
+
+Map data (D39): optionally the map also provides the road grade along the route, assumed exact: the
+grade at each map distance is the true road grade at the corresponding point of the driven path.
+It is information for the estimators only; nothing simulated changes.
 """
 
 from __future__ import annotations
@@ -52,7 +56,9 @@ from throughtunnel.vehicle.truth import GroundTruth, build_ground_truth
 # v6: added `calibration` (orientation error of the estimators' phone calibration, D34); default off.
 # v7: added `road_profile` (road elevation, D36); default flat.
 # v8: added `traffic` (traffic scenario in the tunnel, D37); default free flow.
-SCHEMA_VERSION = 8
+# v9: added `map_data` (what the navigation map provides to the estimators, D39); default no grade.
+SCHEMA_VERSION = 9
+MAP_GRADE_STEP_M = 10.0
 
 TUNNEL_MIN_LENGTH_M = 500.0
 TUNNEL_MAX_LENGTH_M = 5000.0
@@ -85,6 +91,16 @@ class TunnelConfig(BaseModel):
         return self
 
 
+class MapDataConfig(BaseModel):
+    """What the navigation map provides to the estimators beyond the route geometry (D39)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    road_grade: bool = Field(
+        False, description="The map provides the road grade along the route, assumed exact"
+    )
+
+
 class ScenarioConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -104,6 +120,10 @@ class ScenarioConfig(BaseModel):
     calibration: CalibrationErrorConfig = Field(
         default_factory=CalibrationErrorConfig,
         description="Orientation error of the estimators' phone calibration (positioning side, D34)",
+    )
+    map_data: MapDataConfig = Field(
+        default_factory=MapDataConfig,
+        description="Information the navigation map gives the estimators (positioning side, D39)",
     )
     tunnel: TunnelConfig | None = Field(None, description="None = no tunnel (GPS on the whole route)")
     gnss: GnssConfig = Field(default_factory=GnssConfig)
@@ -202,7 +222,7 @@ def run_scenario(config: ScenarioConfig, path: RoadPath | None = None) -> Simula
     imu, ideal, errors = simulate_imu(motion, path, config.imu, config.seed)
     sections = section_truth(route_map, path, motion) if config.tunnel is not None else None
     gnss, gnss_ideal, gnss_events = simulate_gps(motion, path, sections, config.gnss, config.imu, config.seed)
-    return SimulationResult(
+    result = SimulationResult(
         config=config,
         path=path,
         profile=profile,
@@ -218,6 +238,7 @@ def run_scenario(config: ScenarioConfig, path: RoadPath | None = None) -> Simula
         gnss_events=gnss_events,
         traffic=traffic,
     )
+    return with_map_data(result, config.map_data)
 
 
 def traffic_plan(config: ScenarioConfig, route_map: RouteMap) -> TrafficPlan:
@@ -282,6 +303,24 @@ def build_route_map(config: ScenarioConfig) -> RouteMap:
     return RouteMap(
         lat=lat, lon=lon, tunnel_entrance_m=entrance, tunnel_exit_m=exit_, announce_before_exit_m=announce
     )
+
+
+def map_grade(route_map: RouteMap, path: RoadPath) -> np.ndarray:
+    """Exact map grade (D39): every ``MAP_GRADE_STEP_M`` along the map route, the true road grade at the
+    closest point of the driven path.
+
+    The map carries the grade itself (as provider slope attributes do), not heights. Differentiating
+    heights over *map* distance would show false grade dips wherever the driven path cuts a polyline
+    corner (map and path distance diverge by 1-3 m there), and sampling the profile at the map
+    distance would put grade changes a few metres off (up to ~7 m on the presets)."""
+    n = math.ceil(route_map.length_m / MAP_GRADE_STEP_M) + 1
+    if path.elevation is None:
+        return np.zeros(n)
+    s, s_prev = np.empty(n), 0.0
+    for i in range(n):
+        east, north = route_map.enu_at(i * MAP_GRADE_STEP_M)
+        s_prev = s[i] = path.project(east, north, s_lo=max(s_prev - 20.0, 0.0), s_hi=s_prev + 200.0)
+    return path.elevation.evaluate(s)[1]
 
 
 def section_truth(route_map: RouteMap, path: RoadPath, motion: LongitudinalTrajectory) -> SectionTruth:
@@ -399,6 +438,15 @@ def with_calibration(result: SimulationResult, calibration: CalibrationErrorConf
     """Same simulation with another calibration error. Nothing is re-simulated: the error acts only on
     the estimators (D34), so the vehicle motion and all sensor data stay identical."""
     return replace(result, config=result.config.model_copy(update={"calibration": calibration}))
+
+
+def with_map_data(result: SimulationResult, map_data: MapDataConfig) -> SimulationResult:
+    """Same simulation with other map data. Nothing is re-simulated: the map data is information for
+    the estimators only (D39), so the vehicle motion and all sensor data stay identical."""
+    grade = map_grade(result.route_map, result.path) if map_data.road_grade else None
+    route_map = replace(result.route_map, road_grade=grade, grade_step_m=MAP_GRADE_STEP_M)
+    config = result.config.model_copy(update={"map_data": map_data})
+    return replace(result, config=config, route_map=route_map)
 
 
 def with_imu_config(result: SimulationResult, imu: ImuConfig) -> SimulationResult:

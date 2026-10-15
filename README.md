@@ -89,7 +89,10 @@ Options: `uv run throughtunnel --port 8090 --host 0.0.0.0 --no-browser`.
    before the tunnel* for GPS (multipath, jumps). *Calibration error (assumed orientation)* rotates the phone-to-vehicle
    orientation the estimators use (yaw, pitch, roll) without changing the actual mount or any sensor
    data. Only positioning re-runs, so with/without comparisons are exactly paired
-   ([docs/calibration_error.md](docs/calibration_error.md)).
+   ([docs/calibration_error.md](docs/calibration_error.md)). *Map data (estimators)* → *Road grade from
+   the map* gives the estimators the road grade along the route (assumed exact); the IMU estimators
+   then remove the gravity it adds to the forward accelerometer axis. Again only positioning re-runs
+   ([docs/map_grade_study.md](docs/map_grade_study.md)).
 7. **Reproduce it.** *Save scenario* downloads a JSON file with the route geometry *as fetched*, every
    parameter (phone mounting, IMU rate and errors included) and the seeds. *Load scenario* replays it
    bit-for-bit, offline.
@@ -129,6 +132,7 @@ uv run python -m throughtunnel.evaluation.factor_study --seeds 20         # docs
 uv run python -m throughtunnel.evaluation.slope_study --seeds 20          # docs/slope_study.md (+ figures)
 uv run python -m throughtunnel.evaluation.traffic_study --seeds 20        # docs/traffic_study.md (+ figures)
 uv run python -m throughtunnel.evaluation.realism_check --seeds 10        # docs/realism_check/tables.md
+uv run python -m throughtunnel.evaluation.map_grade_study --seeds 20      # docs/map_grade_study.md (+ figures)
 ```
 
 The figures need matplotlib, a dev dependency (installed by `uv sync`). The simulator does not need it.

@@ -22,6 +22,7 @@ from nicegui import events, run, ui
 from throughtunnel.app.controls import (
     CalibrationPanel,
     DrivePanel,
+    MapDataPanel,
     MountPanel,
     SensorPanel,
     TrafficPanel,
@@ -46,6 +47,7 @@ from throughtunnel.road import RoadConfig
 from throughtunnel.road_profile import RoadProfileConfig
 from throughtunnel.routing import OsrmRouteProvider, RawRoute
 from throughtunnel.scenario import (
+    MapDataConfig,
     ScenarioConfig,
     SimulationResult,
     build_route_map,
@@ -54,6 +56,7 @@ from throughtunnel.scenario import (
     run_scenario,
     scenario_from_json,
     with_calibration,
+    with_map_data,
     with_sensor_config,
 )
 from throughtunnel.sensors.gnss import GnssConfig
@@ -106,6 +109,7 @@ class SimulatorPage:
                 self.profile_editor = ProfileEditor(self._on_profile_change)
                 self.mount_panel = MountPanel(self._apply_sensors, self.base_imu)
                 self.calibration_panel = CalibrationPanel(self._apply_calibration, CalibrationErrorConfig())
+                self.map_data_panel = MapDataPanel(self._apply_map_data, MapDataConfig())
                 self.sensor_panel = SensorPanel(self._apply_sensors, self.base_imu, self.base_gnss)
 
         # keep_alive=False: the hidden plot is unmounted (Plotly cannot resize a hidden div); only the
@@ -199,6 +203,7 @@ class SimulatorPage:
         self.base_imu, self.base_gnss = cfg.imu, cfg.gnss
         self.mount_panel.set(cfg.imu)
         self.calibration_panel.set(cfg.calibration)
+        self.map_data_panel.set(cfg.map_data)
         self.sensor_panel.set_imu(cfg.imu)
         self.sensor_panel.set_gnss(cfg.gnss)
         self.tunnel_panel.set(cfg.tunnel)
@@ -255,6 +260,7 @@ class SimulatorPage:
                 driver=self.drive_panel.driver(),
                 imu=self._imu_from_controls(),
                 calibration=self.calibration_panel.config(),
+                map_data=self.map_data_panel.config(),
                 gnss=self.sensor_panel.gnss(self.base_gnss),
                 tunnel=self.tunnel_panel.config(),
                 traffic=self.traffic_panel.config(),
@@ -303,6 +309,14 @@ class SimulatorPage:
         if self.result is None:
             return
         self.result = with_calibration(self.result, self.calibration_panel.config())
+        self._update_route_info()
+        await self._run_positioning()
+
+    async def _apply_map_data(self) -> None:
+        """Re-run only positioning: the map data is information for the estimators (D39)."""
+        if self.result is None:
+            return
+        self.result = with_map_data(self.result, self.map_data_panel.config())
         self._update_route_info()
         await self._run_positioning()
 
