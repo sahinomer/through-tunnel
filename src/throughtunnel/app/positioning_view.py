@@ -20,6 +20,7 @@ ESTIMATOR_COLORS = {
     "dr_filtered": "#fb8c00",
     "route_imu": "#43a047",
     "route_hold": "#8e24aa",
+    "route_vspeed": "#455a64",  # reference (car speed): neutral, not a phone-only solution
 }
 MAP_TRACK_RATE_HZ = 5.0  # decimation of estimated tracks for the map
 

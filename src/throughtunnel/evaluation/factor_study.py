@@ -30,7 +30,7 @@ from pathlib import Path
 import numpy as np
 
 from throughtunnel.evaluation.experiment import compare_estimators, markdown_table
-from throughtunnel.positioning import ESTIMATORS
+from throughtunnel.positioning import MAIN_ESTIMATORS
 from throughtunnel.scenario import (
     list_presets,
     load_preset,
@@ -105,7 +105,7 @@ def study_preset(preset_id: str, seeds: list[int]) -> tuple[list[dict], dict]:
             res = with_calibration(with_sensor_config(base, imu=imu, gnss=gnss), cal)
             loss = res.gnss_events.loss_t
             end = min(res.gnss_events.reacquire_t, res.sections.exit_t)
-            for ev in compare_estimators(res).evaluations:
+            for ev in compare_estimators(res, list(MAIN_ESTIMATORS)).evaluations:
                 s = ev.summary
                 rec = {
                     "preset": preset_id,
@@ -155,7 +155,7 @@ def exit_table(records, preset) -> list[dict[str, str]]:
     rows = []
     for cond in CONDITIONS:
         row = {"condition": cond.label + ("" if cond.main else " ‡")}
-        for name in ESTIMATORS:
+        for name in MAIN_ESTIMATORS:
             row[name] = _med_p90(
                 [r["exit_total_m"] for r in _sel(records, preset=preset, condition=cond.key, estimator=name)]
             )
@@ -168,7 +168,7 @@ def component_table(records, preset) -> list[dict[str, str]]:
     rows = []
     for cond in CONDITIONS:
         row = {"condition": cond.label + ("" if cond.main else " ‡")}
-        for name in ESTIMATORS:
+        for name in MAIN_ESTIMATORS:
             sel = _sel(records, preset=preset, condition=cond.key, estimator=name)
             a = np.median(np.abs([r["exit_along_m"] for r in sel]))
             c = np.median(np.abs([r["exit_cross_m"] for r in sel]))
@@ -184,7 +184,7 @@ def exponent_table(curves_by_preset, preset) -> list[dict[str, str]]:
     rows = []
     for cond in CONDITIONS:
         row = {"condition": cond.label + ("" if cond.main else " ‡")}
-        for name in ESTIMATORS:
+        for name in MAIN_ESTIMATORS:
             e1, e2 = med[(cond.key, name)][int(t1)], med[(cond.key, name)][int(t2)]
             ok = (
                 np.isfinite(e1) and np.isfinite(e2) and e1 > 0.5 and e2 > 0.5
@@ -200,7 +200,7 @@ def announcement_table(records, preset) -> list[dict[str, str]]:
         if not cond.main:
             continue
         row = {"condition": cond.label}
-        for name in ESTIMATORS:
+        for name in MAIN_ESTIMATORS:
             vals = [
                 r["announcement_error_s"]
                 for r in _sel(records, preset=preset, condition=cond.key, estimator=name)
@@ -235,7 +235,7 @@ def tables_markdown(records, curves_by_preset, seeds: list[int]) -> str:
         out.append("**Median horizontal error vs. time since GPS loss [m]:**\n")
         rows = []
         for cond in CONDITIONS:
-            for name in ESTIMATORS:
+            for name in MAIN_ESTIMATORS:
                 sel = _sel(records, preset=pid, condition=cond.key, estimator=name)
                 row = {"condition": cond.label + ("" if cond.main else " ‡"), "estimator": name}
                 for tau in GROWTH_TIMES_S:
@@ -264,7 +264,13 @@ SHORT = {
     "dr_filtered": "DR calibrated + GPS-blended",
     "route_imu": "Route + IMU speed",
     "route_hold": "Route + last GPS speed",
+    "route_vspeed": "Route + vehicle speed (ref.)",
 }
+
+
+def short_ticks(names) -> list[str]:
+    """Short estimator names as two-line axis tick labels."""
+    return [SHORT[n].replace(" + ", "\n+ ") for n in names]
 
 
 def plot_figures(curves_by_preset, records, out: Path) -> list[Path]:
@@ -285,12 +291,12 @@ def plot_figures(curves_by_preset, records, out: Path) -> list[Path]:
 
     # Figure 1: median error vs time since GPS loss; rows = presets, columns = estimators.
     fig, axes = plt.subplots(
-        len(presets), len(ESTIMATORS), figsize=(16, 3.1 * len(presets)), sharex=True, sharey=True
+        len(presets), len(MAIN_ESTIMATORS), figsize=(16, 3.1 * len(presets)), sharex=True, sharey=True
     )
     axes = np.atleast_2d(axes)
     for i, pid in enumerate(presets):
         med = curves_by_preset[pid]["medians"]
-        for j, name in enumerate(ESTIMATORS):
+        for j, name in enumerate(MAIN_ESTIMATORS):
             ax = axes[i, j]
             for k in reversed(range(len(main))):
                 y = np.maximum(med[(main[k].key, name)], 0.1)
@@ -325,7 +331,7 @@ def plot_figures(curves_by_preset, records, out: Path) -> list[Path]:
     for ax, pid in zip(np.atleast_1d(axes), presets, strict=True):
         grid = np.array([
             [np.median([r["exit_total_m"] for r in _sel(records, preset=pid, condition=c.key, estimator=n)])
-             for n in ESTIMATORS] for c in CONDITIONS
+             for n in MAIN_ESTIMATORS] for c in CONDITIONS
         ])  # fmt: skip
         ax.imshow(grid, cmap=cmap, norm=norm, aspect="auto")
         for (r, c), v in np.ndenumerate(grid):
@@ -333,9 +339,7 @@ def plot_figures(curves_by_preset, records, out: Path) -> list[Path]:
             ax.text(c, r, f"{v:.0f}" if v >= 10 else f"{v:.1f}", ha="center", va="center", fontsize=8,
                     color=INK if light_cell else "#ffffff")  # fmt: skip
         ax.axhline(sum(c.main for c in CONDITIONS) - 0.5, color=INK_2, linewidth=1.2)
-        ax.set_xticks(
-            range(len(ESTIMATORS)), [SHORT[n].replace(" + ", "\n+ ") for n in ESTIMATORS], fontsize=8
-        )
+        ax.set_xticks(range(len(MAIN_ESTIMATORS)), short_ticks(MAIN_ESTIMATORS), fontsize=8)
         ax.set_yticks(range(len(CONDITIONS)), [c.label + ("" if c.main else " ‡") for c in CONDITIONS])
         ax.set_title(curves_by_preset[pid]["name"], color=INK)
         ax.tick_params(length=0)

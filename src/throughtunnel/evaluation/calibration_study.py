@@ -18,7 +18,7 @@ import numpy as np
 
 from throughtunnel.evaluation.experiment import compare_estimators, markdown_table
 from throughtunnel.evaluation.metrics import TrackEvaluation
-from throughtunnel.positioning import ESTIMATORS
+from throughtunnel.positioning import MAIN_ESTIMATORS
 from throughtunnel.scenario import (
     list_presets,
     load_preset,
@@ -65,7 +65,7 @@ def run_study(preset_id: str, seeds: range, cases: dict[str, CalibrationErrorCon
         res = with_sensor_config(base, imu=imu, gnss=cfg.gnss.model_copy(update={"seed": seed}))
         results.append(res)
         for case, cal in cases.items():
-            for ev in compare_estimators(with_calibration(res, cal)).evaluations:
+            for ev in compare_estimators(with_calibration(res, cal), list(MAIN_ESTIMATORS)).evaluations:
                 runs[case].setdefault(ev.name, []).append(ev)
     return base, results, runs
 
@@ -81,7 +81,7 @@ def exit_error_rows(runs: Runs) -> list[dict[str, str]]:
     for case, by_est in runs.items():
         row = {"calibration error": case}
         for name, evals in by_est.items():
-            row[ESTIMATORS[name].name] = _cell(np.array([e.summary["exit_total_m"] for e in evals]))
+            row[MAIN_ESTIMATORS[name].name] = _cell(np.array([e.summary["exit_total_m"] for e in evals]))
         rows.append(row)
     return rows
 

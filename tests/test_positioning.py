@@ -53,10 +53,13 @@ def test_estimators_are_causal(demo, name):
     gyro[after_i] += 0.1
     lat = obs.gnss.lat.copy()
     lat[after_g] += 1e-3
+    vs = obs.vehicle_speed
+    speed = vs.speed_mps + np.where(vs.t > t_star, 5.0, 0.0)
     perturbed = Observations(
         imu=ImuStream(t=obs.imu.t, accel=accel, gyro=gyro),
         gnss=replace(obs.gnss, lat=lat),
         route=obs.route,
+        vehicle_speed=replace(vs, speed_mps=speed),
     )
     a = run_estimator(ESTIMATORS[name](obs.route), obs)
     b = run_estimator(ESTIMATORS[name](obs.route), perturbed)

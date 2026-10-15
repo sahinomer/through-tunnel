@@ -40,7 +40,7 @@ from throughtunnel.evaluation.slope_study import (
     profile_config,
     realistic_sensors,
 )
-from throughtunnel.positioning import ESTIMATORS
+from throughtunnel.positioning import MAIN_ESTIMATORS
 from throughtunnel.scenario import (
     MapDataConfig,
     list_presets,
@@ -66,7 +66,7 @@ def run_records(res, tags: dict) -> tuple[list[dict], dict]:
     route_len = res.route_map.length_m
     records, curves = [], {}
     for grade in (False, True):
-        cmp = compare_estimators(with_map_data(res, MapDataConfig(road_grade=grade)))
+        cmp = compare_estimators(with_map_data(res, MapDataConfig(road_grade=grade)), list(MAIN_ESTIMATORS))
         for track, ev in zip(cmp.tracks, cmp.evaluations, strict=True):
             before_c = track.t < c_t
             k = int(np.flatnonzero(before_c)[-1])
@@ -151,7 +151,7 @@ def ideal_table(records, preset, block) -> list[dict[str, str]]:
         sel = _sel(records, preset=preset, block=block, profile=p.key, sensors="ideal")
         by = {(r["map_grade"], r["estimator"]): r for r in sel}
         row = {"profile": p.label}
-        for name in ESTIMATORS:
+        for name in MAIN_ESTIMATORS:
             off, on = by[(False, name)], by[(True, name)]
             row[name] = f"{off['exit_total_m']:.0f}{' §' if off['route_end_reached'] else ''} → " + (
                 f"{on['exit_total_m']:.1f}{' §' if on['route_end_reached'] else ''}"
@@ -165,7 +165,7 @@ def realistic_table(records, preset, block, key="exit_total_m") -> list[dict[str
     rows = []
     for p in _profiles(block):
         row = {"profile": p.label}
-        for name in ESTIMATORS:
+        for name in MAIN_ESTIMATORS:
             cells = []
             for grade in (False, True):
                 sel = _sel(
@@ -183,7 +183,7 @@ def paired_table(records, preset, block) -> list[dict[str, str]]:
     rows = []
     for p in _profiles(block):
         row = {"profile": p.label}
-        for name in ESTIMATORS:
+        for name in MAIN_ESTIMATORS:
             sel = _sel(
                 records, preset=preset, block=block, profile=p.key, sensors="realistic", estimator=name
             )
@@ -220,7 +220,7 @@ def announcement_table(records, preset, block) -> list[dict[str, str]]:
     rows = []
     for p in _profiles(block):
         row = {"profile": p.label}
-        for name in ESTIMATORS:
+        for name in MAIN_ESTIMATORS:
             cells = []
             for grade in (False, True):
                 sel = _sel(

@@ -21,7 +21,9 @@ the implementation:
   IMU-propagated state, instead of resetting to every fix. The route estimator blends speed the same
   way.
 * **Estimators:** `dr_raw` (declared aligned mount, no calibration), `dr_calibrated`, `dr_filtered`,
-  `route_imu`, `route_hold` (naive reference).
+  `route_imu`, `route_hold` (naive reference); `MAIN_ESTIMATORS`, the phone-only solution. Plus
+  `route_vspeed` (D42), the reference ceiling: route + the car's speed reading, the only estimator that
+  receives it (`REFERENCE_ESTIMATORS`).
 * **Exit announcement simplified** (D32, 2026-10-13): the separate navigation event inside B–C with
   several lead distances was replaced by **one announcement a configurable distance before the
   physical tunnel exit C** (`TunnelConfig.announce_before_exit_m`, default 300 m, 0 ≤ d ≤ B–C length).

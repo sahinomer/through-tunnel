@@ -11,7 +11,11 @@ from throughtunnel.positioning.dead_reckoning import (
     FilteredDeadReckoning,
     RawDeadReckoning,
 )
-from throughtunnel.positioning.route_constrained import RouteImuDeadReckoning, RouteSpeedHold
+from throughtunnel.positioning.route_constrained import (
+    RouteImuDeadReckoning,
+    RouteSpeedHold,
+    RouteVehicleSpeed,
+)
 from throughtunnel.positioning.runner import EstimateTrack, align_imu, run_estimator, run_estimators
 
 # Registry used by the UI and experiments: name -> estimator class (constructed with the route map).
@@ -24,12 +28,22 @@ ESTIMATORS: dict[str, type[Estimator]] = {
         FilteredDeadReckoning,
         RouteImuDeadReckoning,
         RouteSpeedHold,
+        RouteVehicleSpeed,
     )
+}
+# The phone-only solution (D20) vs. reference estimators that use the car's speed reading (D41).
+MAIN_ESTIMATORS: dict[str, type[Estimator]] = {
+    n: cls for n, cls in ESTIMATORS.items() if not cls.uses_vehicle_speed
+}
+REFERENCE_ESTIMATORS: dict[str, type[Estimator]] = {
+    n: cls for n, cls in ESTIMATORS.items() if cls.uses_vehicle_speed
 }
 
 __all__ = [
     "ALIGNMENTS",
     "ESTIMATORS",
+    "MAIN_ESTIMATORS",
+    "REFERENCE_ESTIMATORS",
     "AlignmentStage",
     "EstimateTrack",
     "Estimator",

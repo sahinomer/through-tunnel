@@ -27,9 +27,9 @@ from pathlib import Path
 import numpy as np
 
 from throughtunnel.evaluation.experiment import compare_estimators, markdown_table
-from throughtunnel.evaluation.factor_study import BLUES, GRID, INK, INK_2, SERIES, SHORT, SURFACE
+from throughtunnel.evaluation.factor_study import BLUES, GRID, INK, INK_2, SERIES, SHORT, SURFACE, short_ticks
 from throughtunnel.evaluation.slope_study import ideal_sensors, realistic_sensors
-from throughtunnel.positioning import ESTIMATORS
+from throughtunnel.positioning import MAIN_ESTIMATORS
 from throughtunnel.scenario import list_presets, load_preset, run_scenario, truth_at, with_sensor_config
 from throughtunnel.vehicle.traffic import SCENARIO_LABELS, TrafficConfig
 
@@ -47,7 +47,7 @@ def run_records(res, tag: dict) -> list[dict]:
     standing = float(np.sum(m.v[tunnel] == 0.0) * (m.t[1] - m.t[0]))
     route_len = res.route_map.length_m
     out = []
-    cmp = compare_estimators(res)
+    cmp = compare_estimators(res, list(MAIN_ESTIMATORS))
     for track, ev in zip(cmp.tracks, cmp.evaluations, strict=True):
         before_c = track.t < c_t
         k = int(np.flatnonzero(before_c)[-1])
@@ -154,7 +154,7 @@ def error_table(records, preset, sensors) -> list[dict[str, str]]:
     rows = []
     for sc in SCENARIOS:
         row = {"scenario": SCENARIO_LABELS[sc]}
-        for name in ESTIMATORS:
+        for name in MAIN_ESTIMATORS:
             sel = _sel(records, preset=preset, study="main", sensors=sensors, scenario=sc, estimator=name)
             vals = [r["exit_total_m"] for r in sel]
             row[name] = _capped(_med_p90(vals) if sensors == "realistic" else _med(vals), sel)
@@ -166,7 +166,7 @@ def max_table(records, preset) -> list[dict[str, str]]:
     rows = []
     for sc in SCENARIOS:
         row = {"scenario": SCENARIO_LABELS[sc]}
-        for name in ESTIMATORS:
+        for name in MAIN_ESTIMATORS:
             sel = _sel(records, preset=preset, study="main", sensors="realistic", scenario=sc, estimator=name)
             row[name] = _med([r["tunnel_max_m"] for r in sel])
         rows.append(row)
@@ -181,7 +181,7 @@ def heading_announcement_table(records, preset) -> list[dict[str, str]]:
             records, preset=preset, study="main", sensors="realistic", scenario=sc, estimator="dr_calibrated"
         )
         row["dr_calibrated |heading err.|"] = _med([abs(r["heading_error_deg"]) for r in dc], "{:.2f}°")
-        for name in ESTIMATORS:
+        for name in MAIN_ESTIMATORS:
             sel = _sel(records, preset=preset, study="main", sensors="realistic", scenario=sc, estimator=name)
             v = np.array([r["announcement_error_s"] for r in sel], dtype=float)
             row[f"{name} announce"] = (
@@ -198,7 +198,7 @@ def sweep_table(records, preset, study, label, fmt) -> list[dict[str, str]]:
         sel_v = _sel(records, preset=preset, study=study, value=val)
         dc = [r for r in sel_v if r["estimator"] == "dr_calibrated"]
         row = {label: fmt.format(val), "time in tunnel [s]": _med([r["tunnel_time_s"] for r in dc])}
-        for name in ESTIMATORS:
+        for name in MAIN_ESTIMATORS:
             sel = [r for r in sel_v if r["estimator"] == name]
             row[name] = _capped(_med([r["exit_total_m"] for r in sel]), sel)
         rows.append(row)
@@ -256,11 +256,12 @@ def plot_figures(records, names, out: Path) -> list[Path]:
     for ax, pid in zip(np.atleast_1d(axes), presets, strict=True):
         real = _sel(records, preset=pid, study="main", sensors="realistic")
         grid = np.array([
-            [np.median([r["exit_total_m"] for r in _sel(real, scenario=sc, estimator=n)]) for n in ESTIMATORS]
+            [np.median([r["exit_total_m"] for r in _sel(real, scenario=sc, estimator=n)])
+             for n in MAIN_ESTIMATORS]
             for sc in SCENARIOS
         ])  # fmt: skip
         capped = np.array([
-            [_mostly_capped(_sel(real, scenario=sc, estimator=n)) for n in ESTIMATORS]
+            [_mostly_capped(_sel(real, scenario=sc, estimator=n)) for n in MAIN_ESTIMATORS]
             for sc in SCENARIOS
         ])  # fmt: skip
         ax.imshow(grid, cmap=cmap, norm=norm, aspect="auto")
@@ -274,9 +275,7 @@ def plot_figures(records, names, out: Path) -> list[Path]:
                 fontsize=8,
                 color=INK if norm(v) < 7 else "#ffffff",
             )
-        ax.set_xticks(
-            range(len(ESTIMATORS)), [SHORT[n].replace(" + ", "\n+ ") for n in ESTIMATORS], fontsize=8
-        )
+        ax.set_xticks(range(len(MAIN_ESTIMATORS)), short_ticks(MAIN_ESTIMATORS), fontsize=8)
         ax.set_yticks(range(len(SCENARIOS)), [SCENARIO_LABELS[s] for s in SCENARIOS])
         ax.set_title(names[pid], color=INK)
         ax.tick_params(length=0)

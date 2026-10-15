@@ -40,8 +40,9 @@ from throughtunnel.evaluation.factor_study import (
     SURFACE,
     WIDTHS,
     _nanmedian_rows,
+    short_ticks,
 )
-from throughtunnel.positioning import ESTIMATORS
+from throughtunnel.positioning import MAIN_ESTIMATORS
 from throughtunnel.road_profile import RoadProfileConfig, point_distances, template_heights
 from throughtunnel.scenario import (
     build_route_map,
@@ -120,7 +121,7 @@ def run_records(res, profile: Profile, sensors: str, seed: int, preset: str):
     loss, c_t = res.gnss_events.loss_t, res.sections.exit_t
     end = min(res.gnss_events.reacquire_t, c_t)
     route_len = res.route_map.length_m
-    cmp = compare_estimators(res)
+    cmp = compare_estimators(res, list(MAIN_ESTIMATORS))
     records, curves = [], {}
     for track, ev in zip(cmp.tracks, cmp.evaluations, strict=True):
         before_c = track.t < c_t
@@ -198,7 +199,7 @@ def ideal_table(records, preset) -> list[dict[str, str]]:
         sel = {r["estimator"]: r for r in _sel(records, preset=preset, sensors="ideal", profile=p.key)}
         dc = sel["dr_calibrated"]
         row = {"profile": p.label}
-        for name in ESTIMATORS:
+        for name in MAIN_ESTIMATORS:
             r = sel[name]
             row[name] = f"{r['exit_total_m']:.0f}" + (" §" if r["route_end_reached"] else "")
         row["dr_calibrated along / cross"] = f"{dc['exit_along_m']:+.0f} / {dc['exit_cross_m']:+.0f}"
@@ -214,7 +215,7 @@ def realistic_table(records, preset) -> list[dict[str, str]]:
     rows = []
     for p in PROFILES:
         row = {"profile": p.label}
-        for name in ESTIMATORS:
+        for name in MAIN_ESTIMATORS:
             sel = _sel(records, preset=preset, sensors="realistic", profile=p.key, estimator=name)
             row[name] = _med_p90([r["exit_total_m"] for r in sel]) + _flag(sel)
         rows.append(row)
@@ -230,7 +231,7 @@ def shift_table(records, preset) -> list[dict[str, str]]:
     }
     for p in PROFILES[1:]:
         row = {"profile": p.label}
-        for name in ESTIMATORS:
+        for name in MAIN_ESTIMATORS:
             sel = _sel(records, preset=preset, sensors="realistic", profile=p.key, estimator=name)
             d = np.array([r["exit_along_m"] - flat[(r["seed"], name)]["exit_along_m"] for r in sel])
             row[name] = f"{np.median(d):+.0f} [{d.min():+.0f}, {d.max():+.0f}]"
@@ -254,7 +255,7 @@ def announcement_table(records, preset) -> list[dict[str, str]]:
     rows = []
     for p in PROFILES:
         row = {"profile": p.label}
-        for name in ESTIMATORS:
+        for name in MAIN_ESTIMATORS:
             sel = _sel(records, preset=preset, sensors="realistic", profile=p.key, estimator=name)
             v = np.array([r["announcement_error_s"] for r in sel], dtype=float)
             row[name] = (
@@ -292,7 +293,7 @@ def tables_markdown(records, info, seeds) -> str:
         out.append(markdown_table(announcement_table(records, pid)) + "\n")
         rows = []
         for p in PROFILES:
-            for name in ESTIMATORS:
+            for name in MAIN_ESTIMATORS:
                 sel = _sel(records, preset=pid, sensors="realistic", profile=p.key, estimator=name)
                 row = {"profile": p.label, "estimator": name}
                 for tau in GROWTH_TIMES_S:
@@ -323,12 +324,12 @@ def plot_figures(info, records, out: Path) -> list[Path]:
     paths = []
 
     fig, axes = plt.subplots(
-        len(presets), len(ESTIMATORS), figsize=(16, 3.1 * len(presets)), sharex=True, sharey=True
+        len(presets), len(MAIN_ESTIMATORS), figsize=(16, 3.1 * len(presets)), sharex=True, sharey=True
     )
     axes = np.atleast_2d(axes)
     for i, pid in enumerate(presets):
         med = info[pid]["medians"]
-        for j, name in enumerate(ESTIMATORS):
+        for j, name in enumerate(MAIN_ESTIMATORS):
             ax = axes[i, j]
             for k in reversed(range(len(shown))):
                 y = np.maximum(med[("realistic", shown[k].key, name)], 0.1)
@@ -367,7 +368,7 @@ def plot_figures(info, records, out: Path) -> list[Path]:
         real = _sel(records, preset=pid, sensors="realistic")
         grid = np.array([
             [np.median([r["exit_total_m"] for r in _sel(real, profile=p.key, estimator=n)])
-             for n in ESTIMATORS]
+             for n in MAIN_ESTIMATORS]
             for p in PROFILES
         ])  # fmt: skip
         ax.imshow(grid, cmap=cmap, norm=norm, aspect="auto")
@@ -381,9 +382,7 @@ def plot_figures(info, records, out: Path) -> list[Path]:
                 fontsize=8,
                 color=INK if norm(v) < 7 else "#ffffff",
             )
-        ax.set_xticks(
-            range(len(ESTIMATORS)), [SHORT[n].replace(" + ", "\n+ ") for n in ESTIMATORS], fontsize=8
-        )
+        ax.set_xticks(range(len(MAIN_ESTIMATORS)), short_ticks(MAIN_ESTIMATORS), fontsize=8)
         ax.set_yticks(range(len(PROFILES)), [p.label for p in PROFILES])
         ax.set_title(info[pid]["name"], color=INK)
         ax.tick_params(length=0)

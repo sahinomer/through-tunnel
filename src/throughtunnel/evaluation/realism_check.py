@@ -21,7 +21,7 @@ import numpy as np
 from throughtunnel.evaluation.experiment import markdown_table
 from throughtunnel.evaluation.slope_study import realistic_sensors
 from throughtunnel.evaluation.traffic_study import run_records
-from throughtunnel.positioning import ESTIMATORS
+from throughtunnel.positioning import MAIN_ESTIMATORS
 from throughtunnel.scenario import list_presets, load_preset, run_scenario, with_sensor_config
 from throughtunnel.vehicle.traffic import TrafficConfig
 
@@ -69,7 +69,7 @@ def table(records, preset: str, traffic: str) -> list[dict[str, str]]:
     base = {(r["seed"], r["estimator"]): r for r in here if r["condition"] == "baseline"}
     for cond, label in CONDITIONS.items():
         row = {"condition": label}
-        for name in ESTIMATORS:
+        for name in MAIN_ESTIMATORS:
             sel = [r for r in records if r["preset"] == preset and r["traffic"] == traffic
                    and r["condition"] == cond and r["estimator"] == name]  # fmt: skip
             err = np.array([r["exit_total_m"] for r in sel])

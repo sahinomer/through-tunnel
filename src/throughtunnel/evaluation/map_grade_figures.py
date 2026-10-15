@@ -11,9 +11,18 @@ from pathlib import Path
 
 import numpy as np
 
-from throughtunnel.evaluation.factor_study import BLUES, DASHES, GRID, INK, INK_2, SERIES, SHORT, SURFACE
+from throughtunnel.evaluation.factor_study import (
+    BLUES,
+    DASHES,
+    GRID,
+    INK,
+    INK_2,
+    SERIES,
+    SURFACE,
+    short_ticks,
+)
 from throughtunnel.evaluation.slope_study import PROFILES
-from throughtunnel.positioning import ESTIMATORS
+from throughtunnel.positioning import MAIN_ESTIMATORS
 
 BLOCK_TITLES = {"slope": "free flow", "traffic": "stop-and-go traffic (T3)"}
 
@@ -51,16 +60,14 @@ def plot_figures(records, medians, names, out: Path) -> list[Path]:
             sel = _sel(real, map_grade=grade)
             grid = np.array([
                 [np.median([r["exit_total_m"] for r in _sel(sel, profile=p.key, estimator=n)])
-                 for n in ESTIMATORS]
+                 for n in MAIN_ESTIMATORS]
                 for p in PROFILES
             ])  # fmt: skip
             ax.imshow(grid, cmap=cmap, norm=norm, aspect="auto")
             for (r, c), v in np.ndenumerate(grid):
                 ax.text(c, r, f"{v:.0f}", ha="center", va="center", fontsize=8,
                         color=INK if norm(v) < 7 else "#ffffff")  # fmt: skip
-            ax.set_xticks(
-                range(len(ESTIMATORS)), [SHORT[n].replace(" + ", "\n+ ") for n in ESTIMATORS], fontsize=8
-            )
+            ax.set_xticks(range(len(MAIN_ESTIMATORS)), short_ticks(MAIN_ESTIMATORS), fontsize=8)
             ax.set_yticks(range(len(PROFILES)), [p.label for p in PROFILES])
             ax.set_title(f"{_short_name(names[pid])}: map grade {'on' if grade else 'off'}", color=INK)
             ax.tick_params(length=0)

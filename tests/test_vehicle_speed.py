@@ -85,8 +85,12 @@ def test_changing_the_sensor_re_simulates_only_the_reading(demo):
     assert np.allclose(other.vehicle_speed.speed_mps * 1.02, demo.vehicle_speed.speed_mps * 0.96)
 
 
-def test_no_main_estimator_declares_the_vehicle_speed():
-    assert not any(cls.uses_vehicle_speed for cls in ESTIMATORS.values())
+def test_only_the_reference_estimator_declares_the_vehicle_speed():
+    from throughtunnel.positioning import MAIN_ESTIMATORS, REFERENCE_ESTIMATORS
+
+    assert set(REFERENCE_ESTIMATORS) == {"route_vspeed"}
+    assert not any(cls.uses_vehicle_speed for cls in MAIN_ESTIMATORS.values())
+    assert set(MAIN_ESTIMATORS) | set(REFERENCE_ESTIMATORS) == set(ESTIMATORS)
 
 
 def test_only_a_declaring_estimator_receives_the_vehicle_speed(demo):
@@ -111,3 +115,47 @@ def test_a_declaring_estimator_without_a_reading_fails_loudly(demo):
     obs = replace(demo.observations(), vehicle_speed=None)
     with pytest.raises(ValueError, match="needs the vehicle speed"):
         run_estimator(SpeedRecorder(obs.route), obs)
+
+
+# ------------------------------------------------------------------ the reference estimator
+def ideal_run(scale_pct: float, **update):
+    from throughtunnel.evaluation.slope_study import ideal_sensors
+    from throughtunnel.scenario import with_sensor_config
+
+    cfg = load_preset("synthetic_demo_track")
+    cfg = cfg.model_copy(update={"vehicle_speed": VehicleSpeedConfig(scale_error_pct=scale_pct), **update})
+    imu, gnss = ideal_sensors(cfg)
+    return with_sensor_config(run_scenario(cfg), imu=imu, gnss=gnss)
+
+
+def along_error_at_c(res, est):
+    from throughtunnel.evaluation.metrics import evaluate_track
+
+    return evaluate_track(run_estimator(est, res.observations()), res).summary["exit_along_m"]
+
+
+def test_reference_with_a_perfect_speed_reading_is_accurate():
+    res = ideal_run(0.0)
+    est = ESTIMATORS["route_vspeed"](res.route_map)
+    assert abs(along_error_at_c(res, est)) < 10.0  # only map vs driven distance remains
+    assert est.scale == pytest.approx(1.0, abs=1e-3)
+
+
+def test_reference_calibrates_the_scale_error_away():
+    res = ideal_run(3.0)
+    raw = ESTIMATORS["route_vspeed"](res.route_map)
+    raw.calibrate_scale = False
+    calibrated = ESTIMATORS["route_vspeed"](res.route_map)
+    raw_err, cal_err = along_error_at_c(res, raw), along_error_at_c(res, calibrated)
+    t_f = float(res.gnss.t[res.gnss.t < res.gnss_events.loss_t][-1])
+    s_at = lambda t: float(np.interp(t, res.truth.t, res.truth.s))  # noqa: E731
+    travelled = s_at(res.sections.exit_t) - s_at(t_f)
+    assert raw_err == pytest.approx(0.03 * travelled, rel=0.1)  # reads 3 % high: 3 % of the distance ahead
+    assert calibrated.scale == pytest.approx(1 / 1.03, rel=2e-3)
+    assert abs(cal_err) < 0.15 * abs(raw_err)
+
+
+def test_reference_is_unaffected_by_stops():
+    res = ideal_run(2.0, traffic=TrafficConfig(scenario="stop_and_go"))
+    assert (res.motion.v == 0.0).any()
+    assert abs(along_error_at_c(res, ESTIMATORS["route_vspeed"](res.route_map))) < 10.0

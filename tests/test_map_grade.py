@@ -10,7 +10,7 @@ import pytest
 from throughtunnel.evaluation.experiment import compare_estimators
 from throughtunnel.evaluation.slope_study import PROFILES, ideal_sensors, profile_config
 from throughtunnel.observations import RouteMap
-from throughtunnel.positioning import ESTIMATORS, align_imu, run_estimator
+from throughtunnel.positioning import ESTIMATORS, MAIN_ESTIMATORS, align_imu, run_estimator
 from throughtunnel.positioning.alignment import GpsImuAlignment
 from throughtunnel.positioning.map_grade import GradeCompensation, grade_compensation
 from throughtunnel.scenario import (
@@ -128,6 +128,6 @@ def test_study_pairs_each_run_with_the_grade_off_and_on():
     res = sloped("synthetic_demo_track", "up2")
     records, curves = run_records(res, {"preset": "synthetic_demo_track", "sensors": "ideal", "seed": 0})
     by = {(r["map_grade"], r["estimator"]): r for r in records}
-    assert len(records) == 2 * len(ESTIMATORS) and set(curves) == set(by)
+    assert len(records) == 2 * len(MAIN_ESTIMATORS) and set(curves) == set(by)  # the study is phone-only
     assert by[(True, "route_hold")]["exit_total_m"] == by[(False, "route_hold")]["exit_total_m"]
     assert by[(True, "route_imu")]["exit_total_m"] < 0.05 * by[(False, "route_imu")]["exit_total_m"]
