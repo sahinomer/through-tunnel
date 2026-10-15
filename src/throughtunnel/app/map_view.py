@@ -39,7 +39,7 @@ class MapView:
         ui.add_body_html(f"<script>{TRACK_PLAYER_JS}</script>")
         self.client = context.client
         self.map = ui.leaflet(center=(47.6086, -122.3398), zoom=13).classes("w-full")
-        self.map.style("height: 62vh")
+        self.map.style("height: 50vh; min-height: 320px")
         self.layers: dict[str, Any] = {}
 
     # ------------------------------------------------------------------ layers

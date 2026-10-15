@@ -72,6 +72,7 @@ DEFAULT_PRESET = "seattle_sr99_tunnel"
 TICK_S = 0.05  # server UI refresh (readouts, plot cursor, slider); map motion is client-side
 PLOT_CURSOR_EVERY = 2  # ticks
 SLIDER_EVERY = 5  # ticks
+COLUMNS_HEIGHT = "calc(100vh - 84px)"  # viewport minus the header and the page padding
 RESYNC_EVERY = 100  # ticks: periodic re-anchoring of the browser clock while playing (safety net)
 
 
@@ -98,17 +99,29 @@ class SimulatorPage:
                 "text-sm opacity-80"
             )
 
-        with ui.row().classes("w-full no-wrap items-start gap-4"):
-            with ui.column().classes("gap-1").style("flex: 3 1 0; min-width: 0"):
+        # Two columns that scroll independently (the page itself does not): map and plots on the left,
+        # cards and settings on the right, so scrolling the settings never moves the map or the plots.
+        with ui.row().classes("w-full no-wrap items-stretch gap-4").style(f"height: {COLUMNS_HEIGHT}"):
+            with ui.column().classes("gap-1 h-full overflow-y-auto").style("flex: 3 1 0; min-width: 0"):
                 self.map_view = MapView()
                 self.picker = RoutePicker(self.map_view, OsrmRouteProvider(), self._on_picked_route)
+                self._build_plots()
 
-            with ui.column().classes("gap-3").style("flex: 2 1 0; min-width: 360px"):
+            with (
+                ui.column()
+                .classes("gap-3 h-full overflow-y-auto pr-1")
+                .style("flex: 2 1 0; min-width: 360px")
+            ):
                 self._build_scenario_card()
                 self._build_playback_card()
                 self._build_positioning_card()
                 self._build_settings()
+        for plot in (self.plot, self.imu_plot, self.err_plot):
+            plot.on("plotly_click", self._on_plot_click)
+        ui.timer(TICK_S, self._tick)
+        ui.timer(0.1, self._initial_load, once=True)
 
+    def _build_plots(self) -> None:
         # keep_alive=False: the hidden plot is unmounted (Plotly cannot resize a hidden div); only the
         # visible plot receives cursor updates, and a newly shown plot starts from the current cursor.
         with ui.tabs(on_change=self._on_tab).classes("w-full") as self.tabs:
@@ -124,10 +137,6 @@ class SimulatorPage:
                 self.err_plot = ui.plotly(
                     empty_figure("Positioning runs after a scenario is generated")
                 ).classes("w-full")
-        for plot in (self.plot, self.imu_plot, self.err_plot):
-            plot.on("plotly_click", self._on_plot_click)
-        ui.timer(TICK_S, self._tick)
-        ui.timer(0.1, self._initial_load, once=True)
 
     def _build_settings(self) -> None:
         """Settings groups, most used first; within a group the least used settings come last."""
