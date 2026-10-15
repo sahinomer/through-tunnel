@@ -31,7 +31,7 @@ import numpy as np
 from numpy.typing import ArrayLike
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from throughtunnel.observations import GnssStream, Observations, RouteMap
+from throughtunnel.observations import GnssStream, Observations, RouteMap, VehicleSpeedStream
 from throughtunnel.randomness import rng_stream
 from throughtunnel.road import RoadConfig, RoadPath
 from throughtunnel.road_profile import VERTICAL_ACCEL_WARNING, ElevationProfile, RoadProfileConfig
@@ -40,6 +40,7 @@ from throughtunnel.sensors.errors import ImuErrorConfig, ImuErrorRealization, ap
 from throughtunnel.sensors.gnss import GnssConfig, GnssEvents, gnss_timestamps, simulate_gnss
 from throughtunnel.sensors.imu import ImuConfig, ImuStream, ideal_imu, imu_timestamps
 from throughtunnel.sensors.mounting import CalibrationErrorConfig
+from throughtunnel.sensors.vehicle_speed import VehicleSpeedConfig, simulate_vehicle_speed
 from throughtunnel.vehicle.config import DriverConfig
 from throughtunnel.vehicle.longitudinal import LongitudinalTrajectory, simulate_longitudinal
 from throughtunnel.vehicle.speed_profile import SpeedProfile, plan_speed_profile
@@ -57,7 +58,8 @@ from throughtunnel.vehicle.truth import GroundTruth, build_ground_truth
 # v7: added `road_profile` (road elevation, D36); default flat.
 # v8: added `traffic` (traffic scenario in the tunnel, D37); default free flow.
 # v9: added `map_data` (what the navigation map provides to the estimators, D39); default no grade.
-SCHEMA_VERSION = 9
+# v10: added `vehicle_speed` (the car's speed reading, reference only, D41); default +2 % scale error.
+SCHEMA_VERSION = 10
 MAP_GRADE_STEP_M = 10.0
 
 TUNNEL_MIN_LENGTH_M = 500.0
@@ -124,6 +126,10 @@ class ScenarioConfig(BaseModel):
     map_data: MapDataConfig = Field(
         default_factory=MapDataConfig,
         description="Information the navigation map gives the estimators (positioning side, D39)",
+    )
+    vehicle_speed: VehicleSpeedConfig = Field(
+        default_factory=VehicleSpeedConfig,
+        description="The car's speed reading (OBD / speedometer), reference estimator only (D41)",
     )
     tunnel: TunnelConfig | None = Field(None, description="None = no tunnel (GPS on the whole route)")
     gnss: GnssConfig = Field(default_factory=GnssConfig)
@@ -193,10 +199,14 @@ class SimulationResult:
     gnss_ideal: GnssStream
     gnss_events: GnssEvents
     traffic: TrafficPlan = field(default_factory=TrafficPlan)  # zones and stops used (hidden state)
+    vehicle_speed: VehicleSpeedStream | None = None  # the car's speed reading (reference only, D41)
 
     def observations(self) -> Observations:
-        """The only data an estimator may use (D15): measured IMU, measured GPS, the route map."""
-        return Observations(imu=self.imu, gnss=self.gnss, route=self.route_map)
+        """The only data the positioning pipeline may use (D15): measured IMU, measured GPS, the route
+        map, and the car's speed reading, which the runner passes only to estimators that declare it."""
+        return Observations(
+            imu=self.imu, gnss=self.gnss, route=self.route_map, vehicle_speed=self.vehicle_speed
+        )
 
 
 def build_path(config: ScenarioConfig) -> RoadPath:
@@ -237,6 +247,7 @@ def run_scenario(config: ScenarioConfig, path: RoadPath | None = None) -> Simula
         gnss_ideal=gnss_ideal,
         gnss_events=gnss_events,
         traffic=traffic,
+        vehicle_speed=simulate_vehicle_speed(truth, config.vehicle_speed),
     )
     return with_map_data(result, config.map_data)
 
@@ -447,6 +458,12 @@ def with_map_data(result: SimulationResult, map_data: MapDataConfig) -> Simulati
     route_map = replace(result.route_map, road_grade=grade, grade_step_m=MAP_GRADE_STEP_M)
     config = result.config.model_copy(update={"map_data": map_data})
     return replace(result, config=config, route_map=route_map)
+
+
+def with_vehicle_speed(result: SimulationResult, vehicle_speed: VehicleSpeedConfig) -> SimulationResult:
+    """Same simulation with another vehicle-speed sensor; only that reading is re-simulated."""
+    config = result.config.model_copy(update={"vehicle_speed": vehicle_speed})
+    return replace(result, config=config, vehicle_speed=simulate_vehicle_speed(result.truth, vehicle_speed))
 
 
 def with_imu_config(result: SimulationResult, imu: ImuConfig) -> SimulationResult:

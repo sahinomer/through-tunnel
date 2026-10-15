@@ -67,6 +67,7 @@ from throughtunnel.scenario import (
 from throughtunnel.sensors.gnss import GnssConfig
 from throughtunnel.sensors.imu import ImuConfig
 from throughtunnel.sensors.mounting import CalibrationErrorConfig
+from throughtunnel.sensors.vehicle_speed import VehicleSpeedConfig
 from throughtunnel.vehicle.config import DRIVER_PRESETS
 
 DEFAULT_PRESET = "seattle_sr99_tunnel"
@@ -85,6 +86,7 @@ class SimulatorPage:
         self.scenario_name = "Custom route"
         self.base_imu = ImuConfig()  # fields without controls (e.g. gravity model) come from here
         self.base_gnss = GnssConfig()
+        self.base_vehicle_speed = VehicleSpeedConfig()  # rate etc. (no controls) come from here
         self.comparison: Comparison | None = None
         self.visible_estimators: set[str] = set(ESTIMATORS)
         self._last_tick = time.perf_counter()
@@ -239,6 +241,8 @@ class SimulatorPage:
 
     async def _load_scenario(self, cfg: ScenarioConfig) -> None:
         self.drive_panel.set(cfg.driver, cfg.road, cfg.seed, cfg.sample_rate_hz)
+        self.drive_panel.set_vehicle_speed(cfg.vehicle_speed)
+        self.base_vehicle_speed = cfg.vehicle_speed
         self.base_imu, self.base_gnss = cfg.imu, cfg.gnss
         self.mount_panel.set(cfg.imu)
         self.calibration_panel.set(cfg.calibration)
@@ -300,6 +304,7 @@ class SimulatorPage:
                 imu=self._imu_from_controls(),
                 calibration=self.calibration_panel.config(),
                 map_data=self.map_data_panel.config(),
+                vehicle_speed=self.drive_panel.vehicle_speed(self.base_vehicle_speed),
                 gnss=self.gps_panel.gnss(self.base_gnss),
                 tunnel=self.tunnel_panel.config(),
                 traffic=self.traffic_panel.config(),

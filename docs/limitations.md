@@ -65,7 +65,7 @@ methods.
 
 | Source | What it would give | Notes |
 |---|---|---|
-| Vehicle speed (OBD, Android Auto / CarPlay) | direct speed: immune to grade, traffic and stops; error ∝ distance (scale ~1–3 %, quantisation 1 km/h) | Excluded from the main solution (D20); planned as a "what if" reference experiment. |
+| Vehicle speed (OBD, Android Auto / CarPlay) | direct speed: immune to grade, traffic and stops; error ∝ distance | **Simulated** since D41 as a reference-only sensor (fixed scale error, default +2 %); only an estimator that declares it receives it (D20). Not modelled: the 1 km/h quantisation of the OBD value (up to ±0.14 m/s, i.e. ~20 m over 150 s at constant speed), noise, latency, dropouts. |
 | Bluetooth beacons in tunnels (e.g. the Waze Beacons programme) | absolute position fixes inside the tunnel | Installed in some cities' tunnels; an infrastructure answer. |
 | Cellular / Wi-Fi positioning | coarse fixes | Coverage in tunnels varies; accuracy typically tens to hundreds of metres. |
 

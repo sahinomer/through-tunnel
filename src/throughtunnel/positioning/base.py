@@ -36,11 +36,16 @@ class Estimator(ABC):
     ``alignment`` names the stage that feeds the estimator (``alignment.ALIGNMENTS``); None = the
     estimator uses no IMU and receives None samples (time ticks only). Experiments may set another
     stage on an instance to compare alignment methods on the same estimator.
+
+    ``uses_vehicle_speed`` (D41): the car's own speed reading is reference information, kept out of the
+    main solution (D20). The runner calls ``on_vehicle_speed`` only for a class that sets it to True
+    (the reference estimator); every other estimator never receives it.
     """
 
     name: str = "estimator"
     label: str = "Estimator"
     alignment: str | None = "gps_imu"
+    uses_vehicle_speed: bool = False
 
     def __init__(self, route: RouteMap) -> None:
         self.route = route
@@ -53,6 +58,10 @@ class Estimator(ABC):
     @abstractmethod
     def on_gnss(self, fix: GnssFix) -> None:
         """One GPS fix."""
+
+    def on_vehicle_speed(self, t: float, speed_mps: float) -> None:
+        """One reading of the car's speed (only for estimators that declare ``uses_vehicle_speed``)."""
+        raise NotImplementedError(f"{type(self).__name__} does not declare uses_vehicle_speed")
 
     @abstractmethod
     def state(self) -> StateEstimate | None:

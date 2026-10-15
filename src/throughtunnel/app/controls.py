@@ -35,6 +35,7 @@ from throughtunnel.sensors.mounting import (
     PhoneMount,
     describe_phone_axes,
 )
+from throughtunnel.sensors.vehicle_speed import VehicleSpeedConfig
 from throughtunnel.vehicle.config import DRIVER_PRESETS, DriverConfig
 from throughtunnel.vehicle.traffic import SCENARIO_LABELS, TrafficConfig
 
@@ -112,6 +113,14 @@ class DrivePanel(Panel):
             self.s_dec = slider("Max deceleration", 0.5, 6.0, 0.1, d.max_decel, "m/s²")
             self.s_jerk = slider("Max jerk", 0.5, 8.0, 0.1, d.max_jerk, "m/s³")
             ui.separator()
+            self.s_vspeed = slider(
+                "Vehicle speed scale error", -5, 5, 0.5, VehicleSpeedConfig().scale_error_pct, "%"
+            )
+            ui.label(
+                "The car's own speed reading (OBD / speedometer), off by the fixed scale error (+ = reads "
+                "high). Reference information: only an estimator that declares it receives it (D41)."
+            ).classes("text-xs text-gray-500")
+            ui.separator()
             self.s_wave = slider("Road smoothing λc", 0, 400, 10, r.smoothing_wavelength_m, "m")
             self.s_cut = slider("Max corner cut", 0.5, 10, 0.5, r.max_corner_cut_m, "m")
             with ui.row().classes("w-full items-center no-wrap gap-2"):
@@ -142,6 +151,13 @@ class DrivePanel(Panel):
             "max_corner_cut_m": float(self.s_cut.value),
         }
         return RoadConfig(**values)
+
+    def vehicle_speed(self, base: VehicleSpeedConfig) -> VehicleSpeedConfig:
+        return base.model_copy(update={"scale_error_pct": float(self.s_vspeed.value)})
+
+    def set_vehicle_speed(self, vehicle_speed: VehicleSpeedConfig) -> None:
+        with self._quiet():
+            self.s_vspeed.value = vehicle_speed.scale_error_pct
 
     @property
     def seed(self) -> int:

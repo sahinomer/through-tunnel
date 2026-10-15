@@ -9,6 +9,10 @@ information flow is strictly causal.
 Each alignment stage runs once per run; its vehicle-axis samples are shared by every estimator that
 uses it (a stage depends only on the observations, not on the estimator). The calibration error is an
 experiment setting applied inside the stage (``alignment.py``); estimators never receive it.
+
+The car's speed reading (``Observations.vehicle_speed``, D41) goes only to estimators that declare
+``uses_vehicle_speed``: the boundary that keeps it out of the main solution (D20) is enforced here.
+Ties: a reading at the same timestamp as an IMU sample comes after the sample and its GPS fixes.
 """
 
 from __future__ import annotations
@@ -135,23 +139,36 @@ def replay(
     imu: Sequence[VehicleImu | None],
     output_rate_hz: float = DEFAULT_OUTPUT_RATE_HZ,
 ) -> EstimateTrack:
-    """Feed one estimator its vehicle-axis IMU stream and the GPS fixes in time order."""
+    """Feed one estimator its vehicle-axis IMU stream, the GPS fixes and, only if it declares
+    ``uses_vehicle_speed``, the car's speed readings, all in time order."""
     imu_t = obs.imu.t.tolist()
     fixes = [obs.gnss.fix(i) for i in range(len(obs.gnss))]
     announcer = Announcer(obs.route)
+    speed_t: list[float] = []
+    speed_v: list[float] = []
+    if estimator.uses_vehicle_speed:
+        if obs.vehicle_speed is None:
+            raise ValueError(f"{estimator.name} needs the vehicle speed, but the observations have none")
+        speed_t, speed_v = obs.vehicle_speed.t.tolist(), obs.vehicle_speed.speed_mps.tolist()
 
     rows: list[tuple] = []
     out_dt = 1.0 / output_rate_hz
     next_out = imu_t[0] if imu_t else 0.0
-    j = 0
+    j = k = 0
     for i, t in enumerate(imu_t):
         while j < len(fixes) and fixes[j].t < t:  # fixes strictly before this sample
             estimator.on_gnss(fixes[j])
             j += 1
+        while k < len(speed_t) and speed_t[k] < t:
+            estimator.on_vehicle_speed(speed_t[k], speed_v[k])
+            k += 1
         estimator.on_imu(t, imu[i])
         while j < len(fixes) and fixes[j].t <= t:  # fixes at the same timestamp come after the IMU sample
             estimator.on_gnss(fixes[j])
             j += 1
+        while k < len(speed_t) and speed_t[k] <= t:
+            estimator.on_vehicle_speed(speed_t[k], speed_v[k])
+            k += 1
         if t >= next_out - 1e-9:
             next_out += out_dt
             est = estimator.state()

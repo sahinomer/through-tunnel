@@ -62,7 +62,9 @@ Options: `uv run throughtunnel --port 8090 --host 0.0.0.0 --no-browser`.
    on it, and the grade at the vehicle.
 3. **Change the scenario.** Under *Drive and simulation* (the last settings group) you can set the driver style (calm / normal /
    sporty), cruise speed, speed variability, the lateral/longitudinal acceleration and jerk limits, the
-   road smoothing settings, the random seed and the sample rate. Then press **Generate**.
+   road smoothing settings, the random seed and the sample rate, and the *vehicle speed scale error*:
+   the car's own speed reading (OBD / speedometer), reference information that only a dedicated
+   reference estimator receives (D41). Then press **Generate**.
 4. **Mount the phone.** Under *Phone IMU: mounting, errors, calibration* → *Mounting* pick a mounting
    preset (aligned with the vehicle, flat in portrait, dashboard holder in portrait / tilted /
    landscape) or set yaw, pitch and roll yourself. The lever arm (where the phone sits relative to the
@@ -231,7 +233,9 @@ Stop-and-go traffic and map errors are on the roadmap.
 - **Map grade for the estimators** (done, 2026-10-15, D39). Optional exact road grade from the map;
   sloped tunnels return to the flat-road accuracy in free flow, and stop-and-go on a climb drops from
   kilometres to 52–228 m median ([docs/map_grade_study.md](docs/map_grade_study.md)).
-- **Next:** an estimator that handles standstills and time-driven drift; map errors; a
+- **Vehicle speed sensor and final simulator freeze** (done, 2026-10-15, D41). The car's speed reading
+  with a fixed scale error, as reference information for one dedicated estimator only.
+- **Next:** a fixed benchmark; an estimator that handles standstills and time-driven drift; map errors; a
   probabilistic estimator with covariance; then the write-up. Tracked in [docs/roadmap.md](docs/roadmap.md).
 
 ## Data and services

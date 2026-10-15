@@ -10,7 +10,8 @@ Contents:
 * ``GnssStream`` / ``GnssFix``: phone-style location fixes (Android ``Location``-like fields).
 * ``RouteMap``: the navigation route as the app knows it. Map geometry, not the driven path. It
   includes the tunnel entrance/exit and the exit-announcement distance along the route.
-* ``Observations``: the bundle handed to estimators.
+* ``VehicleSpeedStream``: the car's own speed reading (OBD / speedometer), reference only (D41).
+* ``Observations``: the bundle the runner feeds to the positioning pipeline.
 """
 
 from __future__ import annotations
@@ -242,9 +243,32 @@ class RouteMap:
 
 
 @dataclass(frozen=True)
+class VehicleSpeedStream:
+    """The car's own speed reading (OBD wheel speed / speedometer): reference information only (D41).
+
+    Not a phone sensor. The runner hands it only to estimators that declare ``uses_vehicle_speed``
+    (the reference estimator); the main estimators never receive it (D20)."""
+
+    t: NDArray[np.float64]  # [s], strictly increasing, same clock as the IMU
+    speed_mps: NDArray[np.float64]  # [m/s], >= 0 (along the road)
+    source: str = "simulated:vehicle"
+
+    def __post_init__(self) -> None:
+        if len(self.t) != len(self.speed_mps):
+            raise ValueError("t and speed_mps must have the same length")
+        if len(self.t) > 1 and not np.all(np.diff(self.t) > 0):
+            raise ValueError("timestamps must be strictly increasing")
+
+    def __len__(self) -> int:
+        return len(self.t)
+
+
+@dataclass(frozen=True)
 class Observations:
-    """Everything an estimator is allowed to use (D15)."""
+    """Everything the positioning pipeline may use (D15). ``vehicle_speed`` is reference information:
+    the runner passes it only to estimators that declare it (D20, D41)."""
 
     imu: ImuStream
     gnss: GnssStream
     route: RouteMap
+    vehicle_speed: VehicleSpeedStream | None = None

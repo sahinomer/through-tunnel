@@ -261,3 +261,19 @@ async def test_defaults_map_selection_off_and_profile_panel_hidden():
         with user.client:
             page.profile_overlay.set_shown(True)
         assert page.profile_overlay.shown and not page.profile_overlay.show_button.visible
+
+
+@pytest.mark.anyio
+async def test_vehicle_speed_slider_reaches_the_simulation():
+    from throughtunnel.scenario import load_preset
+
+    async with user_simulation(root=SimulatorPage) as user:
+        await user.open("/")
+        page = current_page(user)
+        with user.client:
+            await page._load_scenario(load_preset("synthetic_demo_track"))
+            assert page.drive_panel.s_vspeed.value == 2.0  # the default
+            page.drive_panel.s_vspeed.value = -3.0
+            await page._generate()
+        assert page.result.config.vehicle_speed.scale_error_pct == -3.0
+        assert "scale error -3 %" in page.route_info.content

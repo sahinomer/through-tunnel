@@ -46,6 +46,10 @@ def route_info_html(result: SimulationResult, route: RawRoute) -> str:
         ("GPS", f"{len(res.gnss)} fixes · outage: {outage}"),
         ("Calibration error", html.escape(res.config.calibration.describe())),
         ("Map data", "route + road grade" if rm.has_grade else "route geometry only"),
+        (
+            "Vehicle speed",
+            f"scale error {res.config.vehicle_speed.scale_error_pct:+g} % (reference estimator only)",
+        ),
         ("Traffic", html.escape(traffic_summary(res))),
         ("Map polyline", f"{fmt_km(d.raw_length_m)} · {d.raw_vertices} vertices"),
         ("Smoothing deviation", f"max {d.max_deviation_m:.2f} m · rms {d.rms_deviation_m:.2f} m"),

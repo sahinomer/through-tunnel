@@ -290,6 +290,16 @@ estimators must receive finished data, with no calibration-error argument.
   with B–C, the announcement point, and the vehicle and visible estimators moving on it (display only).
   Checked in a browser: seek, playback, hide and show.
 
+**Task 13: vehicle speed sensor, reference only (D41), done; simulator frozen.**
+* *Model:* the car's speed reading (OBD / speedometer) at 10 Hz: the true along-road speed times a fixed
+  scale error (default +2 %, slider under *Drive and simulation*). Deterministic; exactly 0 at
+  standstill.
+* *Boundary:* only an estimator class that declares `uses_vehicle_speed` receives it. The runner
+  enforces this, and no registered estimator declares it; both are tested. Existing tracks are
+  bit-identical (945/945 arrays).
+* *Next:* the simulator is frozen (user decision). Estimator phase: the benchmark first, then the
+  reference estimator "route + vehicle speed" among the others.
+
 **Observation (UI behaviour, pre-existing, not fixed):** NiceGUI runs *async* change handlers as
 background tasks, so the "loading" guard that marks values set from code is already reset when they run.
 Handlers registered with `on_value_change` / `on_change` (switches, mount-preset select) therefore
@@ -420,7 +430,7 @@ are committed (F9).
 | R3 | Map uncertainty: scale error, lateral offsets, local distortions of the estimator's map (D21, D24) | [ ] |
 | R4 | GPS detail: entrance degradation ramp, dropouts, multipath outliers, reacquisition transients, latency (D16) | [~] degradation ramp + multipath jumps before B (D38, optional); others in [limitations.md](limitations.md) |
 | R5 | IMU error extensions: bias instability/random walk, temperature drift, scale factor, misalignment, vibration + anti-aliasing, timestamp jitter, separate accel/gyro clocks, device profiles (D07) | [~] bias drift (Gauss-Markov, D38, optional); others in [limitations.md](limitations.md) |
-| R6 | Optional external vehicle-speed experiment, separate from the main solution (D20) | [ ] |
+| R6 | Optional external vehicle-speed experiment, separate from the main solution (D20) | [~] sensor + boundary (D41); the reference estimator follows in the estimator phase |
 | R7 | Estimator tuning mismatch (PD6) | [ ] |
 | R8 | Scenario library: curved vs straight, 0.5–5 km tunnels, different mounts and driver styles | [ ] |
 | R9 | Re-check road smoothing defaults on new real roads (D03) | [ ] |

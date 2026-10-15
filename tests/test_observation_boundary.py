@@ -9,7 +9,7 @@ import subprocess
 import sys
 from dataclasses import fields
 
-from throughtunnel.observations import GnssStream, ImuStream, Observations, RouteMap
+from throughtunnel.observations import GnssStream, ImuStream, Observations, RouteMap, VehicleSpeedStream
 
 FORBIDDEN = (
     "throughtunnel.vehicle",
@@ -40,6 +40,7 @@ def test_positioning_and_observations_do_not_load_simulator_modules():
 
 
 def test_observation_types_have_no_truth_fields():
-    names = {f.name for cls in (ImuStream, GnssStream, RouteMap, Observations) for f in fields(cls)}
+    types = (ImuStream, GnssStream, RouteMap, VehicleSpeedStream, Observations)
+    names = {f.name for cls in types for f in fields(cls)}
     for forbidden in ("truth", "mount", "bias", "ideal", "speed_true", "lever_arm"):
         assert not any(forbidden in n for n in names), forbidden
