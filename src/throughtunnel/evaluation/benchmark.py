@@ -16,8 +16,14 @@ every estimator and every code version. Sloped roads are evaluated twice, with t
 on (two information levels); flat roads once.
 
 Every registered estimator runs, the reference ``route_vspeed`` included (marked as reference in the
-tables). A run "fails" if the estimate reaches the route end D before C (its error is then capped by
-the route length) or the exit announcement is missed.
+tables). Per run and estimator, two failure states and one data-quality flag (D44):
+* **gross error**: the estimate was more than ``GROSS_ERROR_M`` (200 m) from the true position at some
+  time in the tunnel or at C, ahead or behind;
+* **announcement off**: the exit announcement was more than ``ANNOUNCE_OFF_S`` (15 s) early or late,
+  or never fired;
+* **capped** (not a failure): the estimate reached the route end D before the vehicle reached C. A
+  route estimate stops at D, so its error is then a lower bound. Such a run is always also a gross
+  error (it was at least the C–D distance, 0.8–0.9 km, ahead).
 
     uv run python -m throughtunnel.evaluation.benchmark --seeds 20 --out docs/benchmark/baseline
     uv run python -m throughtunnel.evaluation.benchmark --quick --out <dir> --compare docs/benchmark/baseline
@@ -74,6 +80,8 @@ ROADS: dict[str, Profile | None] = {
 TRAFFIC = ("free", "stop_and_go")
 QUICK_SEEDS = 5
 ANNOUNCE_OK_S = 3.0  # "good" announcement: within ±3 s of the ideal time
+ANNOUNCE_OFF_S = 15.0  # failure: announcement more than 15 s early or late (or never)
+GROSS_ERROR_M = 200.0  # failure: the estimate more than 200 m off at some time in the tunnel or at C
 REGRESSION_REL, REGRESSION_ABS_M = 0.10, 5.0  # flagged if the median gets worse by both
 VERTEX_SPACING_M = 15.0
 
@@ -184,8 +192,18 @@ def _med_p90(vals) -> str:
     return f"{np.median(v):.0f} ({np.percentile(v, 90):.0f})" if len(v) else "–"
 
 
-def _failed(r) -> bool:
-    return r["route_end_reached"] or r["announcement_missed"]
+def gross_error(r) -> bool:
+    """More than GROSS_ERROR_M off, ahead or behind, at some time in the tunnel or at C."""
+    return max(r["tunnel_max_m"], r["exit_total_m"]) > GROSS_ERROR_M
+
+
+def announcement_off(r) -> bool:
+    """Announced more than ANNOUNCE_OFF_S early or late, or never."""
+    return r["announcement_missed"] or abs(r["announcement_error_s"]) > ANNOUNCE_OFF_S
+
+
+def _pct(flags) -> str:
+    return f"{100 * np.mean(list(flags)):.0f} %"
 
 
 def _label(name: str) -> str:
@@ -197,20 +215,22 @@ def _estimators(records) -> list[str]:
     return [n for n in ESTIMATORS if n in present] + sorted(present - set(ESTIMATORS))
 
 
-def overall_table(records) -> list[dict[str, str]]:
+def overall_table(records, map_grade: bool) -> list[dict[str, str]]:
+    """All 48 scenarios at one information level (flat roads, where the map grade changes nothing,
+    are in both)."""
     rows = []
     for name in _estimators(records):
-        sel = _sel(records, estimator=name)
-        off = [r for r in sel if not r["map_grade"]]  # flat runs + sloped runs without map grade
-        on = [r for r in sel if r["road"] == "flat" or r["map_grade"]]
-        ann = np.array([r["announcement_error_s"] for r in off], dtype=float)
-        row = {"estimator": _label(name) + (" †" if name in REFERENCE_ESTIMATORS else "")}
-        row["error at C, map grade off [m]"] = _med_p90([r["exit_total_m"] for r in off])
-        row["error at C, map grade on [m]"] = _med_p90([r["exit_total_m"] for r in on])
-        row["max in tunnel [m]"] = _med_p90([r["tunnel_max_m"] for r in off])
-        row["announcement within ±3 s"] = f"{100 * np.mean(np.abs(ann) <= ANNOUNCE_OK_S):.0f} %"
-        row["failed runs"] = f"{100 * np.mean([_failed(r) for r in off]):.1f} %"
-        rows.append(row)
+        sel = [r for r in _sel(records, estimator=name) if r["road"] == "flat" or r["map_grade"] == map_grade]
+        ann = np.array([r["announcement_error_s"] for r in sel], dtype=float)
+        rows.append({
+            "estimator": _label(name) + (" †" if name in REFERENCE_ESTIMATORS else ""),
+            "error at C [m]": _med_p90([r["exit_total_m"] for r in sel]),
+            "max in tunnel [m]": _med_p90([r["tunnel_max_m"] for r in sel]),
+            f"gross error (> {GROSS_ERROR_M:g} m)": _pct(gross_error(r) for r in sel),
+            f"announcement off (> ±{ANNOUNCE_OFF_S:g} s)": _pct(announcement_off(r) for r in sel),
+            f"announcement good (±{ANNOUNCE_OK_S:g} s)": _pct(np.abs(ann) <= ANNOUNCE_OK_S),
+            "capped at D": _pct(r["route_end_reached"] for r in sel),
+        })  # fmt: skip
     return rows
 
 
@@ -222,8 +242,9 @@ def family_table(records, column: str, values, label=str, **fixed) -> list[dict[
         for v in values:
             sel = _sel(records, estimator=name, **{column: v}, **fixed)
             cell = _med_p90([r["exit_total_m"] for r in sel])
-            failed = sum(_failed(r) for r in sel)
-            row[label(v)] = cell + (f" ✗{failed}" if failed else "")
+            gross = sum(gross_error(r) for r in sel)
+            capped = sum(r["route_end_reached"] for r in sel)
+            row[label(v)] = cell + (f" ✗{gross}" if gross else "") + (f" §{capped}" if capped else "")
         rows.append(row)
     return rows
 
@@ -233,14 +254,26 @@ def tables_markdown(records, meta: dict) -> str:
     out = [
         "# Benchmark: generated tables\n",
         f"{meta.get('label', '')} · commit `{meta.get('commit', '?')}` · {meta.get('date', '')} · "
-        f"{len({r['case'] for r in records})} scenarios × {n_seeds} runs. Cells: error at C [m], median "
-        "(p90). ✗n = n failed runs (route end reached before C, or announcement missed). † = reference "
-        "estimator (uses the car's speed reading; not a phone-only solution). Realism options on (bias "
-        "drift, GPS degradation before the portal).\n",
-        "## Overall\n",
-        "Flat roads are counted in both error columns (the map grade changes nothing there); the other "
-        "columns use the runs without map grade.\n",
-        markdown_table(overall_table(records)) + "\n",
+        f"{len({r['case'] for r in records})} scenarios × {n_seeds} runs. † = reference estimator (uses "
+        "the car's speed reading; not a phone-only solution). Realism options on (bias drift, GPS "
+        "degradation before the portal).\n",
+        "## How to read the failure states\n",
+        f"* **Gross error**: the estimate was more than {GROSS_ERROR_M:g} m from the true position at some "
+        "time in the tunnel or at C, ahead *or* behind. The position is unusable for guidance.\n"
+        f"* **Announcement off**: the exit announcement came more than {ANNOUNCE_OFF_S:g} s early or late "
+        "(or never). The driver gets the instruction at the wrong time. Never-fired does not happen in "
+        "practice: a late estimate is pushed past the announcement point when GPS returns, so the "
+        "announcement is late, not missing.\n"
+        "* **Capped at D** (a data-quality flag, not a third failure): the estimate reached the route end D "
+        "before the vehicle reached C. A route estimate stops at D, so its error is a lower bound (cells of "
+        "exactly 782 / 881 / 889 m are the C–D distances). Every capped run is also a gross error.\n"
+        "* In the scenario tables, cells are the error at C [m], median (p90); ✗n = n runs with a gross "
+        "error, §n = n of them capped at D.\n",
+        "## Overall, without map grade\n",
+        markdown_table(overall_table(records, map_grade=False)) + "\n",
+        "## Overall, with map grade\n",
+        "Flat roads (where the map grade changes nothing) are in both overall tables.\n",
+        markdown_table(overall_table(records, map_grade=True)) + "\n",
     ]
     ladder = [f"ladder_{km:g}km" for km in LADDER_KM]
     km = lambda g: g.removeprefix("ladder_").replace("km", " km")  # noqa: E731

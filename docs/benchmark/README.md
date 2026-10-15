@@ -10,19 +10,33 @@ baseline on exactly the same runs:
 |---|---|---|---|
 | `baseline/` | `36904cb` (2026-10-15) | the 5 phone-only estimators before any estimator work, + the reference | [tables](baseline/tables.md) |
 
+## Failure states (D44)
+
+Per run and estimator:
+* **Gross error** (failure): the estimate was more than **200 m** from the true position at some time
+  in the tunnel or at C, **ahead or behind**. The position is unusable for guidance.
+* **Announcement off** (failure): the exit announcement was more than **15 s** early or late, or never
+  fired. The driver gets the instruction at the wrong time. In practice it is never missing: a late
+  estimate is pushed past the announcement point when GPS returns, so it is late.
+* **Capped at D** (data-quality flag, not a failure): the estimate reached the route end D before the
+  vehicle reached C. A route estimate stops at D, so its error is a lower bound (exactly 782 / 881 /
+  889 m = the C–D distance). Every capped run is also a gross error.
+
+The first version counted only "capped at D" (plus a missed announcement, which never happens) as a
+failure. That is one-sided: an estimate 1 km behind never counted. For the best phone-only estimator
+with map grade, 7 % of runs failed by that definition and 21 % have a gross error.
+
 ## What the first baseline says
 
-Error at the tunnel exit C, median (p90) over all 48 scenarios; † = reference (uses the car's speed):
+All 48 scenarios, median (p90); † = reference (uses the car's speed):
 
-| Estimator | map grade off | map grade on | announcement within ±3 s | failed runs |
-|---|---|---|---|---|
-| Route + vehicle speed † | 5 m (15) | 5 m (14) | 99 % | 0 % |
-| Route + filtered IMU speed (best phone-only) | 782 m (889) | 39 m (544) | 20 % | 45 % |
-| DR calibrated + GPS-blended | 1336 m (20668) | 58 m (543) | 21 % | 45 % |
-| Route + last GPS speed (naive) | 435 m (881) | 435 m (881) | 24 % | 48 % |
-
-The announcement and failure columns use the runs without map grade, so they include the sloped
-cases that break the IMU estimators.
+| Estimator | map grade | error at C | gross error | announcement off | announcement good (±3 s) |
+|---|---|---|---|---|---|
+| Route + vehicle speed † | either | 5 m (14–15) | 0 % | 0 % | 99 % |
+| Route + filtered IMU speed (best phone-only) | on | 39 m (544) | 21 % | 20 % | 59 % |
+| | off | 782 m (889) | 69 % | 65 % | 20 % |
+| DR calibrated + GPS-blended | on | 58 m (543) | 22 % | 19 % | 59 % |
+| Route + last GPS speed (naive) | either | 435 m (881) | 58 % | 52 % | 24 % |
 
 * **The reference sets the ceiling.** It holds 4–7 m median for every tunnel length, road profile and
   traffic case: car speed is worth about an order of magnitude.
@@ -30,14 +44,14 @@ cases that break the IMU estimators.
   it, sloped roads match flat ones; the underwater V is even better (the grade-change feedback,
   [map_grade_study.md](../map_grade_study.md)).
 * **The phone-only error grows with outage time.** On a flat road the best phone-only estimator goes
-  from 5 m (0.5 km tunnel) to 231 m (5 km) in free flow, and to 482 m at 5 km in stop-and-go. 2–6 of
-  20 runs fail from 2 km of stop-and-go upwards.
-* **The naive constant-speed estimator** is competitive in free flow on short tunnels, but fails almost
-  every stop-and-go run: it reaches the route end before C.
-* **Announcements:** without car speed, few announcements are good (within ±3 s): 11–24 % over all
-  runs without map grade. The sloped and long stop-and-go runs dominate this, since those estimates
-  are hundreds of metres off. In stop-and-go, small position errors also become large timing errors
-  at low speed (traffic study).
+  from 5 m (0.5 km tunnel) to 231 m (5 km) in free flow, and to 482 m at 5 km in stop-and-go. Gross
+  errors: 0 of 20 runs up to 2 km and 11 of 20 at 5 km in free flow; 3 of 20 at 0.5 km and 16 of 20
+  at 5 km in stop-and-go.
+* **The naive constant-speed estimator** is competitive in free flow on short tunnels, but has a gross
+  error in every stop-and-go run, nearly all capped at D (it keeps driving while the car stands).
+* **Announcements:** with map grade, the best phone-only estimators announce within ±3 s in 59 % of
+  runs and are more than 15 s off in 19–20 %; 85–89 % of those runs also have a gross error. In
+  stop-and-go, small position errors also become large timing errors at low speed (traffic study).
 
 These are the numbers the estimator work has to improve: phone-only, with map grade, the 5 km and
 stop-and-go cases.

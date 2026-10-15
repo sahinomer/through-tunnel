@@ -321,6 +321,10 @@ estimators must receive finished data, with no calibration-error argument.
   [benchmark/README.md](benchmark/README.md): reference 5 m median everywhere. Best phone-only with map
   grade: 39 m median, p90 544 m. Error grows with tunnel length (5 → 231 m from 0.5 to 5 km, flat, free
   flow); 2–6 of 20 runs fail in stop-and-go from 2 km upwards.
+* *Failure states redefined (D44):* the first definition was one-sided (only estimates far ahead
+  failed). Now: gross error > 200 m ahead or behind; announcement off by > 15 s; capped at D as a
+  data-quality flag. Recomputed from the saved data. Best phone-only with map grade: 21 % gross
+  errors (7 % before).
 
 **Observation (UI behaviour, pre-existing, not fixed):** NiceGUI runs *async* change handlers as
 background tasks, so the "loading" guard that marks values set from code is already reset when they run.

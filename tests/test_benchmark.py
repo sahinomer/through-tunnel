@@ -59,3 +59,16 @@ def test_comparison_flags_regressions_only():
     assert "20 → 30 ⚠" in text and "Route + filtered IMU speed, flat / free" in text
     slightly = [r | {"exit_total_m": 23.0} for r in base]  # 3 m worse: below the 5 m threshold
     assert "**Regressions:** none" in compare_markdown(slightly, base, {}, {})
+
+
+def test_failure_states_are_symmetric_and_explained():
+    from throughtunnel.evaluation.benchmark import announcement_off, gross_error
+
+    run = {"tunnel_max_m": 50.0, "exit_total_m": 40.0}
+    run |= {"announcement_error_s": 2.0, "announcement_missed": False}
+    assert not gross_error(run) and not announcement_off(run)
+    assert gross_error(run | {"tunnel_max_m": 250.0})  # 250 m off in the tunnel, ahead or behind
+    assert gross_error(run | {"exit_total_m": 201.0})
+    assert announcement_off(run | {"announcement_error_s": -16.0})  # 16 s early
+    assert announcement_off(run | {"announcement_error_s": 20.0})  # 20 s late
+    assert announcement_off(run | {"announcement_error_s": float("nan"), "announcement_missed": True})
