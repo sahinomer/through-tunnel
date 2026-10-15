@@ -6,20 +6,28 @@ from nicegui.testing.user_simulation import user_simulation
 from throughtunnel.app.page import SimulatorPage
 
 
+def current_page(user) -> SimulatorPage:
+    """The page of this test's client (pages of earlier tests may still be alive)."""
+    import gc
+
+    return next(o for o in gc.get_objects() if isinstance(o, SimulatorPage) and o.plot.client is user.client)
+
+
 @pytest.mark.anyio
 async def test_page_builds():
     async with user_simulation(root=SimulatorPage) as user:
         await user.open("/")
         await user.should_see("Preset scenario")
-        await user.should_see("IMU sample rate & errors")
-        await user.should_see("Phone mounting (IMU)")
+        await user.should_see("Phone IMU: mounting, errors, calibration")
+        await user.should_see("Phone GPS")
+        await user.should_see("Drive and simulation")
 
 
 @pytest.mark.anyio
 async def test_single_exit_announcement_control():
     async with user_simulation(root=SimulatorPage) as user:
         await user.open("/")
-        await user.should_see("Tunnel exit announcement")
+        await user.should_see("Tunnel: exit announcement and traffic")
         await user.should_see("Announce before exit C")
         await user.should_not_see("First announcement")
         await user.should_not_see("Exit position after B")
@@ -28,13 +36,12 @@ async def test_single_exit_announcement_control():
 @pytest.mark.anyio
 async def test_panels_feed_the_simulation():
     """Wiring: a loaded preset fills the panels, and a panel change reaches the next simulation."""
-    import gc
 
     from throughtunnel.scenario import load_preset
 
     async with user_simulation(root=SimulatorPage) as user:
         await user.open("/")
-        page = next(o for o in gc.get_objects() if isinstance(o, SimulatorPage))
+        page = current_page(user)
         cfg = load_preset("synthetic_demo_track")
         with user.client:
             await page._load_scenario(cfg)
@@ -49,13 +56,12 @@ async def test_panels_feed_the_simulation():
 
 @pytest.mark.anyio
 async def test_calibration_panel_reaches_the_estimators_only():
-    import gc
 
     from throughtunnel.scenario import load_preset
 
     async with user_simulation(root=SimulatorPage) as user:
         await user.open("/")
-        page = next(o for o in gc.get_objects() if isinstance(o, SimulatorPage))
+        page = current_page(user)
         with user.client:
             await page._load_scenario(load_preset("synthetic_demo_track"))
             before = page.result
@@ -70,13 +76,12 @@ async def test_calibration_panel_reaches_the_estimators_only():
 
 @pytest.mark.anyio
 async def test_map_grade_switch_reaches_the_estimators_only():
-    import gc
 
     from throughtunnel.scenario import load_preset
 
     async with user_simulation(root=SimulatorPage) as user:
         await user.open("/")
-        page = next(o for o in gc.get_objects() if isinstance(o, SimulatorPage))
+        page = current_page(user)
         with user.client:
             await page._load_scenario(load_preset("synthetic_demo_track"))
             before = page.result
@@ -90,7 +95,6 @@ async def test_map_grade_switch_reaches_the_estimators_only():
 
 @pytest.mark.anyio
 async def test_profile_drag_is_clamped_and_reaches_the_simulation():
-    import gc
 
     import numpy as np
 
@@ -98,7 +102,7 @@ async def test_profile_drag_is_clamped_and_reaches_the_simulation():
 
     async with user_simulation(root=SimulatorPage) as user:
         await user.open("/")
-        page = next(o for o in gc.get_objects() if isinstance(o, SimulatorPage))
+        page = current_page(user)
         editor = page.profile_editor
         with user.client:
             await page._load_scenario(load_preset("synthetic_demo_track"))
@@ -115,13 +119,12 @@ async def test_profile_drag_is_clamped_and_reaches_the_simulation():
 
 @pytest.mark.anyio
 async def test_traffic_panel_reaches_the_simulation():
-    import gc
 
     from throughtunnel.scenario import load_preset
 
     async with user_simulation(root=SimulatorPage) as user:
         await user.open("/")
-        page = next(o for o in gc.get_objects() if isinstance(o, SimulatorPage))
+        page = current_page(user)
         panel = page.traffic_panel
         with user.client:
             await page._load_scenario(load_preset("synthetic_demo_track"))
@@ -136,21 +139,20 @@ async def test_traffic_panel_reaches_the_simulation():
 
 @pytest.mark.anyio
 async def test_bias_drift_and_gps_degradation_controls_reach_the_simulation():
-    import gc
 
     from throughtunnel.scenario import load_preset
 
     async with user_simulation(root=SimulatorPage) as user:
         await user.open("/")
-        page = next(o for o in gc.get_objects() if isinstance(o, SimulatorPage))
-        panel = page.sensor_panel
+        page = current_page(user)
+        panel, gps = page.imu_panel, page.gps_panel
         with user.client:
             await page._load_scenario(load_preset("synthetic_demo_track"))
             assert panel.s_acc_drift.value == pytest.approx(0.5)  # preset gets the default drift size (mg)
             panel.acc_drift_on.value = True
             panel.s_acc_drift.value = 2.0
-            panel.deg_on.value = True
-            panel.s_deg_sigma.value = 12.0
+            gps.deg_on.value = True
+            gps.s_deg_sigma.value = 12.0
             await panel._changed()
         cfg = page.result.config
         assert cfg.imu.errors.accel.drift_enabled and cfg.imu.errors.accel.drift_sigma > 0
@@ -164,7 +166,6 @@ async def test_values_set_from_code_trigger_no_handler():
     """F10: change handlers run as background tasks, so the loading guard must be checked when the
     event fires, not inside the task. Setting every panel from code must call no panel callback."""
     import asyncio
-    import gc
 
     from throughtunnel.scenario import load_preset
     from throughtunnel.sensors.mounting import CalibrationErrorConfig
@@ -172,7 +173,7 @@ async def test_values_set_from_code_trigger_no_handler():
 
     async with user_simulation(root=SimulatorPage) as user:
         await user.open("/")
-        page = next(o for o in gc.get_objects() if isinstance(o, SimulatorPage))
+        page = current_page(user)
         calls = []
 
         def record(name):
@@ -181,7 +182,8 @@ async def test_values_set_from_code_trigger_no_handler():
 
             return callback
 
-        panels = ("mount_panel", "calibration_panel", "map_data_panel", "sensor_panel", "traffic_panel")
+        panels = ("mount_panel", "calibration_panel", "map_data_panel", "imu_panel", "gps_panel")
+        panels += ("traffic_panel",)
         for name in panels:
             getattr(page, name)._on_change = record(name)
         cfg = load_preset("seattle_sr99_tunnel")
@@ -190,8 +192,8 @@ async def test_values_set_from_code_trigger_no_handler():
             page.mount_panel.set(imu)
             page.calibration_panel.set(CalibrationErrorConfig(enabled=True))
             page.map_data_panel.set(page.map_data_panel.config().model_copy(update={"road_grade": True}))
-            page.sensor_panel.set_imu(imu.model_copy(update={"errors": imu.errors.ideal()}))
-            page.sensor_panel.set_gnss(cfg.gnss.model_copy(update={"enabled": False}))
+            page.imu_panel.set_imu(imu.model_copy(update={"errors": imu.errors.ideal()}))
+            page.gps_panel.set_gnss(cfg.gnss.model_copy(update={"enabled": False}))
             page.traffic_panel.set(TrafficConfig(scenario="stop_and_go"))
             await asyncio.sleep(0.2)  # let any scheduled handler run
         assert calls == []
@@ -202,13 +204,12 @@ async def test_loaded_preset_label_with_modified_angles_keeps_the_angles():
     """F10: a file whose mount says "dash_portrait" but with other angles must load as written (the
     preset handler used to overwrite the angles after the load)."""
     import asyncio
-    import gc
 
     from throughtunnel.scenario import load_preset
 
     async with user_simulation(root=SimulatorPage) as user:
         await user.open("/")
-        page = next(o for o in gc.get_objects() if isinstance(o, SimulatorPage))
+        page = current_page(user)
         cfg = load_preset("synthetic_demo_track")
         edited = {"label": "dash_portrait", "yaw_deg": -80.0, "roll_deg": 90.0}
         mount = cfg.imu.mount.model_copy(update=edited)
@@ -221,3 +222,28 @@ async def test_loaded_preset_label_with_modified_angles_keeps_the_angles():
             await asyncio.sleep(0.2)
         assert page.mount_panel.s_yaw.value == -80.0
         assert page.result.config.imu.mount.yaw_deg == -80.0
+
+
+@pytest.mark.anyio
+async def test_imu_error_master_switch_turns_all_errors_off_and_back_on():
+
+    from throughtunnel.scenario import load_preset
+
+    async with user_simulation(root=SimulatorPage) as user:
+        await user.open("/")
+        page = current_page(user)
+        panel = page.imu_panel
+        with user.client:
+            await page._load_scenario(load_preset("synthetic_demo_track"))
+            before = page.result.config.imu.errors
+            assert panel.errors_on.value and before.accel.noise_enabled and before.gyro.bias_enabled
+            panel.errors_on.value = False
+            await panel._changed()
+            off = page.result.config.imu.errors
+            assert not any((off.accel.noise_enabled, off.accel.bias_enabled, off.gyro.noise_enabled,
+                            off.gyro.bias_enabled))  # fmt: skip
+            assert off.accel.noise_density == before.accel.noise_density  # magnitudes kept
+            assert page.result.imu.accel.tolist() == page.result.imu_ideal.accel.tolist()
+            panel.errors_on.value = True
+            await panel._changed()
+        assert page.result.config.imu.errors == before  # the individual choice is restored

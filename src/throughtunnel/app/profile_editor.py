@@ -128,9 +128,7 @@ class ProfileEditor:
         self.entrance_m: float | None = None
         self.exit_m: float | None = None
         self.max_grade_pct = DEFAULT_MAX_GRADE_PCT
-        with ui.expansion("Road profile (elevation)", icon="terrain", value=False).classes(
-            "w-full border rounded"
-        ):
+        with ui.column().classes("w-full gap-1"):
             with ui.row().classes("w-full items-center gap-1"):
                 for key, label in TEMPLATES.items():
                     ui.button(label, on_click=lambda _, k=key: self._apply_template(k)).props(
@@ -150,7 +148,7 @@ class ProfileEditor:
             self.info = ui.label().classes("text-xs text-gray-600")
             ui.label(
                 "Drag the points up or down; the road follows a smooth curve through them and never gets "
-                "steeper than the limit. The route map stays 2-D: estimators get no height information."
+                "steeper than the limit. The estimators know the grade only if the switch below is on."
             ).classes("text-xs text-gray-500")
         self._update_info()
 

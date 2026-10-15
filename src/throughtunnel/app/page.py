@@ -22,11 +22,15 @@ from nicegui import events, run, ui
 from throughtunnel.app.controls import (
     CalibrationPanel,
     DrivePanel,
+    GpsPanel,
+    ImuErrorPanel,
     MapDataPanel,
     MountPanel,
-    SensorPanel,
     TrafficPanel,
     TunnelPanel,
+    box,
+    group,
+    section,
 )
 from throughtunnel.app.map_view import MapView
 from throughtunnel.app.playback import SPEED_OPTIONS, PlaybackController
@@ -103,14 +107,7 @@ class SimulatorPage:
                 self._build_scenario_card()
                 self._build_playback_card()
                 self._build_positioning_card()
-                self.tunnel_panel = TunnelPanel(self._on_tunnel_change)
-                self.traffic_panel = TrafficPanel(self._on_tunnel_change)
-                self.drive_panel = DrivePanel(self._generate, DRIVER_PRESETS["normal"], RoadConfig())
-                self.profile_editor = ProfileEditor(self._on_profile_change)
-                self.mount_panel = MountPanel(self._apply_sensors, self.base_imu)
-                self.calibration_panel = CalibrationPanel(self._apply_calibration, CalibrationErrorConfig())
-                self.map_data_panel = MapDataPanel(self._apply_map_data, MapDataConfig())
-                self.sensor_panel = SensorPanel(self._apply_sensors, self.base_imu, self.base_gnss)
+                self._build_settings()
 
         # keep_alive=False: the hidden plot is unmounted (Plotly cannot resize a hidden div); only the
         # visible plot receives cursor updates, and a newly shown plot starts from the current cursor.
@@ -131,6 +128,36 @@ class SimulatorPage:
             plot.on("plotly_click", self._on_plot_click)
         ui.timer(TICK_S, self._tick)
         ui.timer(0.1, self._initial_load, once=True)
+
+    def _build_settings(self) -> None:
+        """Settings groups, most used first; within a group the least used settings come last."""
+        with group("Tunnel: exit announcement and traffic", "traffic"):
+            section("Exit announcement")
+            self.tunnel_panel = TunnelPanel(self._on_tunnel_change)
+            section("Traffic in the tunnel")
+            self.traffic_panel = TrafficPanel(self._on_tunnel_change)
+        with group("Road profile (elevation)", "terrain"):
+            self.profile_editor = ProfileEditor(self._on_profile_change)
+            self.map_data_panel = MapDataPanel(self._apply_map_data, MapDataConfig())
+        with group("Phone IMU: mounting, errors, calibration", "smartphone"):
+            section("Mounting")
+            mount_box = box()
+            section("Sensor errors")
+            errors_box = box()
+            section("Calibration error (alignment before the estimators)")
+            calibration_box = box()
+            with ui.expansion("More: lever arm, Earth rotation, IMU rate, sensor seed").classes("w-full"):
+                advanced = box()
+        with mount_box:
+            self.mount_panel = MountPanel(self._apply_sensors, self.base_imu, advanced)
+        with errors_box:
+            self.imu_panel = ImuErrorPanel(self._apply_sensors, self.base_imu, advanced)
+        with calibration_box:
+            self.calibration_panel = CalibrationPanel(self._apply_calibration, CalibrationErrorConfig())
+        with group("Phone GPS", "satellite_alt"):
+            self.gps_panel = GpsPanel(self._apply_sensors, self.base_gnss)
+        with group("Drive and simulation", "tune"):
+            self.drive_panel = DrivePanel(self._generate, DRIVER_PRESETS["normal"], RoadConfig())
 
     def _build_scenario_card(self) -> None:
         with ui.card().classes("w-full"):
@@ -204,8 +231,8 @@ class SimulatorPage:
         self.mount_panel.set(cfg.imu)
         self.calibration_panel.set(cfg.calibration)
         self.map_data_panel.set(cfg.map_data)
-        self.sensor_panel.set_imu(cfg.imu)
-        self.sensor_panel.set_gnss(cfg.gnss)
+        self.imu_panel.set_imu(cfg.imu)
+        self.gps_panel.set_gnss(cfg.gnss)
         self.tunnel_panel.set(cfg.tunnel)
         self.traffic_panel.set(cfg.traffic)
         rm = build_route_map(cfg)
@@ -245,7 +272,7 @@ class SimulatorPage:
         mounted = self.base_imu.model_copy(
             update={"mount": self.mount_panel.mount(), "earth_rotation": self.mount_panel.earth_rotation}
         )
-        return self.sensor_panel.imu(mounted)
+        return self.imu_panel.imu(mounted)
 
     async def _generate(self) -> None:
         if self.route is None:
@@ -261,7 +288,7 @@ class SimulatorPage:
                 imu=self._imu_from_controls(),
                 calibration=self.calibration_panel.config(),
                 map_data=self.map_data_panel.config(),
-                gnss=self.sensor_panel.gnss(self.base_gnss),
+                gnss=self.gps_panel.gnss(self.base_gnss),
                 tunnel=self.tunnel_panel.config(),
                 traffic=self.traffic_panel.config(),
                 seed=self.drive_panel.seed,
@@ -278,7 +305,7 @@ class SimulatorPage:
         self.map_view.show_result(result)
         self.plot.update_figure(ground_truth_figure(result))
         self.imu_plot.update_figure(imu_figure(result))
-        self.sensor_panel.show_applied_errors(result)
+        self.imu_panel.show_applied_errors(result)
         self._update_route_info()
         self._render(force=True)
         await self._run_positioning()
@@ -294,12 +321,12 @@ class SimulatorPage:
     async def _apply_sensors(self) -> None:
         """Re-run only the sensor models (IMU and GPS) and positioning; the vehicle motion is unchanged."""
         self.base_imu = self._imu_from_controls()
-        self.base_gnss = self.sensor_panel.gnss(self.base_gnss)
+        self.base_gnss = self.gps_panel.gnss(self.base_gnss)
         if self.result is None:
             return
         self.result = with_sensor_config(self.result, imu=self.base_imu, gnss=self.base_gnss)
         self.imu_plot.update_figure(imu_figure(self.result))
-        self.sensor_panel.show_applied_errors(self.result)
+        self.imu_panel.show_applied_errors(self.result)
         self.map_view.show_gps(self.result)
         self._update_route_info()
         await self._run_positioning()

@@ -56,18 +56,19 @@ Options: `uv run throughtunnel --port 8090 --host 0.0.0.0 --no-browser`.
 2. **Play it back.** Use play/pause, restart, playback speed (0.5×–20×), and seek with the slider or by
    clicking a plot. The vehicle (yellow) moves along the road with a heading tick, the travelled trail
    is drawn in orange, and the readouts and plot cursor follow the simulation time.
-3. **Change the scenario.** Under *Scenario parameters* you can set the driver style (calm / normal /
+3. **Change the scenario.** Under *Drive and simulation* (the last settings group) you can set the driver style (calm / normal /
    sporty), cruise speed, speed variability, the lateral/longitudinal acceleration and jerk limits, the
    road smoothing settings, the random seed and the sample rate. Then press **Generate**.
-4. **Mount the phone.** Under *Phone mounting (IMU)* pick a mounting preset (aligned with the vehicle,
-   flat in portrait, dashboard holder in portrait / tilted / landscape) or set yaw, pitch and roll
-   yourself, plus a lever arm (where the phone sits relative to the rear axle) and optional Earth
-   rotation. The panel says where each phone axis points in the car. Only the sensor model is
+4. **Mount the phone.** Under *Phone IMU: mounting, errors, calibration* → *Mounting* pick a mounting
+   preset (aligned with the vehicle, flat in portrait, dashboard holder in portrait / tilted /
+   landscape) or set yaw, pitch and roll yourself. The lever arm (where the phone sits relative to the
+   rear axle) and optional Earth rotation are under *More* at the end of the group. The panel says where each phone axis points in the car. Only the sensor model is
    re-run; the vehicle motion stays identical.
-5. **Make the sensors imperfect.** Under *IMU sample rate & errors* set the phone sensor rate (default
-   200 Hz) and switch accelerometer and gyroscope white noise and constant bias on or off. Magnitudes
-   are in datasheet units (µg/√Hz, mg, mdps/√Hz, °/s). Set a *sensor seed* to draw a new noise and bias
-   realisation on the same drive. The panel shows the resulting per-sample σ and the bias actually
+5. **Make the sensors imperfect.** In the same group, *Sensor errors* has one master switch for all
+   IMU errors (off = error-free IMU; the individual settings are kept). Below it, switch accelerometer
+   and gyroscope white noise, constant bias and bias drift on or off. Magnitudes are in datasheet units
+   (µg/√Hz, mg, mdps/√Hz, °/s). The IMU rate (default 200 Hz) and a *sensor seed* (a new noise and bias
+   realisation on the same drive) are under *More*. The panel shows the resulting per-sample σ and the bias actually
    applied. The *Phone IMU* tab plots measured (light) against ideal (dark) readings for each phone
    axis, and the readouts show both.
 6. **Compare position estimators.** After every generation, all estimators run on the same phone
@@ -78,19 +79,21 @@ Options: `uv run throughtunnel --port 8090 --host 0.0.0.0 --no-browser`.
    * **Positioning errors tab:** total, along-track and cross-track error over time.
    * **Live readout:** each estimator's current error.
 
-   *Tunnel exit announcement* sets how far before the tunnel exit C the app announces the exit (one
-   announcement per estimator, triggered from its own estimate; default 300 m). The GPS controls are
-   in *IMU sample rate & errors*. *Traffic in the tunnel* adds a portal slowdown, a tunnel speed limit,
+   Settings groups below the cards, most used first. *Tunnel: exit announcement and traffic* sets
+   how far before the tunnel exit C the app announces the exit (one announcement per estimator,
+   triggered from its own estimate; default 300 m) and the traffic, which adds a portal slowdown, a tunnel speed limit,
    stop-and-go, an exit queue or congested flow, with real stops (anchored to B/C, seeded).
    *Road profile (elevation)* sets the road's height: drag the points
    up or down, or start from a template (steady climb, climb inside the tunnel, underwater tunnel).
    The grade never exceeds the limit (default 6%), and the drive re-simulates.
-   Two optional realism effects (off by default): *Bias drift (in-run)* per IMU sensor, and *Degradation
-   before the tunnel* for GPS (multipath, jumps). *Calibration error (assumed orientation)* rotates the phone-to-vehicle
+   *Phone GPS* holds the GPS error model, loss and reacquisition. Two optional realism effects (off by
+   default): *Bias drift (in-run)* per IMU sensor, and *Degradation before the tunnel* for GPS
+   (multipath, jumps). Switched-off options hide their sliders. *Calibration error* (in the IMU group)
+   rotates the phone-to-vehicle
    orientation of the alignment step that feeds the estimators (yaw, pitch, roll) without changing the
    actual mount or any sensor data. Only positioning re-runs, so with/without comparisons are exactly paired
-   ([docs/calibration_error.md](docs/calibration_error.md)). *Map data (estimators)* → *Road grade from
-   the map* gives the estimators the road grade along the route (assumed exact); the IMU estimators
+   ([docs/calibration_error.md](docs/calibration_error.md)). In *Road profile*, *Estimators use the
+   road grade from the map* gives the estimators the road grade along the route (assumed exact); the IMU estimators
    then remove the gravity it adds to the forward accelerometer axis. Again only positioning re-runs
    ([docs/map_grade_study.md](docs/map_grade_study.md)).
 7. **Reproduce it.** *Save scenario* downloads a JSON file with the route geometry *as fetched*, every

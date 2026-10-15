@@ -53,6 +53,27 @@ def slider(label: str, lo: float, hi: float, step: float, value: float, unit: st
     return s
 
 
+def group(title: str, icon: str) -> ui.expansion:
+    """A collapsible settings group of the page (closed by default)."""
+    return ui.expansion(title, icon=icon, value=False).classes("w-full border rounded")
+
+
+def section(title: str) -> None:
+    ui.label(title).classes("text-sm font-bold mt-2")
+
+
+def box() -> ui.column:
+    """A full-width container that a panel fills later (keeps the page's section order)."""
+    return ui.column().classes("w-full gap-1")
+
+
+def show_if(switch: ui.switch, *controls: ui.element) -> None:
+    """Show ``controls`` (sliders: their labelled row) only while ``switch`` is on."""
+    for control in controls:
+        target = control.parent_slot.parent if isinstance(control, ui.slider) else control
+        target.bind_visibility_from(switch, "value")
+
+
 class Panel:
     """A group of controls whose user changes call ``on_change``."""
 
@@ -80,7 +101,7 @@ class DrivePanel(Panel):
         super().__init__(on_generate)
         self.base_driver, self.base_road = driver, road
         d, r = driver, road
-        with ui.expansion("Scenario parameters", icon="tune", value=False).classes("w-full border rounded"):
+        with box():
             self.style_select = ui.select(
                 list(DRIVER_PRESETS), value=d.style, label="Driver style", on_change=self._on_style
             ).classes("w-full")
@@ -159,9 +180,7 @@ class TunnelPanel(Panel):
     def __init__(self, on_change: Callback) -> None:
         super().__init__(on_change)
         self.tunnel: TunnelConfig | None = None
-        with ui.expansion("Tunnel exit announcement", icon="campaign", value=False).classes(
-            "w-full border rounded"
-        ):
+        with box():
             self.s_announce = slider(
                 "Announce before exit C", 0, 5000, 10, DEFAULT_ANNOUNCE_BEFORE_EXIT_M, "m"
             )
@@ -206,10 +225,8 @@ class TrafficPanel(Panel):
     def __init__(self, on_change: Callback) -> None:
         super().__init__(on_change)
         t = TrafficConfig()
-        with ui.expansion("Traffic in the tunnel", icon="traffic", value=False).classes(
-            "w-full border rounded"
-        ):
-            self.select = ui.select(SCENARIO_LABELS, value=t.scenario, label="Scenario").classes("w-full")
+        with box():
+            self.select = ui.select(SCENARIO_LABELS, value=t.scenario, label="Traffic").classes("w-full")
             self.s_drop = slider("Speed drop at B", 0, 40, 1, t.portal_drop_kmh, "km/h")
             self.s_recovery = slider("Speeds up after", 0, 2000, 50, t.portal_recovery_m, "m")
             self.s_limit = slider("Tunnel speed limit", 20, 120, 5, t.speed_limit_kmh, "km/h")
@@ -282,35 +299,36 @@ class TrafficPanel(Panel):
 
 
 class MountPanel(Panel):
-    """Phone mounting (rotation, lever arm) and the Earth-rotation switch."""
+    """Phone mounting: rotation (main part); lever arm and Earth rotation (``advanced`` container)."""
 
-    def __init__(self, on_change: Callback, imu: ImuConfig) -> None:
+    def __init__(self, on_change: Callback, imu: ImuConfig, advanced: ui.element) -> None:
         super().__init__(on_change)
         m = imu.mount
         options = {k: k.replace("_", " ") for k in MOUNT_PRESETS} | {"custom": "custom"}
-        with ui.expansion("Phone mounting (IMU)", icon="smartphone", value=False).classes(
-            "w-full border rounded"
-        ):
+        with box():
             self.mount_select = ui.select(
                 options, value=m.label, label="Mount preset", on_change=self._on_preset
             ).classes("w-full")
             self.s_yaw = slider("Yaw (about vehicle z)", -180, 180, 5, m.yaw_deg, "°")
             self.s_pitch = slider("Pitch", -90, 90, 5, m.pitch_deg, "°")
             self.s_roll = slider("Roll", -180, 180, 5, m.roll_deg, "°")
+            self.axes_label = ui.html().classes("text-sm")
+            ui.label("Android axes: x = right edge, y = top edge, z = out of the screen.").classes(
+                "text-xs text-gray-500"
+            )
+        with advanced:
             self.s_lx = slider("Lever arm x (fwd)", -3, 3, 0.1, m.lever_arm_m[0], "m")
             self.s_ly = slider("Lever arm y (left)", -1.5, 1.5, 0.1, m.lever_arm_m[1], "m")
             self.s_lz = slider("Lever arm z (up)", -1, 2, 0.1, m.lever_arm_m[2], "m")
+            ui.label(
+                "Lever arm = phone position relative to the vehicle reference point (rear-axle centre)."
+            ).classes("text-xs text-gray-500")
             self.earth_switch = ui.switch(
                 "Earth rotation (gyro Earth rate, Coriolis)", value=imu.earth_rotation
             )
-            self.earth_switch.on_value_change(self._on_control)
-            self.axes_label = ui.html().classes("text-sm")
-            ui.label(
-                "Android axes: x = right edge, y = top edge, z = out of the screen. "
-                "Lever arm = phone position relative to the vehicle reference point (rear-axle centre)."
-            ).classes("text-xs text-gray-500")
-            for s in (self.s_yaw, self.s_pitch, self.s_roll, self.s_lx, self.s_ly, self.s_lz):
-                s.on("change", self._on_control)
+        self.earth_switch.on_value_change(self._on_control)
+        for s in (self.s_yaw, self.s_pitch, self.s_roll, self.s_lx, self.s_ly, self.s_lz):
+            s.on("change", self._on_control)
         self._update_axes_label()
 
     def mount(self) -> PhoneMount:
@@ -371,20 +389,19 @@ class CalibrationPanel(Panel):
     def __init__(self, on_change: Callback, calibration: CalibrationErrorConfig) -> None:
         super().__init__(on_change)
         c = calibration
-        with ui.expansion(
-            "Calibration error (assumed orientation)", icon="screen_rotation", value=False
-        ).classes("w-full border rounded"):
-            self.enabled = ui.switch("Calibration error", value=c.enabled)
+        with box():
+            self.enabled = ui.switch("Rotate the assumed phone orientation", value=c.enabled)
             self.s_yaw = slider("Heading (yaw) error", -10, 10, 0.5, c.yaw_deg, "°")
             self.s_pitch = slider("Pitch error", -2, 2, 0.05, c.pitch_deg, "°")
             self.s_roll = slider("Roll error", -5, 5, 0.1, c.roll_deg, "°")
-            ui.label(
+            self.cal_note = ui.label(
                 "The alignment step before the estimators uses the phone-to-vehicle orientation from its "
                 "calibration, rotated by these angles (vehicle axes). The actual mount and all sensor data "
                 "stay unchanged. "
                 "+ yaw: assumed forward to the left; + pitch: assumed forward nose-down (gravity leaks in "
                 "as −g·sin pitch); + roll: assumed up tilted to the right."
             ).classes("text-xs text-gray-500")
+            show_if(self.enabled, self.s_yaw, self.s_pitch, self.s_roll, self.cal_note)
             self.enabled.on_value_change(self._changed)
             for s in (self.s_yaw, self.s_pitch, self.s_roll):
                 s.on("change", self._changed)
@@ -410,14 +427,12 @@ class MapDataPanel(Panel):
 
     def __init__(self, on_change: Callback, map_data: MapDataConfig) -> None:
         super().__init__(on_change)
-        with ui.expansion("Map data (estimators)", icon="terrain", value=False).classes(
-            "w-full border rounded"
-        ):
-            self.grade_on = ui.switch("Road grade from the map", value=map_data.road_grade)
+        with box():
+            self.grade_on = ui.switch("Estimators use the road grade from the map", value=map_data.road_grade)
             ui.label(
-                "The map provides the road grade along the route (assumed exact). The IMU estimators "
-                "subtract the gravity it adds to the forward accelerometer axis, relative to the grade "
-                "they were calibrated in. Only positioning re-runs; the simulated data stay unchanged."
+                "The navigation map provides the road grade along the route (assumed exact). The IMU "
+                "estimators subtract the gravity it adds to the forward accelerometer axis, relative to the "
+                "grade they were calibrated in. Only positioning re-runs; the simulated drive is unchanged."
             ).classes("text-xs text-gray-500")
             self.grade_on.on_value_change(self._changed)
 
@@ -429,15 +444,54 @@ class MapDataPanel(Panel):
             self.grade_on.value = map_data.road_grade
 
 
-class SensorPanel(Panel):
-    """IMU sample rate and error switches/magnitudes, and the phone GPS error model."""
+class ImuErrorPanel(Panel):
+    """IMU error switches and magnitudes behind one master switch; rate and seed (``advanced``)."""
 
-    def __init__(self, on_change: Callback, imu: ImuConfig, gnss: GnssConfig) -> None:
+    def __init__(self, on_change: Callback, imu: ImuConfig, advanced: ui.element) -> None:
         super().__init__(on_change)
         acc, gyr = imu.errors.accel, imu.errors.gyro
-        with ui.expansion("IMU sample rate & errors", icon="sensors", value=False).classes(
-            "w-full border rounded"
-        ):
+        with box():
+            on = _any_error(imu.errors)
+            self.errors_on = ui.switch("Simulate sensor errors (noise, bias, drift)", value=on)
+            with box() as details:
+                ui.label("Accelerometer").classes("text-sm font-bold mt-1")
+                self.acc_noise_on = ui.switch("White noise", value=acc.noise_enabled)
+                self.s_acc_nd = slider("Noise density", 0, 1000, 10, acc.noise_density / UG, "µg/√Hz")
+                self.acc_bias_on = ui.switch("Constant bias", value=acc.bias_enabled)
+                self.s_acc_bias = slider("Bias magnitude", 0, 100, 1, acc.bias_magnitude / MG, "mg")
+                self.acc_drift_on = ui.switch("Bias drift (in-run)", value=acc.drift_enabled)
+                self.s_acc_drift = slider("Drift σ", 0, 5, 0.1, acc.drift_sigma / MG, "mg")
+                ui.label("Gyroscope").classes("text-sm font-bold mt-1")
+                self.gyr_noise_on = ui.switch("White noise", value=gyr.noise_enabled)
+                self.s_gyr_nd = slider("Noise density", 0, 50, 0.5, gyr.noise_density / MDPS, "mdps/√Hz")
+                self.gyr_bias_on = ui.switch("Constant bias", value=gyr.bias_enabled)
+                self.s_gyr_bias = slider("Bias magnitude", 0, 2, 0.01, gyr.bias_magnitude / DEG, "°/s")
+                self.gyr_drift_on = ui.switch("Bias drift (in-run)", value=gyr.drift_enabled)
+                self.s_gyr_drift = slider("Drift σ", 0, 50, 0.5, gyr.drift_sigma / MDPS, "mdps")
+                self.s_drift_tau = slider("Drift correlation time", 10, 1800, 10, acc.drift_tau_s, "s")
+                self.errors_label = ui.html().classes("text-sm")
+                ui.label(
+                    "Noise density N: per-sample σ = N·√rate (rate-independent after averaging). Bias: "
+                    "constant vector with the given norm, direction drawn from the seed. Bias drift: a "
+                    "slowly wandering bias (Gauss-Markov, σ and correlation time per axis), e.g. "
+                    "temperature; the approach calibration cannot remove it."
+                ).classes("text-xs text-gray-500")
+            details.bind_visibility_from(self.errors_on, "value")
+            show_if(self.acc_noise_on, self.s_acc_nd)
+            show_if(self.acc_bias_on, self.s_acc_bias)
+            show_if(self.acc_drift_on, self.s_acc_drift)
+            show_if(self.gyr_noise_on, self.s_gyr_nd)
+            show_if(self.gyr_bias_on, self.s_gyr_bias)
+            show_if(self.gyr_drift_on, self.s_gyr_drift)
+            tau_row = self.s_drift_tau.parent_slot.parent
+
+            def show_tau(_: Any = None) -> None:
+                tau_row.set_visibility(bool(self.acc_drift_on.value or self.gyr_drift_on.value))
+
+            for switch in (self.acc_drift_on, self.gyr_drift_on):
+                switch.on_value_change(show_tau)
+            show_tau()
+        with advanced:
             with ui.row().classes("w-full items-center no-wrap gap-2"):
                 self.imu_rate = ui.number(
                     "IMU rate [Hz]", value=imu.rate_hz, min=10, max=2000, step=1, format="%g"
@@ -446,128 +500,66 @@ class SensorPanel(Panel):
                 self.sensor_seed = ui.number(
                     "Sensor seed (empty = scenario seed)", value=imu.errors.seed, min=0, step=1, format="%d"
                 ).classes("flex-grow")
-            ui.label("Accelerometer").classes("text-sm font-bold mt-1")
-            self.acc_noise_on = ui.switch("White noise", value=acc.noise_enabled)
-            self.s_acc_nd = slider("Noise density", 0, 1000, 10, acc.noise_density / UG, "µg/√Hz")
-            self.acc_bias_on = ui.switch("Constant bias", value=acc.bias_enabled)
-            self.s_acc_bias = slider("Bias magnitude", 0, 100, 1, acc.bias_magnitude / MG, "mg")
-            self.acc_drift_on = ui.switch("Bias drift (in-run)", value=acc.drift_enabled)
-            self.s_acc_drift = slider("Drift σ", 0, 5, 0.1, acc.drift_sigma / MG, "mg")
-            ui.label("Gyroscope").classes("text-sm font-bold mt-1")
-            self.gyr_noise_on = ui.switch("White noise", value=gyr.noise_enabled)
-            self.s_gyr_nd = slider("Noise density", 0, 50, 0.5, gyr.noise_density / MDPS, "mdps/√Hz")
-            self.gyr_bias_on = ui.switch("Constant bias", value=gyr.bias_enabled)
-            self.s_gyr_bias = slider("Bias magnitude", 0, 2, 0.01, gyr.bias_magnitude / DEG, "°/s")
-            self.gyr_drift_on = ui.switch("Bias drift (in-run)", value=gyr.drift_enabled)
-            self.s_gyr_drift = slider("Drift σ", 0, 50, 0.5, gyr.drift_sigma / MDPS, "mdps")
-            self.s_drift_tau = slider("Drift correlation time", 10, 1800, 10, acc.drift_tau_s, "s")
-            self.errors_label = ui.html().classes("text-sm")
-            ui.label(
-                "Noise density N: per-sample σ = N·√rate (rate-independent after averaging). Bias: constant "
-                "vector with the given norm, direction drawn from the seed. Bias drift: a slowly wandering "
-                "bias (Gauss-Markov, σ and correlation time per axis), e.g. temperature; the approach "
-                "calibration cannot remove it."
-            ).classes("text-xs text-gray-500")
-            switches = (self.acc_noise_on, self.acc_bias_on, self.acc_drift_on, self.gyr_noise_on,
-                        self.gyr_bias_on, self.gyr_drift_on)  # fmt: skip
-            for switch in switches:
-                switch.on_value_change(self._changed)
-            sliders = (self.s_acc_nd, self.s_acc_bias, self.s_acc_drift, self.s_gyr_nd, self.s_gyr_bias,
-                       self.s_gyr_drift, self.s_drift_tau)  # fmt: skip
-            for s in sliders:
-                s.on("change", self._changed)
-            for number in (self.imu_rate, self.sensor_seed):
-                number.on("blur", self._changed)
-                number.on("keydown.enter", self._changed)
-            ui.label("GPS (phone location fixes)").classes("text-sm font-bold mt-2")
-            self.gps_on = ui.switch("GPS enabled", value=gnss.enabled)
-            self.s_gps_sigma = slider("Position error σ", 0, 10, 0.5, gnss.position_sigma_m, "m")
-            self.s_gps_tau = slider("Error correlation", 5, 120, 5, gnss.position_tau_s, "s")
-            self.s_gps_speed = slider("Speed noise σ", 0, 1, 0.05, gnss.speed_sigma_mps, "m/s")
-            self.s_gps_window = slider("Loss up to … before B", 0, 200, 10, gnss.loss_window_m, "m")
-            self.s_gps_delay = slider("Reacquisition delay", 0, 20, 0.5, gnss.reacquisition_delay_s, "s")
-            self.deg_on = ui.switch(
-                "Degradation before the tunnel (multipath)", value=gnss.portal_degradation
-            )
-            self.s_deg_len = slider("Degradation zone before B", 0, 500, 10, gnss.degradation_length_m, "m")
-            self.s_deg_sigma = slider("Extra error σ at B", 0, 30, 0.5, gnss.degradation_sigma_m, "m")
-            self.s_deg_outlier = slider(
-                "Jump probability at B", 0, 50, 1, 100 * gnss.outlier_probability, "%"
-            )
-            ui.label(
-                "Degradation grows linearly over the zone and reaches these values at B: extra correlated "
-                "position error, extra speed noise and occasional multipath jumps (not reflected in the "
-                "reported accuracy)."
-            ).classes("text-xs text-gray-500")
-            self.gps_on.on_value_change(self._changed)
-            self.deg_on.on_value_change(self._changed)
-            gps_sliders = (self.s_gps_sigma, self.s_gps_tau, self.s_gps_speed, self.s_gps_window,
-                           self.s_gps_delay, self.s_deg_len, self.s_deg_sigma,
-                           self.s_deg_outlier)  # fmt: skip
-            for s in gps_sliders:
-                s.on("change", self._changed)
+        switches = (self.errors_on, self.acc_noise_on, self.acc_bias_on, self.acc_drift_on,
+                    self.gyr_noise_on, self.gyr_bias_on, self.gyr_drift_on)  # fmt: skip
+        for switch in switches:
+            switch.on_value_change(self._changed)
+        sliders = (self.s_acc_nd, self.s_acc_bias, self.s_acc_drift, self.s_gyr_nd, self.s_gyr_bias,
+                   self.s_gyr_drift, self.s_drift_tau)  # fmt: skip
+        for s in sliders:
+            s.on("change", self._changed)
+        for number in (self.imu_rate, self.sensor_seed):
+            number.on("blur", self._changed)
+            number.on("keydown.enter", self._changed)
 
     def imu(self, base: ImuConfig) -> ImuConfig:
-        """``base`` with the rate and errors from the controls (an explicit bias keeps its direction)."""
+        """``base`` with the rate and errors from the controls (an explicit bias keeps its direction).
+
+        With the master switch off every error is off; the individual settings are kept for later."""
         rate = self.imu_rate.value
         rate = float(min(max(rate, 10.0), 2000.0)) if rate is not None else base.rate_hz
         seed = self.sensor_seed.value
         tau = float(self.s_drift_tau.value)
+        on = bool(self.errors_on.value)
 
-        def drift(on, s_sigma, unit) -> dict:
+        def drift(switch, s_sigma, unit) -> dict:
             return {
-                "drift_enabled": bool(on.value),
+                "drift_enabled": on and bool(switch.value),
                 "drift_sigma": float(s_sigma.value) * unit,
                 "drift_tau_s": tau,
             }
 
         accel = _sensor_errors(
-            base.errors.accel, self.acc_noise_on, self.s_acc_nd, UG, self.acc_bias_on, self.s_acc_bias, MG
+            base.errors.accel, self.acc_noise_on, self.s_acc_nd, UG, self.acc_bias_on, self.s_acc_bias, MG, on
         ).model_copy(update=drift(self.acc_drift_on, self.s_acc_drift, MG))
         gyro = _sensor_errors(
-            base.errors.gyro, self.gyr_noise_on, self.s_gyr_nd, MDPS, self.gyr_bias_on, self.s_gyr_bias, DEG
-        ).model_copy(update=drift(self.gyr_drift_on, self.s_gyr_drift, MDPS))
+            base.errors.gyro,
+            self.gyr_noise_on,
+            self.s_gyr_nd,
+            MDPS,
+            self.gyr_bias_on,
+            self.s_gyr_bias,
+            DEG,
+            on,
+        )  # fmt: skip.model_copy(update=drift(self.gyr_drift_on, self.s_gyr_drift, MDPS))
         errors = ImuErrorConfig(accel=accel, gyro=gyro, seed=int(seed) if seed is not None else None)
         return base.model_copy(update={"rate_hz": rate, "errors": errors})
 
-    def gnss(self, base: GnssConfig) -> GnssConfig:
-        return base.model_copy(
-            update={
-                "enabled": bool(self.gps_on.value),
-                "position_sigma_m": float(self.s_gps_sigma.value),
-                "position_tau_s": float(self.s_gps_tau.value),
-                "speed_sigma_mps": float(self.s_gps_speed.value),
-                "loss_window_m": float(self.s_gps_window.value),
-                "reacquisition_delay_s": float(self.s_gps_delay.value),
-                "portal_degradation": bool(self.deg_on.value),
-                "degradation_length_m": float(self.s_deg_len.value),
-                "degradation_sigma_m": float(self.s_deg_sigma.value),
-                "outlier_probability": float(self.s_deg_outlier.value) / 100.0,
-            }
-        )
-
     def set_imu(self, imu: ImuConfig) -> None:
+        """Show ``imu``. Error-free IMU: master switch off, the individual switches keep their state."""
         with self._quiet():
             self.imu_rate.value = imu.rate_hz
             self.sensor_seed.value = imu.errors.seed
             acc, gyr = imu.errors.accel, imu.errors.gyro
-            self.acc_noise_on.value, self.acc_bias_on.value = acc.noise_enabled, acc.bias_enabled
             self.s_acc_nd.value, self.s_acc_bias.value = acc.noise_density / UG, acc.bias_magnitude / MG
-            self.gyr_noise_on.value, self.gyr_bias_on.value = gyr.noise_enabled, gyr.bias_enabled
             self.s_gyr_nd.value, self.s_gyr_bias.value = gyr.noise_density / MDPS, gyr.bias_magnitude / DEG
-            self.acc_drift_on.value, self.s_acc_drift.value = acc.drift_enabled, acc.drift_sigma / MG
-            self.gyr_drift_on.value, self.s_gyr_drift.value = gyr.drift_enabled, gyr.drift_sigma / MDPS
+            self.s_acc_drift.value, self.s_gyr_drift.value = acc.drift_sigma / MG, gyr.drift_sigma / MDPS
             self.s_drift_tau.value = acc.drift_tau_s
-
-    def set_gnss(self, gnss: GnssConfig) -> None:
-        with self._quiet():
-            self.gps_on.value = gnss.enabled
-            self.s_gps_sigma.value, self.s_gps_tau.value = gnss.position_sigma_m, gnss.position_tau_s
-            self.s_gps_speed.value, self.s_gps_window.value = gnss.speed_sigma_mps, gnss.loss_window_m
-            self.s_gps_delay.value = gnss.reacquisition_delay_s
-            self.deg_on.value, self.s_deg_len.value = gnss.portal_degradation, gnss.degradation_length_m
-            self.s_deg_sigma.value = gnss.degradation_sigma_m
-            self.s_deg_outlier.value = 100.0 * gnss.outlier_probability
+            self.errors_on.value = _any_error(imu.errors)
+            if self.errors_on.value:
+                self.acc_noise_on.value, self.acc_bias_on.value = acc.noise_enabled, acc.bias_enabled
+                self.gyr_noise_on.value, self.gyr_bias_on.value = gyr.noise_enabled, gyr.bias_enabled
+                self.acc_drift_on.value, self.gyr_drift_on.value = acc.drift_enabled, gyr.drift_enabled
 
     def show_applied_errors(self, result: SimulationResult) -> None:
         """The per-sample noise σ and the bias actually drawn for this run (hidden simulation state)."""
@@ -588,8 +580,87 @@ class SensorPanel(Panel):
             self.errors_label.content += "<br>Bias drift over the run: " + ", ".join(drift)
 
 
+class GpsPanel(Panel):
+    """The phone GPS: availability, error model, loss/reacquisition, degradation before the portal."""
+
+    def __init__(self, on_change: Callback, gnss: GnssConfig) -> None:
+        super().__init__(on_change)
+        with box():
+            self.gps_on = ui.switch("GPS enabled", value=gnss.enabled)
+            with box() as details:
+                self.s_gps_sigma = slider("Position error σ", 0, 10, 0.5, gnss.position_sigma_m, "m")
+                self.s_gps_tau = slider("Error correlation", 5, 120, 5, gnss.position_tau_s, "s")
+                self.s_gps_speed = slider("Speed noise σ", 0, 1, 0.05, gnss.speed_sigma_mps, "m/s")
+                self.s_gps_window = slider("Loss up to … before B", 0, 200, 10, gnss.loss_window_m, "m")
+                self.s_gps_delay = slider("Reacquisition delay", 0, 20, 0.5, gnss.reacquisition_delay_s, "s")
+                self.deg_on = ui.switch(
+                    "Degradation before the tunnel (multipath)", value=gnss.portal_degradation
+                )
+                self.s_deg_len = slider(
+                    "Degradation zone before B", 0, 500, 10, gnss.degradation_length_m, "m"
+                )
+                self.s_deg_sigma = slider("Extra error σ at B", 0, 30, 0.5, gnss.degradation_sigma_m, "m")
+                self.s_deg_outlier = slider(
+                    "Jump probability at B", 0, 50, 1, 100 * gnss.outlier_probability, "%"
+                )
+                self.deg_note = ui.label(
+                    "Degradation grows linearly over the zone and reaches these values at B: extra "
+                    "correlated position error, extra speed noise and occasional multipath jumps (not "
+                    "reflected in the reported accuracy)."
+                ).classes("text-xs text-gray-500")
+            details.bind_visibility_from(self.gps_on, "value")
+            show_if(self.deg_on, self.s_deg_len, self.s_deg_sigma, self.s_deg_outlier, self.deg_note)
+        self.gps_on.on_value_change(self._changed)
+        self.deg_on.on_value_change(self._changed)
+        sliders = (self.s_gps_sigma, self.s_gps_tau, self.s_gps_speed, self.s_gps_window, self.s_gps_delay,
+                   self.s_deg_len, self.s_deg_sigma, self.s_deg_outlier)  # fmt: skip
+        for s in sliders:
+            s.on("change", self._changed)
+
+    def gnss(self, base: GnssConfig) -> GnssConfig:
+        return base.model_copy(
+            update={
+                "enabled": bool(self.gps_on.value),
+                "position_sigma_m": float(self.s_gps_sigma.value),
+                "position_tau_s": float(self.s_gps_tau.value),
+                "speed_sigma_mps": float(self.s_gps_speed.value),
+                "loss_window_m": float(self.s_gps_window.value),
+                "reacquisition_delay_s": float(self.s_gps_delay.value),
+                "portal_degradation": bool(self.deg_on.value),
+                "degradation_length_m": float(self.s_deg_len.value),
+                "degradation_sigma_m": float(self.s_deg_sigma.value),
+                "outlier_probability": float(self.s_deg_outlier.value) / 100.0,
+            }
+        )
+
+    def set_gnss(self, gnss: GnssConfig) -> None:
+        with self._quiet():
+            self.gps_on.value = gnss.enabled
+            self.s_gps_sigma.value, self.s_gps_tau.value = gnss.position_sigma_m, gnss.position_tau_s
+            self.s_gps_speed.value, self.s_gps_window.value = gnss.speed_sigma_mps, gnss.loss_window_m
+            self.s_gps_delay.value = gnss.reacquisition_delay_s
+            self.deg_on.value, self.s_deg_len.value = gnss.portal_degradation, gnss.degradation_length_m
+            self.s_deg_sigma.value = gnss.degradation_sigma_m
+            self.s_deg_outlier.value = 100.0 * gnss.outlier_probability
+
+
+def _any_error(errors: ImuErrorConfig) -> bool:
+    return any(
+        getattr(sensor, flag)
+        for sensor in (errors.accel, errors.gyro)
+        for flag in ("noise_enabled", "bias_enabled", "drift_enabled")
+    )
+
+
 def _sensor_errors(
-    base: SensorErrorConfig, noise_on, s_noise, noise_unit: float, bias_on, s_bias, bias_unit: float
+    base: SensorErrorConfig,
+    noise_on,
+    s_noise,
+    noise_unit: float,
+    bias_on,
+    s_bias,
+    bias_unit: float,
+    enabled: bool = True,
 ) -> SensorErrorConfig:
     magnitude = float(s_bias.value) * bias_unit
     vector = base.bias_vector
@@ -598,9 +669,9 @@ def _sensor_errors(
         vector = tuple(float(v) * magnitude / norm for v in vector) if norm > 0 else None
     return base.model_copy(
         update={
-            "noise_enabled": bool(noise_on.value),
+            "noise_enabled": enabled and bool(noise_on.value),
             "noise_density": float(s_noise.value) * noise_unit,
-            "bias_enabled": bool(bias_on.value),
+            "bias_enabled": enabled and bool(bias_on.value),
             "bias_magnitude": magnitude,
             "bias_vector": vector,
         }

@@ -268,6 +268,24 @@ estimators must receive finished data, with no calibration-error argument.
 * *Not changed:* the holder shift (a physical mount change after calibration) stays out, by user
   decision (R11).
 
+**Task 12: UI polish, step 1 (user-guided).**
+* *Bug F10 fixed* (see below); separate commit.
+* *Grouping and order:* the settings groups below the cards now run, most used first:
+  1. tunnel (exit announcement + traffic);
+  2. road profile, now with the "estimators use the road grade from the map" switch;
+  3. phone IMU (mounting, sensor errors, calibration error, then "More": lever arm, Earth rotation,
+     IMU rate, sensor seed);
+  4. phone GPS;
+  5. drive and simulation.
+* *Master switch* for all IMU errors: off = error-free IMU, with the individual settings kept and
+  restored. Switched-off options hide their sliders.
+* *Checked in a browser*: the layout renders, hidden sliders appear and disappear, and the master switch
+  re-simulates (`dr_raw` at C 1069 m → 24 m with an error-free IMU).
+* *Unchanged:* simulation and positioning code; the panels convert to the same configs. A stale note
+  in the profile editor ("estimators get no height information", wrong since D39) was corrected.
+* *Test fix:* UI tests found their page with `gc.get_objects()` and could pick a page of an earlier
+  test; they now pick the page of their own client.
+
 **Observation (UI behaviour, pre-existing, not fixed):** NiceGUI runs *async* change handlers as
 background tasks, so the "loading" guard that marks values set from code is already reset when they run.
 Handlers registered with `on_value_change` / `on_change` (switches, mount-preset select) therefore
