@@ -1,7 +1,7 @@
 """Road profile overlay on the map: height along the route with the vehicle and the estimates on it.
 
-A semi-transparent panel at the bottom of the map, hidable with its close button (a small *Profile*
-button brings it back). It shows the road height along the map route (flat roads included), the
+A semi-transparent panel at the bottom of the map, hidden by default: a small *Profile* button shows it
+and its close button hides it again. It shows the road height along the map route (flat roads included), the
 tunnel B–C, the exit-announcement point, and moving markers for the true vehicle and each visible
 estimator (its own along-route distance). The header gives the true grade at the vehicle. Display only:
 everything comes from the simulation result and the estimate tracks the page already has.
@@ -127,7 +127,7 @@ class ProfileOverlay:
             self.show_button = ui.button("Profile", icon="terrain", on_click=lambda: self.set_shown(True))
             self.show_button.props("dense size=sm color=white text-color=black")
             self.show_button.tooltip("Show the road profile")
-        self.show_button.set_visibility(False)
+        self.panel.set_visibility(False)  # hidden by default
 
     @property
     def shown(self) -> bool:
@@ -169,8 +169,8 @@ class ProfileOverlay:
 
     # ------------------------------------------------------------------ helpers
     def _redraw(self) -> None:
-        if self._result is None:
-            return
+        if self._result is None or not self.shown:
+            return  # drawn when shown (Plotly cannot size a hidden div)
         self.plot.update_figure(overlay_figure(self._result, self._names))
         self.update(self._t)
 

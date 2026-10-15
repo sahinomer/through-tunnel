@@ -247,3 +247,17 @@ async def test_imu_error_master_switch_turns_all_errors_off_and_back_on():
             panel.errors_on.value = True
             await panel._changed()
         assert page.result.config.imu.errors == before  # the individual choice is restored
+
+
+@pytest.mark.anyio
+async def test_defaults_map_selection_off_and_profile_panel_hidden():
+    """Clicks while panning must not move route points; the profile panel opens on request."""
+    async with user_simulation(root=SimulatorPage) as user:
+        await user.open("/")
+        page = current_page(user)
+        assert page.picker.switch.value is False
+        assert "Turn on the switch" in page.picker.hint.text
+        assert not page.profile_overlay.shown and page.profile_overlay.show_button.visible
+        with user.client:
+            page.profile_overlay.set_shown(True)
+        assert page.profile_overlay.shown and not page.profile_overlay.show_button.visible

@@ -38,7 +38,8 @@ Options: `uv run throughtunnel --port 8090 --host 0.0.0.0 --no-browser`.
 ## Using the simulator
 
 1. **Pick a scenario.** Either choose a preset (*Seattle SR 99 Tunnel*, *Eisenhower Tunnel*, *Synthetic demo
-   route*), or click four points on the map:
+   route*), or turn on *Select A–B–C–D by clicking the map* (off by default, so panning the map
+   never moves points) and click four points on the map:
    * **A** start;
    * **B** tunnel entrance;
    * **C** tunnel exit;
@@ -56,7 +57,7 @@ Options: `uv run throughtunnel --port 8090 --host 0.0.0.0 --no-browser`.
 2. **Play it back.** Use play/pause, restart, playback speed (0.5×–20×), and seek with the slider or by
    clicking a plot. The vehicle (yellow) moves along the road with a heading tick, the travelled trail
    is drawn in orange, and the readouts and plot cursor follow the simulation time. The *Road profile* panel at
-   the bottom of the map (hide it with ×, bring it back with *Profile*) shows the road height along the
+   the bottom of the map (hidden by default: open it with *Profile*, hide it with ×) shows the road height along the
    route, the tunnel B–C and the announcement point, with the vehicle and every visible estimator moving
    on it, and the grade at the vehicle.
 3. **Change the scenario.** Under *Drive and simulation* (the last settings group) you can set the driver style (calm / normal /

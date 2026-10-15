@@ -32,7 +32,9 @@ class RoutePicker:
         self._busy = False
         map_view.map.on("map-click", self._on_click)
         with ui.row().classes("items-center gap-3"):
-            self.switch = ui.switch("Select A–B–C–D by clicking the map", value=True)
+            # Off by default: clicks while panning the map must not move the route points.
+            self.switch = ui.switch("Select A–B–C–D by clicking the map", value=False)
+            self.switch.on_value_change(lambda _: self._set_hint())
             ui.button("Clear selection", on_click=self.clear).props("flat dense")
         self.hint = ui.label().classes("text-xs text-gray-600")
         self._set_hint()
@@ -43,6 +45,9 @@ class RoutePicker:
         self._set_hint()
 
     def _set_hint(self) -> None:
+        if not self.switch.value:
+            self.hint.text = "Turn on the switch to pick a new route (A, B, C, D) by clicking the map."
+            return
         label = "ABCD"[len(self.picks)] if len(self.picks) < 4 else "A"
         self.hint.text = (
             f"Click the map to set point {label} ({POINT_NAMES[label]}). A–B: approach with GPS, "
