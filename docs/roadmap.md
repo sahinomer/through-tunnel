@@ -330,6 +330,15 @@ estimators must receive finished data, with no calibration-error argument.
 stop-and-go, 18 one-at-a-time conditions plus the cause-side handover diagnostics. Built while
 validating it: the forward-offset diagnostic, because the pitch misalignment alone misleads under an
 accelerometer bias (the levelling cancels the bias by tilting the axes).
+* *Results* (`docs/benchmark/error_sources/`, 4 320 records, 32 min; summary in
+  [benchmark/README.md](benchmark/README.md)).
+  * The handover state at GPS loss predicts the 5 km error (correlation 0.99–1.00; drift excepted).
+  * Degraded GPS before the portal costs 170–190 m, via the levelling and the handed-over speed (the
+    user's hypothesis, confirmed).
+  * Calibration pitch 0.1° costs ~550 m. Constant errors are calibrated away.
+  * Floor: 0 m in free flow, 12–13 m in stop-and-go.
+* *Run note:* the first full run was stopped by the system for low memory (results are written only at
+  the end). It was rerun after the user freed memory.
 
 **Observation (UI behaviour, pre-existing, not fixed):** NiceGUI runs *async* change handlers as
 background tasks, so the "loading" guard that marks values set from code is already reset when they run.

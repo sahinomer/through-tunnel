@@ -9,6 +9,7 @@ baseline on exactly the same runs:
 | Baseline | Commit | Estimators | Tables |
 |---|---|---|---|
 | `baseline/` | `36904cb` (2026-10-15) | the 5 phone-only estimators before any estimator work, + the reference | [tables](baseline/tables.md) · [configuration](baseline/config.md) |
+| `error_sources/` (D45) | `e69543f` (2026-10-15) | the same estimators; one error source at a time on the 5 km flat tunnel | [tables](error_sources/tables.md) · [configuration](error_sources/config.md) |
 
 Each baseline directory holds, next to its results, the configuration it ran with: `config.md` (readable,
 including where the setup is optimistic) and `config.json` (the complete effective configuration of every
@@ -63,3 +64,38 @@ All 48 scenarios, median (p90); † = reference (uses the car's speed):
 
 These are the numbers the estimator work has to improve: phone-only, with map grade, the 5 km and
 stop-and-go cases.
+
+## What the error-source benchmark says
+
+The 5 km flat tunnel, error 5 km in for the best phone-only estimators (route + IMU / DR filtered),
+median [m]. Each condition adds one error source to an error-free setup:
+
+| Error source | free flow | stop-and-go | through (handover at GPS loss) |
+|---|---|---|---|
+| none (floor) | 0 | 12–13 | – |
+| calibration pitch 0.1° / 0.5° | 540–590 / 2 600 | 880–950 / 3 300 | forward offset 1.7 / 8.7 mg |
+| GPS degradation before the portal (normal / harsh) | 170–184 / 175–188 | 325–354 / 337–373 | forward offset 0.5 mg, speed 0.12–0.14 m/s |
+| GPS speed noise | 95–98 | 196–210 | forward offset 0.2 mg, speed 0.05 m/s |
+| accelerometer bias drift | 78–85 | 328–354 | changes inside the tunnel |
+| calibration yaw 2° | 57–58 | 79–82 | lateral acceleration on curves |
+| accelerometer noise | 7 | 26–28 | – |
+| gyro noise / bias / drift, accelerometer bias, tilted mount, calibration roll, GPS position error | 0–15 | 12–67 | constant errors are calibrated away |
+| all realistic (benchmark setting) | 217–231 | 470–482 | forward offset 0.6 mg, speed 0.11 m/s |
+| hard (+ tilted mount + calibration error) | 2 610–2 640 | 3 280–3 300 | dominated by the 0.5° pitch |
+| reference (car speed), realistic | 6 | 7 | – |
+
+* **The handover state decides the error.** For the calibration and GPS conditions, the along-track
+  error 5 km in is ½ · forward offset · t² + speed error · t from the state at GPS loss (correlation
+  0.99–1.00 per run). Only bias drift, which changes inside the tunnel, is not predicted this way
+  (0.48). The tunnel phase adds almost nothing: the error is set before the tunnel.
+* **Unreliable GPS before the entrance hurts the GPS-calibrated estimators (confirmed).** Degraded
+  fixes in the last 150 m before B corrupt the levelling (0.5 mg forward offset ≈ 0.03° pitch) and
+  the handed-over speed (0.12 m/s). Alone, this costs 170–190 m after 5 km. The harsh version (500 m,
+  20 m) is barely worse: the damage comes from the last fixes, not from how long the degradation lasts.
+* **Calibration pitch is the single largest risk.** 0.1° = 1.7 mg costs ~550 m after 5 km; the
+  estimators cannot observe it after the calibration.
+* **What the calibration already handles.** Constant errors (accelerometer and gyro bias, a tilted
+  mount, roll) are calibrated away almost completely.
+* **Stop-and-go doubles the time-driven errors** (drift, offsets): 738 s instead of 258 s to 5 km. The
+  floor itself is 12–13 m there (error-free sensors), so the algorithm alone loses some accuracy at
+  stops.
