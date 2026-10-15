@@ -15,8 +15,11 @@ the route. What it cannot remove:
   acceleration (a factor √(1 + grade²), 0.08 % at 4 %), and the vertical acceleration in dips and
   crests leaks in multiplied by sin(φ - φ_cal).
 
-Gravity is the standard value: the phone could compute normal gravity at its latitude, but the
-difference (< 0.3 %) scales only the grade correction, i.e. < 0.01 % of g on a 4 % grade.
+Gravity is the standard value; the simulator uses normal gravity at the latitude. The difference
+(≈0.05 % at 40° N) scales only the grade correction: ≈1·10⁻⁴ m/s² on a 2 % grade, i.e. ~14 m after a
+7.6 min stop-and-go outage on Eisenhower +2 % (measured). Using the matched value there gives 56 m
+instead of 42 m with ideal sensors: a second small term of opposite sign remains unidentified
+(map_grade_study.md, open items).
 """
 
 from __future__ import annotations

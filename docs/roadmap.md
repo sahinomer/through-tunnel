@@ -239,12 +239,18 @@ Improvement candidates, none implemented:
     confirmed).
   * Drift adds p90 tails of 0.3–0.6 km in long stop-and-go outages.
 
-**Task 10: map grade for the estimators (D39), done (realistic-sensor study pending).**
+**Task 10: map grade for the estimators (D39), done.**
 * *Model:* the map optionally provides the road grade (assumed exact, user decision; map grade errors
   are listed in [limitations.md](limitations.md)). Every IMU estimator removes the gravity leakage of
   the grade change since calibration. UI switch *Map data (estimators)*; only positioning re-runs.
 * *Validation (ideal sensors):* sloped tunnels go from 0.9–2.2 km to 0.2–7.6 m at C; flat roads are
   bit-identical. Details: [map_grade_study.md](map_grade_study.md).
+* *Study (20 paired seeds, free flow + stop-and-go):* in free flow, sloped tunnels return to the
+  flat-road result (median within ±2 m, p90 ≤ +8 m). Stop-and-go on +2 % drops from 11–21 km to
+  52–228 m median, but p90 tails grow by up to +0.7 km: a position error at a grade change feeds back
+  into the speed (pulls back at grade increases, pushes away at decreases). That also makes the V
+  profiles 3–23 m *better* than flat. Open: a 42 m ideal-sensor residual in long outages, only partly
+  a gravity-model mismatch.
 * *Found during validation:* map heights differentiated over map distance give false grade dips at
   polyline corners (driven path cuts them), which biased the calibration grade. The map now carries
   the grade itself.

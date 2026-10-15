@@ -221,7 +221,10 @@ Stop-and-go traffic and map errors are on the roadmap.
 - **Simulator scope frozen** (D38) after two optional realism effects (IMU bias drift, GPS degradation
   before the portal). What is not simulated is listed with its expected effect in
   [docs/limitations.md](docs/limitations.md).
-- **Next:** an estimator that handles standstills, time-driven drift and grade; map errors; a
+- **Map grade for the estimators** (done, 2026-10-15, D39). Optional exact road grade from the map;
+  sloped tunnels return to the flat-road accuracy in free flow, and stop-and-go on a climb drops from
+  kilometres to 52–228 m median ([docs/map_grade_study.md](docs/map_grade_study.md)).
+- **Next:** an estimator that handles standstills and time-driven drift; map errors; a
   probabilistic estimator with covariance; then the write-up. Tracked in [docs/roadmap.md](docs/roadmap.md).
 
 ## Data and services
