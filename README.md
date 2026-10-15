@@ -238,7 +238,11 @@ Stop-and-go traffic and map errors are on the roadmap.
   kilometres to 52–228 m median ([docs/map_grade_study.md](docs/map_grade_study.md)).
 - **Vehicle speed sensor and final simulator freeze** (done, 2026-10-15, D41). The car's speed reading
   with a fixed scale error, as reference information for one dedicated estimator only.
-- **Next:** a fixed benchmark; an estimator that handles standstills and time-driven drift; map errors; a
+- **Benchmarks and baselines** (done, 2026-10-15, D43–D45): 48 scenarios and an error-source benchmark,
+  with saved configurations ([docs/benchmark/README.md](docs/benchmark/README.md)).
+- **Next:** the estimator work planned in [docs/estimator_plan.md](docs/estimator_plan.md) (problems,
+  candidate solutions, proposed order; to be discussed). Earlier notes: an estimator that handles
+  standstills and time-driven drift; map errors; a
   probabilistic estimator with covariance; then the write-up. Tracked in [docs/roadmap.md](docs/roadmap.md).
 
 ## Data and services

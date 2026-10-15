@@ -340,6 +340,10 @@ accelerometer bias (the levelling cancels the bias by tilting the axes).
 * *Run note:* the first full run was stopped by the system for low memory (results are written only at
   the end). It was rerun after the user freed memory.
 
+**State point (2026-10-15): estimator phase, before any estimator work.** Problems P1–P6, candidate
+solutions, a proposed order and the open items are in [estimator_plan.md](estimator_plan.md). Nothing
+there is implemented; the next step is to discuss it with the user.
+
 **Observation (UI behaviour, pre-existing, not fixed):** NiceGUI runs *async* change handlers as
 background tasks, so the "loading" guard that marks values set from code is already reset when they run.
 Handlers registered with `on_value_change` / `on_change` (switches, mount-preset select) therefore

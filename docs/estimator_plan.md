@@ -1,0 +1,134 @@
+# Estimator work: problems, candidate solutions, plan (state point 2026-10-15)
+
+State point at the end of the session of 2026-10-15, to resume the estimator phase. **Nothing in this
+document is implemented yet.** The user stopped here to continue later; the next step is to discuss
+these solutions and agree the order before building anything (user's working mode: discuss first, one
+step at a time, compare every change against the benchmarks).
+
+## Where we are
+
+* **The simulator is frozen** (D38, final with D41). The optional effects (bias drift, GPS degradation
+  before the portal, the car-speed sensor) are in place.
+* **The pipeline:** observations → alignment stage → estimator (D40). The car-speed reading reaches only
+  the reference estimator (D41/D42).
+* **Estimators:**
+  * phone-only (`MAIN_ESTIMATORS`): `dr_raw`, `dr_calibrated`, `dr_filtered`, `route_imu`, `route_hold`;
+  * reference (`REFERENCE_ESTIMATORS`): `route_vspeed` (route + calibrated car speed), the ceiling.
+* **Two baselines**, each with its configuration saved next to it ([benchmark/README.md](benchmark/README.md)):
+  * `docs/benchmark/baseline/` (D43/D44): 48 scenarios (tunnel length ladder 0.5–5 km + 3 presets ×
+    flat / +3 % climb / underwater × free flow / stop-and-go), realism on, map grade off/on;
+  * `docs/benchmark/error_sources/` (D45): one error source at a time on the 5 km flat tunnel, free
+    flow and stop-and-go, with the state handed over at GPS loss.
+* **Key numbers** (best phone-only estimator):
+  * map grade on, all 48 scenarios: 39 m median, 544 m p90, 21 % gross errors (> 200 m);
+  * reference: 5 m median, 0 % gross errors;
+  * realistic, 5 km flat: 217–231 m (free flow), 470–482 m (stop-and-go);
+  * error-free sensors: 0 m (free flow), 12–13 m (stop-and-go).
+* **Central finding:** the state handed over at GPS loss decides the error. The along-track error 5 km
+  in is ½ · forward offset · t² + speed error · t (correlation 0.99–1.00 per run; bias drift excepted).
+
+## Problems (from both benchmarks)
+
+| # | Problem | Evidence |
+|---|---|---|
+| P1 | The calibration absorbs the last, degraded GPS fixes before the tunnel | GPS degradation alone: 170–190 m after 5 km (0.5 mg forward offset, 0.12 m/s speed); harsh degradation barely worse, so the last fixes do the damage |
+| P2 | Speed and heading handed over at GPS loss are noisy | GPS speed noise alone ≈ 95 m; handover speed error 0.05–0.14 m/s |
+| P3 | A pitch residual cannot be observed after the calibration | 0.1° = 1.7 mg ≈ 550 m after 5 km |
+| P4 | Accelerometer bias drift grows inside the tunnel | 80 m (free flow), 330–350 m (stop-and-go) |
+| P5 | Stops are handled one-sidedly (v ≥ 0 clamp: negative errors wiped, positive ones creep) | 12–13 m floor in stop-and-go with error-free sensors; long "ahead" tails |
+| P6 | Yaw residual leaks lateral acceleration into the forward channel on curves | 2° ≈ 57–80 m |
+
+Handled already or out of scope: grade (map grade, D39); constant biases, tilted mount and roll (the
+calibration removes them).
+
+## Candidate solutions
+
+### P1: the calibration absorbs degraded fixes
+
+| Solution | How | Expected gain | Effort | Catch |
+|---|---|---|---|---|
+| **1a. Freeze the calibration before the portal** | The map knows B: stop updating the calibration a set distance before B (e.g. 200 m) and keep the last clean result | most of the 170–190 m | small | Hard-coded distance; the calibration ages by a few seconds (harmless) |
+| **1b. Consistency gating** | Reject GPS intervals whose speed change disagrees with the acceleration the IMU measured | most of it, adaptive | medium | Threshold; noisy at low speed |
+| 1c. Weight by reported accuracy | Down-weight fixes with poor reported accuracy | some in reality; **none in the simulation** | small | The simulated degradation is deliberately not in the reported accuracy (D38) |
+| 1d. Long-term robust calibration | Robust (median) fit over the whole drive | partial | medium | Slower if the phone moves |
+
+### P2: noisy handover state
+
+| Solution | How | Expected gain | Effort | Catch |
+|---|---|---|---|---|
+| **2a. Hand over from the last trusted state** | With 1a: carry the state from the last clean fix forward with the IMU instead of taking the degraded last GPS speed | large share of the degradation part | small | Same distance choice as 1a |
+| 2b. Better speed fusion | Kalman fusion of GPS speed and IMU instead of the fixed 5 s blend | ~30–50 % of the speed-noise part | medium | Belongs in the filter |
+| 2c. Heading from the map at B | Dead-reckoning estimators snap heading to the route direction at the entrance | cross-track part | small | Route estimators already do this |
+
+### P3: pitch residual unobservable
+
+| Solution | How | Expected gain | Effort | Catch |
+|---|---|---|---|---|
+| **3a. Zero-velocity updates at stops** | At a standstill the forward channel reads exactly the offset: measure and remove it | large, **only when the car stops** | medium | Needs standstill detection (P5) |
+| **3b. Map features as position fixes** | Curves (turn rate vs. map curvature, A7) and grade changes give along-track fixes inside the tunnel | bounds the error in curved / sloped tunnels | medium–large | Useless in a straight flat tunnel |
+| 3c. Separate bias from pitch with map grade | Known grade changes on the approach make tilt and bias distinguishable | partial, sloped approaches only | medium | Depends on the profile |
+| 3d. Offset as a filter state | Honest uncertainty; lets 3a/3b correct it | enabler | part of the filter | — |
+
+### P4: bias drift in the tunnel
+
+| Solution | How | Expected gain | Effort | Catch |
+|---|---|---|---|---|
+| **4a. Zero-velocity updates** (= 3a) | Re-measure the offset at every stop | most of the stop-and-go part | with 3a | No help in free flow |
+| 4b. Map-feature fixes (= 3b) | Position fixes from curves and grade changes | bounds it | with 3b | Geometry-dependent |
+| 4c. Drift in the filter model | Uncertainty grows honestly | enabler for 4a/4b and the announcement | filter | — |
+
+### P5: one-sided stops
+
+| Solution | How | Expected gain | Effort | Catch |
+|---|---|---|---|---|
+| **5a. Standstill detection** | IMU goes quiet → speed exactly 0 (both directions); triggers 3a/4a | removes the creep; enables 3a/4a | small–medium | **The simulation has no vibration**: detection is unrealistically easy here (engine idle vibration in reality). The result is optimistic; add to limitations.md |
+
+### P6: yaw residual on curves
+
+| Solution | How | Expected gain | Effort | Catch |
+|---|---|---|---|---|
+| 6a. Predict the leak from the map | Lateral acceleration = v²·curvature is known from the map: subtract its leak into the forward channel | most of the 57–80 m on curves | small | Route estimators only |
+| 6b. Estimate yaw online | Measured lateral channel vs. predicted v²·curvature shows the yaw error, also inside the tunnel | same, adaptive | medium | Needs curves |
+
+### Beyond the sensor errors (first benchmark)
+
+* **Grade without map data:** solved by map grade (D39); a barometer would be the phone-only
+  alternative (not simulated).
+* **The announcement:** uncertainty-aware timing becomes possible once a filter gives a covariance
+  (3d/4c). 85–89 % of the bad announcements come from gross position errors, so better positions fix
+  most of them.
+
+## Recommended order (proposed, not yet agreed)
+
+1. **Freeze the calibration and hand over from the last trusted state (1a + 2a).** Small change that
+   attacks the largest *realistic* error source. Expected: the realistic free-flow case from ~220 m
+   toward 50–80 m at 5 km. It fits the current estimators, so the benchmark shows the effect cleanly.
+2. **Standstill detection + zero-velocity updates (5a + 3a/4a).** The main lever for stop-and-go;
+   partly addresses pitch and drift. Comes with the no-vibration caveat.
+3. **Route-constrained Kalman filter** (state: distance, speed, forward offset). The home for 2b, 3d,
+   4c and the 3a/3b updates; honest uncertainty for the announcement.
+4. **Map-feature fixes (3b) and the yaw-leak correction (6a).** The only way to bound long free-flow
+   tunnels without stops, once the filter exists.
+
+Each step is checked against both baselines with `--compare` before the next.
+
+## Open items carried over
+
+* The unexplained 42 m residual with ideal sensors in long outages ([map_grade_study.md](map_grade_study.md),
+  open items). It may be related to the 12–13 m stop-and-go floor (P5); worth checking first.
+* Thresholds chosen by Claude and open to change: gross error 200 m, announcement off 15 s,
+  announcement good ±3 s, regression 10 % and 5 m.
+* Optional: rerun the baseline with a longer route after C, so capped errors (§) become real values.
+* Optional: save each benchmark job when it finishes, so a run interrupted by low memory (as happened
+  once) loses at most the jobs in progress.
+* The benchmarks are optimistic in three ways ([benchmark/baseline/config.md](benchmark/baseline/config.md)):
+  an aligned mount, no injected calibration error, an exact map. The error-source benchmark's *hard*
+  condition quantifies the first two.
+
+## How to resume
+
+1. Read this file and [benchmark/README.md](benchmark/README.md).
+2. Discuss with the user: the solutions, the order, and the open thresholds.
+3. For each agreed step: implement → `uv run python -m throughtunnel.evaluation.benchmark --quick
+   --out out/dev --compare docs/benchmark/baseline` and the error-source benchmark on the conditions
+   it targets → write up → commit → stop for review.
