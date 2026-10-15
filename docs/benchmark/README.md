@@ -8,7 +8,15 @@ baseline on exactly the same runs:
 
 | Baseline | Commit | Estimators | Tables |
 |---|---|---|---|
-| `baseline/` | `36904cb` (2026-10-15) | the 5 phone-only estimators before any estimator work, + the reference | [tables](baseline/tables.md) |
+| `baseline/` | `36904cb` (2026-10-15) | the 5 phone-only estimators before any estimator work, + the reference | [tables](baseline/tables.md) · [configuration](baseline/config.md) |
+
+Each baseline directory holds, next to its results, the configuration it ran with: `config.md` (readable,
+including where the setup is optimistic) and `config.json` (the complete effective configuration of every
+scenario). They are as important as the results: a number means nothing without its settings.
+
+**Note on the profiles:** the labels "+3 % climb" and "−4 % / +4 % underwater" are the design grades.
+The actual steepest grades are 3.1–3.4 % and 3.1–4.5 % (`config.md`). The 0.5 km underwater tunnel dips
+only 5 m, because its descent is too short for the 400 m grade transitions to reach 4 %.
 
 ## Failure states (D44)
 

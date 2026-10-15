@@ -72,3 +72,17 @@ def test_failure_states_are_symmetric_and_explained():
     assert announcement_off(run | {"announcement_error_s": -16.0})  # 16 s early
     assert announcement_off(run | {"announcement_error_s": 20.0})  # 20 s late
     assert announcement_off(run | {"announcement_error_s": float("nan"), "announcement_missed": True})
+
+
+def test_configuration_snapshot_lists_shared_and_varying_settings():
+    from throughtunnel.evaluation.benchmark import config_markdown, config_snapshot
+
+    selected = [Case("ladder_0.5km", "flat", "free"), Case("eisenhower_tunnel", "underwater", "stop_and_go")]
+    snap = config_snapshot(selected, [3, 4])
+    assert set(snap["cases"]) == {c.key for c in selected} and snap["shown_for_seed"] == 3
+    assert snap["cases"]["ladder_0.5km/flat/free"]["imu"]["errors"]["accel"]["drift_enabled"] is True
+    assert "coordinates" not in snap["cases"]["ladder_0.5km/flat/free"]["route"]
+    text = config_markdown(snap, {"commit": "abc"})
+    assert "| Accelerometer bias | 10 mg, direction random per seed |" in text  # shared
+    assert "### Traffic by scenario" in text and "### Driver by scenario" in text  # varying
+    assert "## Where this setup is optimistic" in text

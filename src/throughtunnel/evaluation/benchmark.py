@@ -31,6 +31,11 @@ tables). Per run and estimator, two failure states and one data-quality flag (D4
 ``--quick`` = 5 seeds (development). ``--compare`` writes ``compare.md``: per estimator and scenario
 family, the median change of the error at C against the baseline on the shared runs, with regressions
 flagged. ``--from-csv`` regenerates the tables of an existing output directory.
+
+Every run also writes its configuration next to its results: ``config.md`` (readable: shared settings,
+the ones that differ by scenario, where the setup is optimistic) and ``config.json`` (the complete
+effective scenario configuration of every scenario). ``--write-config`` (with ``--from-csv``) rewrites
+them for an existing run.
 """
 
 from __future__ import annotations
@@ -51,6 +56,7 @@ import numpy as np
 from throughtunnel.evaluation.experiment import compare_estimators, markdown_table
 from throughtunnel.evaluation.slope_study import Profile, profile_config
 from throughtunnel.positioning import ESTIMATORS, REFERENCE_ESTIMATORS
+from throughtunnel.road_profile import ElevationProfile
 from throughtunnel.routing.synthetic import (
     DEMO_APPROACH,
     DEMO_RECOVERY,
@@ -68,6 +74,7 @@ from throughtunnel.scenario import (
     run_scenario,
     with_map_data,
 )
+from throughtunnel.sensors.errors import DEG, MDPS, MG, UG
 from throughtunnel.vehicle.traffic import TrafficConfig
 
 LADDER_KM = (0.5, 1.0, 2.0, 3.0, 5.0)
@@ -339,6 +346,200 @@ def compare_markdown(records, baseline, meta: dict, base_meta: dict) -> str:
     return "\n".join(head)
 
 
+# ---------------------------------------------------------------------- configuration snapshot
+OPTIMISTIC_NOTES = (
+    "**The phone is mounted perfectly aligned** with the vehicle (and lever arm 0). Real holders tilt the "
+    "phone. This mainly flatters `dr_raw`, whose aligned assumption is then exactly true; the calibrated "
+    "estimators estimate the mount anyway.",
+    "**No calibration error is injected**: only the natural residual of the approach calibration (from "
+    "noise, bias and GPS errors) remains. Real calibrations leave more, and a 0.1° pitch residual costs "
+    "hundreds of metres in long outages (calibration_error.md), so the phone-only numbers are likely "
+    "optimistic.",
+    "**The map is exact** (geometry and grade, user decision): this flatters the route-constrained and "
+    "map-grade results (limitations.md).",
+    "Earth rotation is off.",
+)
+
+
+def config_snapshot(selected: list[Case], seeds: list[int]) -> dict:
+    """The effective scenario configuration of every scenario (run ``seeds[0]``; the seed rule gives
+    the others). Route coordinates are left out (source and vertex count instead)."""
+    out = {}
+    for case in selected:
+        cfg = run_config(case, seeds[0])
+        d = cfg.model_dump(mode="json")
+        d["route"] = {"source": cfg.route.source, "vertices": len(cfg.route.coordinates)}
+        out[case.key] = d
+    return {
+        "seed_rule": "run k: scenario seed 1000 + k; IMU, GPS and traffic seed k",
+        "seeds": seeds,
+        "shown_for_seed": seeds[0],
+        "cases": out,
+    }
+
+
+def _get(d: dict, path: str):
+    for part in path.split("."):
+        d = d[part]
+    return d
+
+
+def _mount(m: dict) -> str:
+    angles = f"yaw {m['yaw_deg']:g}°, pitch {m['pitch_deg']:g}°, roll {m['roll_deg']:g}°"
+    return f"{m['label']} ({angles}), lever arm {tuple(m['lever_arm_m'])} m"
+
+
+def _noise(unit: float, name: str):
+    return lambda e: f"{e['noise_density'] / unit:g} {name}" if e["noise_enabled"] else "off"
+
+
+def _bias(unit: float, name: str):
+    def fmt(e: dict) -> str:
+        if not e["bias_enabled"]:
+            return "off"
+        return f"{e['bias_magnitude'] / unit:g} {name}, direction random per seed"
+
+    return fmt
+
+
+def _drift(unit: float, name: str):
+    def fmt(e: dict) -> str:
+        if not e["drift_enabled"]:
+            return "off"
+        return f"on: {e['drift_sigma'] / unit:g} {name}, τ {e['drift_tau_s']:g} s"
+
+    return fmt
+
+
+def _calibration(c: dict) -> str:
+    if not c["enabled"]:
+        return "none (only the natural residual of the approach calibration)"
+    return f"yaw {c['yaw_deg']:g}°, pitch {c['pitch_deg']:g}°, roll {c['roll_deg']:g}°"
+
+
+def _gps_position(g: dict) -> str:
+    correlated = f"{g['position_sigma_m']:g} m correlated (τ {g['position_tau_s']:g} s)"
+    return f"{correlated} + {g['white_sigma_m']:g} m white"
+
+
+def _degradation(g: dict) -> str:
+    if not g["portal_degradation"]:
+        return "off"
+    return (
+        f"on: last {g['degradation_length_m']:g} m before B, up to {g['degradation_sigma_m']:g} m extra "
+        f"error at B, {100 * g['outlier_probability']:g} % jump probability"
+    )
+
+
+def _traffic(t: dict) -> str:
+    if t["scenario"] == "free":
+        return "free flow"
+    return (
+        f"stop-and-go: {t['stop_count']} stops of {t['stop_min_s']:g}–{t['stop_max_s']:g} s, "
+        f"{t['moving_speed_kmh']:g} km/h between, ±{100 * t['jitter']:g} % variation"
+    )
+
+
+def _profile(r: dict) -> str:
+    if not r["points"]:
+        return "flat"
+    profile = ElevationProfile.from_points(r["points"])
+    heights = [h for _, h in r["points"]]
+    steepest = 100 * profile.max_grade()
+    return f"steepest grade {steepest:.1f} %, height {min(heights):+.0f} … {max(heights):+.0f} m"
+
+
+SNAPSHOT_FIELDS = (
+    # (section, label, path in the scenario config, formatter)
+    ("Phone IMU", "Phone mount", "imu.mount", _mount),
+    ("Phone IMU", "Sample rate", "imu.rate_hz", lambda v: f"{v:g} Hz"),
+    ("Phone IMU", "Accelerometer noise", "imu.errors.accel", _noise(UG, "µg/√Hz")),
+    ("Phone IMU", "Accelerometer bias", "imu.errors.accel", _bias(MG, "mg")),
+    ("Phone IMU", "Accelerometer bias drift", "imu.errors.accel", _drift(MG, "mg")),
+    ("Phone IMU", "Gyroscope noise", "imu.errors.gyro", _noise(MDPS, "mdps/√Hz")),
+    ("Phone IMU", "Gyroscope bias", "imu.errors.gyro", _bias(DEG, "°/s")),
+    ("Phone IMU", "Gyroscope bias drift", "imu.errors.gyro", _drift(MDPS, "mdps")),
+    ("Phone IMU", "Gravity / Earth rotation", "imu",
+     lambda i: f"{i['gravity_model']} / {'on' if i['earth_rotation'] else 'off'}"),
+    ("Phone IMU", "Calibration error (injected)", "calibration", _calibration),
+    ("Phone GPS", "Fix rate", "gnss.rate_hz", lambda v: f"{v:g} Hz"),
+    ("Phone GPS", "Position error", "gnss", _gps_position),
+    ("Phone GPS", "Speed noise", "gnss.speed_sigma_mps", lambda v: f"{v:g} m/s"),
+    ("Phone GPS", "Loss before B", "gnss.loss_window_m", lambda v: f"random, up to {v:g} m before B"),
+    ("Phone GPS", "Reacquisition after C", "gnss",
+     lambda g: f"{g['reacquisition_delay_s']:g} s + 0–{g['reacquisition_jitter_s']:g} s random"),
+    ("Phone GPS", "Degradation before the portal", "gnss", _degradation),
+    ("Drive and traffic", "Driver", "driver",
+     lambda d: f"{d['style']}, cruise {d['cruise_speed_kmh']:g} km/h, ±{d['speed_variability_kmh']:g} km/h"),
+    ("Drive and traffic", "Traffic", "traffic", _traffic),
+    ("Drive and traffic", "Simulation rate", "sample_rate_hz", lambda v: f"{v:g} Hz"),
+    ("Route and map", "Tunnel B–C / announcement", "tunnel",
+     lambda t: f"{t['exit_m'] - t['entrance_m']:.0f} m / {t['announce_before_exit_m']:g} m before C"),
+    ("Route and map", "Road profile", "road_profile", _profile),
+    ("Route and map", "Map", "map_data",
+     lambda m: "route polyline, exact; map grade off and on for sloped roads (both evaluated)"),
+    ("Route and map", "Car speed reading (reference only)", "vehicle_speed",
+     lambda v: f"{v['scale_error_pct']:+g} % scale error, {v['rate_hz']:g} Hz"),
+)  # fmt: skip
+
+
+def _scenario_groups(keys: list[str]) -> str:
+    """'ladder_2km, seattle_sr99_tunnel' (+ the roads/traffic if not all of them)."""
+    geometries = ", ".join(sorted({k.split("/")[0] for k in keys}))
+    roads = sorted({k.split("/")[1] for k in keys})
+    traffic = sorted({k.split("/")[2] for k in keys})
+    extra = [", ".join(roads)] if len(roads) < len(ROADS) else []
+    extra += [", ".join(traffic)] if len(traffic) < len(TRAFFIC) else []
+    return geometries + (f" ({'; '.join(extra)})" if extra else "")
+
+
+def config_markdown(snapshot: dict, meta: dict) -> str:
+    """Readable summary: values shared by all scenarios, then the ones that differ (by scenario)."""
+    cases_ = snapshot["cases"]
+    out = [
+        "# Benchmark configuration\n",
+        f"The settings behind `runs.csv` in this directory (commit `{meta.get('commit', '?')}`). "
+        f"{len(cases_)} scenarios × {len(snapshot['seeds'])} runs. Seed rule: {snapshot['seed_rule']}. "
+        "The complete effective configuration of every scenario is in `config.json`.\n",
+    ]
+    rows: list[dict[str, str]] = []
+    varying: list[tuple[str, dict[str, str]]] = []
+    section = None
+    for sec, label, path, fmt in SNAPSHOT_FIELDS:
+        if sec != section:
+            if rows:
+                out.append(markdown_table(rows) + "\n")
+                rows = []
+            section = sec
+            out.append(f"## {sec}\n")
+        values = {key: fmt(_get(cfg, path)) for key, cfg in cases_.items()}
+        distinct = sorted(set(values.values()))
+        if len(distinct) == 1:
+            rows.append({"setting": label, "value": distinct[0]})
+        else:
+            rows.append({"setting": label, "value": "differs by scenario (below)"})
+            varying.append((label, values))
+    if rows:
+        out.append(markdown_table(rows) + "\n")
+    for label, values in varying:
+        out.append(f"### {label} by scenario\n")
+        groups: dict[str, list[str]] = {}
+        for key, value in values.items():
+            groups.setdefault(value, []).append(key)
+        table = [{"value": v, "scenarios": _scenario_groups(keys)} for v, keys in groups.items()]
+        out.append(markdown_table(table) + "\n")
+    out.append("## Where this setup is optimistic\n")
+    out += [f"{i}. {note}" for i, note in enumerate(OPTIMISTIC_NOTES, 1)]
+    out.append("")
+    return "\n".join(out)
+
+
+def write_config(out_dir: Path, selected: list[Case], seeds: list[int], meta: dict) -> None:
+    snapshot = config_snapshot(selected, seeds)
+    (out_dir / "config.json").write_text(json.dumps(snapshot, indent=1), encoding="utf-8")
+    (out_dir / "config.md").write_text(config_markdown(snapshot, meta), encoding="utf-8")
+
+
 # ---------------------------------------------------------------------- I/O
 TEXT = ("case", "geometry", "road", "traffic", "estimator")
 FLAGS = ("map_grade", "announcement_missed", "route_end_reached")
@@ -393,6 +594,9 @@ def main() -> None:
     parser.add_argument("--label", default="", help="free text recorded with the run")
     parser.add_argument("--compare", type=Path, default=None, help="baseline directory to compare against")
     parser.add_argument("--from-csv", action="store_true", help="regenerate the tables from --out/runs.csv")
+    parser.add_argument(
+        "--write-config", action="store_true", help="(re)write config.md / config.json for the run in --out"
+    )
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     t0 = time.perf_counter()
@@ -412,6 +616,11 @@ def main() -> None:
         }  # fmt: skip
         write_runs(records, args.out / "runs.csv")
         (args.out / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+        write_config(args.out, selected, seeds, meta)
+    if args.write_config:
+        selected = [c for c in cases() if c.key in set(meta["cases"])]
+        write_config(args.out, selected, meta["seeds"], meta)
+        print("wrote", args.out / "config.md")
     (args.out / "tables.md").write_text(tables_markdown(records, meta), encoding="utf-8")
     print("wrote", args.out / "tables.md")
     if args.compare is not None:
