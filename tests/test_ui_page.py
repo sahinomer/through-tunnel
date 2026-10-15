@@ -157,3 +157,67 @@ async def test_bias_drift_and_gps_degradation_controls_reach_the_simulation():
         assert cfg.gnss.portal_degradation and cfg.gnss.degradation_sigma_m == 12.0
         assert page.result.imu_errors.accel.drift is not None
         assert "Bias drift over the run" in panel.errors_label.content
+
+
+@pytest.mark.anyio
+async def test_values_set_from_code_trigger_no_handler():
+    """F10: change handlers run as background tasks, so the loading guard must be checked when the
+    event fires, not inside the task. Setting every panel from code must call no panel callback."""
+    import asyncio
+    import gc
+
+    from throughtunnel.scenario import load_preset
+    from throughtunnel.sensors.mounting import CalibrationErrorConfig
+    from throughtunnel.vehicle.traffic import TrafficConfig
+
+    async with user_simulation(root=SimulatorPage) as user:
+        await user.open("/")
+        page = next(o for o in gc.get_objects() if isinstance(o, SimulatorPage))
+        calls = []
+
+        def record(name):
+            async def callback():
+                calls.append(name)
+
+            return callback
+
+        panels = ("mount_panel", "calibration_panel", "map_data_panel", "sensor_panel", "traffic_panel")
+        for name in panels:
+            getattr(page, name)._on_change = record(name)
+        cfg = load_preset("seattle_sr99_tunnel")
+        imu = cfg.imu.model_copy(update={"earth_rotation": not cfg.imu.earth_rotation})
+        with user.client:
+            page.mount_panel.set(imu)
+            page.calibration_panel.set(CalibrationErrorConfig(enabled=True))
+            page.map_data_panel.set(page.map_data_panel.config().model_copy(update={"road_grade": True}))
+            page.sensor_panel.set_imu(imu.model_copy(update={"errors": imu.errors.ideal()}))
+            page.sensor_panel.set_gnss(cfg.gnss.model_copy(update={"enabled": False}))
+            page.traffic_panel.set(TrafficConfig(scenario="stop_and_go"))
+            await asyncio.sleep(0.2)  # let any scheduled handler run
+        assert calls == []
+
+
+@pytest.mark.anyio
+async def test_loaded_preset_label_with_modified_angles_keeps_the_angles():
+    """F10: a file whose mount says "dash_portrait" but with other angles must load as written (the
+    preset handler used to overwrite the angles after the load)."""
+    import asyncio
+    import gc
+
+    from throughtunnel.scenario import load_preset
+
+    async with user_simulation(root=SimulatorPage) as user:
+        await user.open("/")
+        page = next(o for o in gc.get_objects() if isinstance(o, SimulatorPage))
+        cfg = load_preset("synthetic_demo_track")
+        edited = {"label": "dash_portrait", "yaw_deg": -80.0, "roll_deg": 90.0}
+        mount = cfg.imu.mount.model_copy(update=edited)
+        cfg = cfg.model_copy(update={"imu": cfg.imu.model_copy(update={"mount": mount})})
+        with user.client:
+            aligned = cfg.imu.mount.model_copy(update={"label": "aligned", "yaw_deg": 0.0, "roll_deg": 0.0})
+            page.mount_panel.set(cfg.imu.model_copy(update={"mount": aligned}))  # the load changes the label
+            await asyncio.sleep(0.2)
+            await page._load_scenario(cfg)
+            await asyncio.sleep(0.2)
+        assert page.mount_panel.s_yaw.value == -80.0
+        assert page.result.config.imu.mount.yaw_deg == -80.0

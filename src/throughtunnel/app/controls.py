@@ -3,6 +3,10 @@
 Each panel builds its controls and converts them to and from the core configuration models. Panels
 run no simulation: they call back into the page, which decides what a change triggers. Values set
 from code (loading a scenario) are applied under ``_quiet()`` so they do not count as user changes.
+
+Change handlers are synchronous and *return* the page callback (F10): NiceGUI calls a handler when the
+value changes but runs a returned awaitable later, as a background task. An ``async`` handler would
+check the guard only in that task, after ``_quiet()`` has already ended.
 """
 
 from __future__ import annotations
@@ -64,9 +68,9 @@ class Panel:
         finally:
             self._loading = False
 
-    async def _changed(self, _: Any = None) -> None:
-        if not self._loading:
-            await self._on_change()
+    def _changed(self, _: Any = None) -> Awaitable[None] | None:
+        """Event handler: the user's change, or None (nothing to run) for a value set from code."""
+        return None if self._loading else self._on_change()
 
 
 class DrivePanel(Panel):
@@ -331,9 +335,9 @@ class MountPanel(Panel):
             self.earth_switch.value = imu.earth_rotation
         self._update_axes_label()
 
-    async def _on_preset(self, e: events.ValueChangeEventArguments) -> None:
+    def _on_preset(self, e: events.ValueChangeEventArguments) -> Awaitable[None] | None:
         if self._loading or e.value not in MOUNT_PRESETS:
-            return
+            return None
         preset = MOUNT_PRESETS[e.value]  # presets only set the rotation; the lever arm is kept
         with self._quiet():
             self.s_yaw.value, self.s_pitch.value, self.s_roll.value = (
@@ -342,18 +346,18 @@ class MountPanel(Panel):
                 preset.roll_deg,
             )
         self._update_axes_label()
-        await self._on_change()
+        return self._on_change()
 
-    async def _on_control(self, _: Any = None) -> None:
+    def _on_control(self, _: Any = None) -> Awaitable[None] | None:
         if self._loading:
-            return
+            return None
         preset = MOUNT_PRESETS.get(self.mount_select.value)
         angles = (self.s_yaw.value, self.s_pitch.value, self.s_roll.value)
         if preset is not None and angles != (preset.yaw_deg, preset.pitch_deg, preset.roll_deg):
             with self._quiet():
                 self.mount_select.value = "custom"
         self._update_axes_label()
-        await self._on_change()
+        return self._on_change()
 
     def _update_axes_label(self) -> None:
         axes = describe_phone_axes(self.mount().rotation_body_from_phone())

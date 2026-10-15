@@ -275,7 +275,10 @@ also fire after a scenario load. This is harmless in the normal flow: the result
 moment, so only the controls are re-read. However, if a loaded file has a preset mount label with
 modified angles, the preset handler would probably overwrite the displayed angles. That case is
 deduced from the code, not reproduced. A fix would be a synchronous guard or comparing values.
-**Backlog: F10** (user decision 2026-10-13: fix during UI polishing).
+**Backlog: F10** (user decision 2026-10-13: fix during UI polishing). *Fixed 2026-10-15:* both effects
+reproduced by regression tests first. A file with mount label `dash_portrait` and yaw −80° loaded as
+−90°, and setting the panels from code fired five panel callbacks. Handlers now check the guard
+synchronously and return the page callback for NiceGUI to schedule.
 
 **Observation (test tooling, not fixed):** driving page handlers in NiceGUI's `user_simulation` logs
 `AttributeError: 'AppConfig' object has no attribute 'reconnect_timeout'` from NiceGUI's own outbox
@@ -414,7 +417,7 @@ are committed (F9).
 | F7 | Optional: recorded-phone loader and a small real-data trial | [ ] |
 | F8 | Live-demo readiness: fast scenario creation and parameter changes (reviewers will ask live) | [~] |
 | F9 | Optional CI (pytest + ruff) and a committed browser smoke test | [ ] |
-| F10 | UI polish: async change handlers bypass the loading guard (values set from code also trigger them; a loaded preset mount label with modified angles is probably overwritten). Fix with a synchronous guard or value comparison + a regression test. See §0.1 | [ ] backlog |
+| F10 | UI polish: async change handlers bypass the loading guard (values set from code also trigger them; a loaded preset mount label with modified angles is overwritten). See §0.1 | [x] fixed 2026-10-15 (synchronous guard; 2 regression tests) |
 
 ## 3. What to do now vs. later
 
