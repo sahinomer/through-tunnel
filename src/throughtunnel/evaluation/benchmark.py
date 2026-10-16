@@ -100,7 +100,14 @@ DEV_CASES = tuple(
     for km, road in (("0.5km", "flat"), ("5km", "flat"), ("5km", "climb3"), ("5km", "underwater"))
     for traffic in ("free", "stop_and_go")
 )
-DEV_ESTIMATORS = ("dr_calibrated", "dr_filtered", "route_imu", "route_vspeed")
+DEV_ESTIMATORS = (
+    "dr_calibrated",
+    "dr_filtered",
+    "route_imu",
+    "route_vspeed",
+    "route_imu_stop",
+    "route_imu_zupt",
+)
 VERTEX_SPACING_M = 15.0
 
 

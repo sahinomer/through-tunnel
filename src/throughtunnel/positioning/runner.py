@@ -13,6 +13,8 @@ experiment setting applied inside the stage (``alignment.py``); estimators never
 The car's speed reading (``Observations.vehicle_speed``, D41) goes only to estimators that declare
 ``uses_vehicle_speed``: the boundary that keeps it out of the main solution (D20) is enforced here.
 Ties: a reading at the same timestamp as an IMU sample comes after the sample and its GPS fixes.
+The standstill oracle (``Observations.standstill``, D49) goes only to estimators that declare
+``uses_standstill``, with the same ordering.
 """
 
 from __future__ import annotations
@@ -150,11 +152,17 @@ def replay(
         if obs.vehicle_speed is None:
             raise ValueError(f"{estimator.name} needs the vehicle speed, but the observations have none")
         speed_t, speed_v = obs.vehicle_speed.t.tolist(), obs.vehicle_speed.speed_mps.tolist()
+    still_t: list[float] = []
+    still_s: list[bool] = []
+    if estimator.uses_standstill:
+        if obs.standstill is None:
+            raise ValueError(f"{estimator.name} needs the standstill oracle, but the observations have none")
+        still_t, still_s = obs.standstill.t.tolist(), [bool(x) for x in obs.standstill.standing]
 
     rows: list[tuple] = []
     out_dt = 1.0 / output_rate_hz
     next_out = imu_t[0] if imu_t else 0.0
-    j = k = 0
+    j = k = m = 0
     for i, t in enumerate(imu_t):
         while j < len(fixes) and fixes[j].t < t:  # fixes strictly before this sample
             estimator.on_gnss(fixes[j])
@@ -162,6 +170,9 @@ def replay(
         while k < len(speed_t) and speed_t[k] < t:
             estimator.on_vehicle_speed(speed_t[k], speed_v[k])
             k += 1
+        while m < len(still_t) and still_t[m] < t:
+            estimator.on_standstill(still_t[m], still_s[m])
+            m += 1
         estimator.on_imu(t, imu[i])
         while j < len(fixes) and fixes[j].t <= t:  # fixes at the same timestamp come after the IMU sample
             estimator.on_gnss(fixes[j])
@@ -169,6 +180,9 @@ def replay(
         while k < len(speed_t) and speed_t[k] <= t:
             estimator.on_vehicle_speed(speed_t[k], speed_v[k])
             k += 1
+        while m < len(still_t) and still_t[m] <= t:
+            estimator.on_standstill(still_t[m], still_s[m])
+            m += 1
         if t >= next_out - 1e-9:
             next_out += out_dt
             est = estimator.state()

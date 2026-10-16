@@ -40,12 +40,17 @@ class Estimator(ABC):
     ``uses_vehicle_speed`` (D41): the car's own speed reading is reference information, kept out of the
     main solution (D20). The runner calls ``on_vehicle_speed`` only for a class that sets it to True
     (the reference estimator); every other estimator never receives it.
+
+    ``uses_standstill`` (D49): standstill taken from the true motion is **oracle** information, for
+    measuring what knowing standstill is worth. The runner calls ``on_standstill`` only for a class that
+    sets it to True; such estimators are kept out of the phone-only set (``ORACLE_ESTIMATORS``).
     """
 
     name: str = "estimator"
     label: str = "Estimator"
     alignment: str | None = "gps_imu"
     uses_vehicle_speed: bool = False
+    uses_standstill: bool = False
 
     def __init__(self, route: RouteMap) -> None:
         self.route = route
@@ -62,6 +67,11 @@ class Estimator(ABC):
     def on_vehicle_speed(self, t: float, speed_mps: float) -> None:
         """One reading of the car's speed (only for estimators that declare ``uses_vehicle_speed``)."""
         raise NotImplementedError(f"{type(self).__name__} does not declare uses_vehicle_speed")
+
+    def on_standstill(self, t: float, standing: bool) -> None:
+        """The car starts (``standing``) or stops standing still at ``t`` (oracle, D49; only for estimators
+        that declare ``uses_standstill``)."""
+        raise NotImplementedError(f"{type(self).__name__} does not declare uses_standstill")
 
     @abstractmethod
     def state(self) -> StateEstimate | None:

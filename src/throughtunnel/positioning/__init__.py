@@ -13,6 +13,8 @@ from throughtunnel.positioning.dead_reckoning import (
 )
 from throughtunnel.positioning.route_constrained import (
     RouteImuDeadReckoning,
+    RouteImuStandstill,
+    RouteImuZeroVelocity,
     RouteSpeedHold,
     RouteVehicleSpeed,
 )
@@ -29,20 +31,27 @@ ESTIMATORS: dict[str, type[Estimator]] = {
         RouteImuDeadReckoning,
         RouteSpeedHold,
         RouteVehicleSpeed,
+        RouteImuStandstill,
+        RouteImuZeroVelocity,
     )
 }
-# The phone-only solution (D20) vs. reference estimators that use the car's speed reading (D41).
+# The phone-only solution (D20) vs. reference estimators that use the car's speed reading (D41) and
+# oracle estimators that get standstill from the true motion (D49).
 MAIN_ESTIMATORS: dict[str, type[Estimator]] = {
-    n: cls for n, cls in ESTIMATORS.items() if not cls.uses_vehicle_speed
+    n: cls for n, cls in ESTIMATORS.items() if not (cls.uses_vehicle_speed or cls.uses_standstill)
 }
 REFERENCE_ESTIMATORS: dict[str, type[Estimator]] = {
     n: cls for n, cls in ESTIMATORS.items() if cls.uses_vehicle_speed
+}
+ORACLE_ESTIMATORS: dict[str, type[Estimator]] = {
+    n: cls for n, cls in ESTIMATORS.items() if cls.uses_standstill
 }
 
 __all__ = [
     "ALIGNMENTS",
     "ESTIMATORS",
     "MAIN_ESTIMATORS",
+    "ORACLE_ESTIMATORS",
     "REFERENCE_ESTIMATORS",
     "AlignmentStage",
     "EstimateTrack",

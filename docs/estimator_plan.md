@@ -1,8 +1,8 @@
 # Estimator work: problems, candidate solutions, plan (state point 2026-10-15)
 
 State point at the end of the session of 2026-10-15, to resume the estimator phase. **Update
-2026-10-16:** the order is agreed; steps 0 (handover diagnostic), 1 (portal freeze, D46), 2 (residual diagnostic) and 2b
-(calibration fixes, D48) are done,
+2026-10-16:** the order is agreed; steps 0 (handover diagnostic), 1 (portal freeze, D46), 2 (residual diagnostic), 2b
+(calibration fixes, D48) and 3a (standstill oracle, D49) are done,
 see "Order" below. User's working mode: discuss first, one step at a time, compare every change
 against the benchmarks.
 
@@ -130,10 +130,17 @@ calibration removes them).
    * Sloped roads: climb free flow 109 → 93 m, underwater stop-and-go 767 → 613 m.
    * Flagged: climb stop-and-go 297 → 501 m. The old gravity error had masked the clamp's forward
      creep, which makes step 3 more urgent.
-3. **Standstill detection + zero-velocity updates (5a + 3a/4a).** The main lever for stop-and-go;
-   partly addresses pitch and drift. Comes with the no-vibration caveat. After steps 1 and 2b the
-   one-sided clamp decides the sign of most stop-and-go errors and has two regression flags against it
-   (underwater, portal_freeze.md finding 6; climb, calibration_fixes.md).
+3. **Standstill, as an oracle (user decision, D49).** No vibration model; standstill is given from the
+   true motion, labelled ‡ oracle, and kept out of the phone-only set. Vibration and engine audio are
+   future research (roadmap R12).
+   * **3a. Done (2026-10-16): perfect oracle ([standstill_oracle.md](standstill_oracle.md)).**
+     Realistic 5 km stop-and-go: 385 → 131 m with the two-sided speed reset alone, and → 103 m with the
+     offset also measured at each stop. Gross errors 16 → 9 → 2. The clamp creep behind the two
+     regression flags of steps 1 and 2b is gone.
+   * Remaining: runaway runs in the underwater V stop-and-go, independent of the oracle (likely
+     map-grade feedback).
+   * **3b. Next: sensitivity**: detection delays, missed stops, false standstills tied to real
+     slow-downs. Ranges to be agreed.
 4. **Route-constrained Kalman filter** (state: distance, speed, forward offset). The home for 2b, 3d,
    4c and the 3a/3b updates; honest uncertainty for the announcement.
 5. **Map-feature fixes (3b) and the yaw-leak correction (6a).** The only way to bound long free-flow

@@ -11,6 +11,7 @@ Contents:
 * ``RouteMap``: the navigation route as the app knows it. Map geometry, not the driven path. It
   includes the tunnel entrance/exit and the exit-announcement distance along the route.
 * ``VehicleSpeedStream``: the car's own speed reading (OBD / speedometer), reference only (D41).
+* ``StandstillStream``: when the car stands still, an oracle from the true motion (D49), not a sensor.
 * ``Observations``: the bundle the runner feeds to the positioning pipeline.
 """
 
@@ -264,11 +265,36 @@ class VehicleSpeedStream:
 
 
 @dataclass(frozen=True)
+class StandstillStream:
+    """**Oracle** standstill information (D49): when the car stands still, as exact transitions.
+
+    Not a phone sensor and not a validated detector. It is derived from the true motion to measure what
+    knowing standstill is worth (step 3 of estimator_plan.md). A real source would be a detector from
+    vibration or engine audio (roadmap R12) or the car itself. The runner hands it only to estimators
+    that declare ``uses_standstill``; the phone-only estimators never receive it."""
+
+    t: NDArray[np.float64]  # [s] transition times, strictly increasing, same clock as the IMU
+    standing: NDArray[np.bool_]  # the state from t[k] on (alternating)
+    source: str = "oracle:truth"
+
+    def __post_init__(self) -> None:
+        if len(self.t) != len(self.standing):
+            raise ValueError("t and standing must have the same length")
+        if len(self.t) > 1 and not np.all(np.diff(self.t) > 0):
+            raise ValueError("timestamps must be strictly increasing")
+
+    def __len__(self) -> int:
+        return len(self.t)
+
+
+@dataclass(frozen=True)
 class Observations:
-    """Everything the positioning pipeline may use (D15). ``vehicle_speed`` is reference information:
-    the runner passes it only to estimators that declare it (D20, D41)."""
+    """Everything the positioning pipeline may use (D15). ``vehicle_speed`` is reference information and
+    ``standstill`` oracle information: the runner passes each only to estimators that declare it (D20,
+    D41, D49)."""
 
     imu: ImuStream
     gnss: GnssStream
     route: RouteMap
     vehicle_speed: VehicleSpeedStream | None = None
+    standstill: StandstillStream | None = None

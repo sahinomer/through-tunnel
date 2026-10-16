@@ -31,7 +31,13 @@ import numpy as np
 from numpy.typing import ArrayLike
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from throughtunnel.observations import GnssStream, Observations, RouteMap, VehicleSpeedStream
+from throughtunnel.observations import (
+    GnssStream,
+    Observations,
+    RouteMap,
+    StandstillStream,
+    VehicleSpeedStream,
+)
 from throughtunnel.randomness import rng_stream
 from throughtunnel.road import RoadConfig, RoadPath
 from throughtunnel.road_profile import VERTICAL_ACCEL_WARNING, ElevationProfile, RoadProfileConfig
@@ -40,6 +46,7 @@ from throughtunnel.sensors.errors import ImuErrorConfig, ImuErrorRealization, ap
 from throughtunnel.sensors.gnss import GnssConfig, GnssEvents, gnss_timestamps, simulate_gnss
 from throughtunnel.sensors.imu import ImuConfig, ImuStream, ideal_imu, imu_timestamps
 from throughtunnel.sensors.mounting import CalibrationErrorConfig
+from throughtunnel.sensors.standstill import standstill_oracle
 from throughtunnel.sensors.vehicle_speed import VehicleSpeedConfig, simulate_vehicle_speed
 from throughtunnel.vehicle.config import DriverConfig
 from throughtunnel.vehicle.longitudinal import LongitudinalTrajectory, simulate_longitudinal
@@ -200,12 +207,18 @@ class SimulationResult:
     gnss_events: GnssEvents
     traffic: TrafficPlan = field(default_factory=TrafficPlan)  # zones and stops used (hidden state)
     vehicle_speed: VehicleSpeedStream | None = None  # the car's speed reading (reference only, D41)
+    standstill: StandstillStream | None = None  # standstill from the true motion (oracle only, D49)
 
     def observations(self) -> Observations:
         """The only data the positioning pipeline may use (D15): measured IMU, measured GPS, the route
-        map, and the car's speed reading, which the runner passes only to estimators that declare it."""
+        map, and two streams the runner passes only to estimators that declare them: the car's speed
+        reading (reference, D41) and the standstill oracle (D49)."""
         return Observations(
-            imu=self.imu, gnss=self.gnss, route=self.route_map, vehicle_speed=self.vehicle_speed
+            imu=self.imu,
+            gnss=self.gnss,
+            route=self.route_map,
+            vehicle_speed=self.vehicle_speed,
+            standstill=self.standstill,
         )
 
 
@@ -248,6 +261,7 @@ def run_scenario(config: ScenarioConfig, path: RoadPath | None = None) -> Simula
         gnss_events=gnss_events,
         traffic=traffic,
         vehicle_speed=simulate_vehicle_speed(truth, config.vehicle_speed),
+        standstill=standstill_oracle(truth),
     )
     return with_map_data(result, config.map_data)
 

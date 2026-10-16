@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from throughtunnel.evaluation.metrics import _recovery_time, evaluate_track
-from throughtunnel.observations import GnssStream, ImuStream, Observations
+from throughtunnel.observations import GnssStream, ImuStream, Observations, StandstillStream
 from throughtunnel.positioning import ESTIMATORS, Estimator, StateEstimate, align_imu, run_estimator
 from throughtunnel.positioning.alignment import GpsImuAlignment
 from throughtunnel.positioning.dead_reckoning import CalibratedDeadReckoning, RawDeadReckoning
@@ -60,6 +60,10 @@ def test_estimators_are_causal(demo, name):
         gnss=replace(obs.gnss, lat=lat),
         route=obs.route,
         vehicle_speed=replace(vs, speed_mps=speed),
+        # a stop that only exists after t* (the demo drive itself has none)
+        standstill=StandstillStream(
+            t=np.array([t_star + 1.0, t_star + 5.0]), standing=np.array([True, False])
+        ),
     )
     a = run_estimator(ESTIMATORS[name](obs.route), obs)
     b = run_estimator(ESTIMATORS[name](obs.route), perturbed)

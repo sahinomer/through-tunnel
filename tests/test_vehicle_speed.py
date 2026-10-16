@@ -86,11 +86,11 @@ def test_changing_the_sensor_re_simulates_only_the_reading(demo):
 
 
 def test_only_the_reference_estimator_declares_the_vehicle_speed():
-    from throughtunnel.positioning import MAIN_ESTIMATORS, REFERENCE_ESTIMATORS
+    from throughtunnel.positioning import MAIN_ESTIMATORS, ORACLE_ESTIMATORS, REFERENCE_ESTIMATORS
 
     assert set(REFERENCE_ESTIMATORS) == {"route_vspeed"}
     assert not any(cls.uses_vehicle_speed for cls in MAIN_ESTIMATORS.values())
-    assert set(MAIN_ESTIMATORS) | set(REFERENCE_ESTIMATORS) == set(ESTIMATORS)
+    assert set(MAIN_ESTIMATORS) | set(REFERENCE_ESTIMATORS) | set(ORACLE_ESTIMATORS) == set(ESTIMATORS)
 
 
 def test_only_a_declaring_estimator_receives_the_vehicle_speed(demo):

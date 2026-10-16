@@ -1,0 +1,43 @@
+{
+ "commit": "d0dc11a+dirty",
+ "date": "2026-10-16 12:01 UTC",
+ "label": "step 3: standstill oracle, pitch 0.1",
+ "seeds": [
+  0,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19
+ ],
+ "freeze_m": "default",
+ "conditions": [
+  "cal_pitch_0.1"
+ ],
+ "estimators": [
+  "dr_raw",
+  "dr_calibrated",
+  "dr_filtered",
+  "route_imu",
+  "route_hold",
+  "route_vspeed",
+  "route_imu_stop",
+  "route_imu_zupt"
+ ],
+ "dev": false,
+ "runtime_s": 197
+}

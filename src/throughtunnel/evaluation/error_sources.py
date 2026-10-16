@@ -434,6 +434,8 @@ def compare_markdown(records, baseline, meta: dict, base_meta: dict) -> str:
                     old = np.median([b["err_5km_m"] for _, b in pairs])
                     new = np.median([r["err_5km_m"] for r, _ in pairs])
                     row[f"{cond} / {traffic}"] = f"{old:.0f} → {new:.0f}"
+                else:  # an estimator the baseline does not have
+                    row[f"{cond} / {traffic}"] = "–"
         rows.append(row)
     return "\n".join(
         [

@@ -12,7 +12,8 @@ baseline on exactly the same runs:
     uv run python -m throughtunnel.evaluation.error_sources --dev --out out/dev/<step>_es --compare docs/benchmark/error_sources
 
 * `--dev` (benchmark): the 0.5 and 5 km flat tunnels, the 5 km climb and underwater tunnels, both traffic
-  cases; map grade on only; the calibrated estimators and the reference; 20 seeds.
+  cases; map grade on only; the calibrated estimators, the reference and (since D49) the two standstill
+  oracle variants; 20 seeds.
 * `--dev` (error sources): floor, GPS speed noise, degradation (normal, harsh), realistic.
 * On unchanged code both reproduce the baselines exactly.
 * The full set is rerun at milestones.

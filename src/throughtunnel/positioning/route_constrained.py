@@ -81,12 +81,16 @@ class RouteConstrained(Estimator):
             return
         v_new = self._v
         if self.use_imu_speed and imu is not None:
-            a_fwd = imu.accel[0]
-            if self._grade is not None:
-                a_fwd -= self._grade.forward_gravity(self._d, imu.calibration_grade_angle)
-            v_new = max(self._v + a_fwd * dt, 0.0)
+            v_new = max(self._v + self._forward_accel(imu) * dt, 0.0)
         self._d = min(self._d + 0.5 * (self._v + v_new) * dt, self.route.length_m)
         self._v = v_new
+
+    def _forward_accel(self, imu: VehicleImu) -> float:
+        """Forward specific force with the map-grade gravity removed (if the map has the grade)."""
+        a_fwd = imu.accel[0]
+        if self._grade is not None:
+            a_fwd -= self._grade.forward_gravity(self._d, imu.calibration_grade_angle)
+        return a_fwd
 
     def state(self) -> StateEstimate | None:
         if self._d is None or self._t is None:
@@ -107,6 +111,64 @@ class RouteImuDeadReckoning(RouteConstrained):
     name = "route_imu"
     label = "Route + filtered IMU speed"
     use_imu_speed = True
+
+
+MIN_STOP_SAMPLES = 200  # ~1 s at 200 Hz: shorter stops do not re-measure the offset
+
+
+class RouteImuStandstill(RouteImuDeadReckoning):
+    """Oracle estimator (D49): route + IMU with standstill given by the oracle. **Not phone-only**: the
+    standstill comes from the true motion, to measure what knowing it is worth (not a validated detector).
+
+    While the car stands: speed exactly 0 and the route distance held, in both directions. The phone-only
+    estimators only have the v ≥ 0 clamp, which resets a negative speed error at a stop but lets a
+    positive one creep through it (P5). With ``measure_offset`` (variant b, zero-velocity update) the
+    standing car also measures the forward offset: the mean grade-compensated forward specific force over
+    the stop, which is then subtracted until the next stop (calibration pitch residual and bias drift,
+    solutions 3a/4a).
+    """
+
+    name = "route_imu_stop"
+    label = "Route + IMU + standstill oracle: speed reset ‡"
+    uses_standstill = True
+    measure_offset = False
+
+    def __init__(self, route: RouteMap) -> None:
+        super().__init__(route)
+        self._standing = False
+        self._offset = 0.0  # forward offset measured at the last stop [m/s^2]
+        self._stop_sum = 0.0
+        self._stop_n = 0
+
+    def on_standstill(self, t: float, standing: bool) -> None:
+        if standing:
+            self._v = 0.0
+            self._stop_sum, self._stop_n = 0.0, 0
+        elif self.measure_offset and self._stop_n >= MIN_STOP_SAMPLES:
+            self._offset += self._stop_sum / self._stop_n
+        self._standing = standing
+
+    def on_imu(self, t: float, imu: VehicleImu | None) -> None:
+        if not self._standing:
+            super().on_imu(t, imu)
+            return
+        self._aligned = imu is not None
+        if self._d is None:
+            return
+        self._t = t
+        self._v = 0.0
+        if imu is not None:
+            self._stop_sum += self._forward_accel(imu)  # what is left after the current correction
+            self._stop_n += 1
+
+    def _forward_accel(self, imu: VehicleImu) -> float:
+        return super()._forward_accel(imu) - self._offset
+
+
+class RouteImuZeroVelocity(RouteImuStandstill):
+    name = "route_imu_zupt"
+    label = "Route + IMU + standstill oracle: speed reset + offset ‡"
+    measure_offset = True
 
 
 class RouteSpeedHold(RouteConstrained):
