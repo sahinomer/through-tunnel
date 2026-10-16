@@ -182,9 +182,15 @@ subsets (`--dev`, D47); the full benchmarks are rerun at milestones.
 
 ## How to resume
 
-1. Read this file and [benchmark/README.md](benchmark/README.md).
-2. Discuss with the user: the solutions, the order, and the open thresholds.
-3. For each agreed step: implement → `uv run python -m throughtunnel.evaluation.benchmark --dev
-   --out out/dev/<step> --compare docs/benchmark/baseline` and `uv run python -m
-   throughtunnel.evaluation.error_sources --dev --out out/dev/<step>_es --compare
-   docs/benchmark/error_sources` (D47) → write up → commit → stop for review.
+1. Read this file and [benchmark/README.md](benchmark/README.md) (section "Milestone after step 4").
+2. **Comparisons are iterative (user, 2026-10-16):** each step is compared with the *previous* reference,
+   not with the first baseline. The current reference is `docs/benchmark/milestone_step4/` (benchmark and
+   error sources, commit `00ab89b`). Raw per-run results (`runs.csv` + `meta.json` + configuration) are
+   kept for every saved run, so any other comparison can be produced later with `--compare` / `--from-csv`.
+3. For each agreed step, discuss first, then:
+   * implement;
+   * run `uv run python -m throughtunnel.evaluation.benchmark --dev --out out/dev/<step> --compare
+     docs/benchmark/milestone_step4/benchmark`;
+   * run `uv run python -m throughtunnel.evaluation.error_sources --dev --out out/dev/<step>_es --compare
+     docs/benchmark/milestone_step4/error_sources` (D47);
+   * write up, commit, and stop for review.

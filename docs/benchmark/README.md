@@ -119,6 +119,10 @@ median [m]. Each condition adds one error source to an error-free setup:
 
 ## Milestone after step 4 (2026-10-16, `milestone_step4/`)
 
+**Comparison policy (user, 2026-10-16):** later work is compared with the previous reference (now
+this milestone), not with the first baseline. All raw results are kept, so any comparison can be
+regenerated.
+
 Both benchmarks in full (all 48 scenarios / 18 conditions, 20 seeds, every estimator) after the portal
 freeze (D46), the calibration fixes (D48), the standstill oracle (D49/D50) and the Kalman filter (D51),
 compared on the same runs with the baselines above. `compare.md` reports no regression in any scenario
