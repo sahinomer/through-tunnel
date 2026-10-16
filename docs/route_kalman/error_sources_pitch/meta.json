@@ -1,0 +1,43 @@
+{
+ "commit": "8e07c8b+dirty",
+ "date": "2026-10-16 13:20 UTC",
+ "label": "step 4: route_kf v1, pitch",
+ "seeds": [
+  0,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19
+ ],
+ "freeze_m": "default",
+ "oracle": {
+  "delay_s": 0.0,
+  "miss_probability": 0.0,
+  "false_standstill_kmh": 0.0
+ },
+ "conditions": [
+  "cal_pitch_0.1"
+ ],
+ "estimators": [
+  "route_imu",
+  "route_kf",
+  "dr_filtered"
+ ],
+ "dev": false,
+ "runtime_s": 92
+}

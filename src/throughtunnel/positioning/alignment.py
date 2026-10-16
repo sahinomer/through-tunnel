@@ -34,7 +34,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from throughtunnel.observations import GnssFix, RouteMap
-from throughtunnel.positioning.map_grade import grade_compensation
+from throughtunnel.positioning.map_grade import GRAVITY, grade_compensation
 from throughtunnel.positioning.mount_estimation import ALIGNED, Alignment, MountAlignmentEstimator
 from throughtunnel.positioning.portal import portal_freeze
 
@@ -52,6 +52,10 @@ class VehicleImu:
     accel: tuple[float, float, float]  # specific force [m/s^2]
     gyro: tuple[float, float, float]  # angular rate [rad/s]; z with the estimated gyro bias removed
     calibration_grade_angle: float = 0.0  # map grade angle absorbed by the levelling [rad] (D39)
+    # Change of the (grade-compensated) forward channel's gravity reading caused by a re-solve of the
+    # orientation just before this sample [m/s^2]; 0 on all other samples (D51). An estimator that tracks
+    # the forward offset shifts it by this much; the others can ignore it.
+    offset_shift: float = 0.0
 
 
 def with_orientation_error(alignment: Alignment, rotation: NDArray[np.float64] | None) -> Alignment:
@@ -77,6 +81,7 @@ class AlignmentStage(ABC):
         self.calibration_error = calibration_error
         self._axes: Alignment | None = None
         self._rows: tuple | None = None  # the axes as plain floats (per-sample arithmetic)
+        self._pending_shift = 0.0  # offset_shift for the next sample
 
     @abstractmethod
     def on_gnss(self, fix: GnssFix) -> None:
@@ -93,6 +98,15 @@ class AlignmentStage(ABC):
 
     def _use(self, axes: Alignment) -> None:
         axes = with_orientation_error(axes, self.calibration_error)
+        old = self._axes
+        if old is not None:
+            # Gravity seen by the forward axis: g·up·F. The new F is orthogonal to the new up, so the
+            # reading changes by −g·(up_new · F_old); the map-grade compensation moves with the grade the
+            # calibration absorbed (+g·Δφ_cal). Second-order terms (current grade vs. the levelled up,
+            # bias × rotation) are below 0.01 mg.
+            self._pending_shift += GRAVITY * (
+                -float(axes.up @ old.forward) + axes.calibration_grade_angle - old.calibration_grade_angle
+            )
         self._axes = axes
         self._rows = (
             *(tuple(float(x) for x in a) for a in (axes.forward, axes.left, axes.up)),
@@ -104,6 +118,7 @@ class AlignmentStage(ABC):
         if self._rows is None:
             return None
         f, lf, u, bias, grade_angle = self._rows
+        shift, self._pending_shift = self._pending_shift, 0.0
         return VehicleImu(
             t,
             (
@@ -117,6 +132,7 @@ class AlignmentStage(ABC):
                 u[0] * gyro[0] + u[1] * gyro[1] + u[2] * gyro[2] - bias,
             ),
             grade_angle,
+            shift,
         )
 
 

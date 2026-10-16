@@ -2,7 +2,8 @@
 
 State point at the end of the session of 2026-10-15, to resume the estimator phase. **Update
 2026-10-16:** the order is agreed; steps 0 (handover diagnostic), 1 (portal freeze, D46), 2 (residual diagnostic), 2.1
-(calibration fixes, D48), 3.1 (standstill oracle, D49) and 3.2 (oracle sensitivity, D50) are done,
+(calibration fixes, D48), 3.1 (standstill oracle, D49), 3.2 (oracle sensitivity, D50) and 4 (Kalman filter, first version,
+D51) are done,
 see "Order" below. User's working mode: discuss first, one step at a time, compare every change
 against the benchmarks.
 
@@ -150,9 +151,11 @@ evening used letters for steps: "step 2b" = 2.1, "step 3a" = 3.1, "step 3b" = 3.
        delay.
    * **3.3. Parked (user, 2026-10-16): "trim and replay" for the oracle variants.** Not built: it would refine
      an assumption, not a phone model; the filter (step 4) is more valuable. The idea carries into the filter as
-     a standstill measurement with a validity window. Exclude the stop's margins
-     from the offset and re-integrate the last M seconds at release, to tolerate delays up to M.
-4. **Route-constrained Kalman filter** (state: distance, speed, forward offset). The home for 2b, 3d,
+     a standstill measurement with a validity window. (The idea: exclude the stop's margins from the
+     offset and re-integrate the last M seconds at release, to tolerate delays up to M.)
+4. **Route-constrained Kalman filter** (state: distance, speed, forward offset). **First version done
+   (2026-10-16, D51, [route_kalman.md](route_kalman.md)):** pitch 0.1° 628 → 3 m, realistic stop-and-go
+   385 → 188 m, realistic free 103 → 85 m (tails mixed). Next limit: the yaw residual (6b). The home for 2b, 3d,
    4c and the 3a/3b updates; honest uncertainty for the announcement.
 5. **Map-feature fixes (3b) and the yaw-leak correction (6a).** The only way to bound long free-flow
    tunnels without stops, once the filter exists.

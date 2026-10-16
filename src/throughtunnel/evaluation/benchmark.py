@@ -104,6 +104,7 @@ DEV_ESTIMATORS = (
     "dr_calibrated",
     "dr_filtered",
     "route_imu",
+    "route_kf",
     "route_vspeed",
     "route_imu_stop",
     "route_imu_zupt",
