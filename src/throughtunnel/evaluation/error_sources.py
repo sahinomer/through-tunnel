@@ -19,7 +19,9 @@ Recorded per run and estimator:
     uv run python -m throughtunnel.evaluation.error_sources --seeds 20 --out docs/benchmark/error_sources
 
 Writes ``runs.csv``, ``meta.json``, ``tables.md`` and the configuration (``config.md``, ``config.json``).
-``--compare`` against an earlier output and ``--from-csv`` work as in the benchmark.
+``--compare`` against an earlier output and ``--from-csv`` work as in the benchmark. ``--dev``: the
+development subset, the conditions an estimator change in the GPS handover can affect
+(``DEV_CONDITIONS``) and the benchmark's ``DEV_ESTIMATORS``.
 """
 
 from __future__ import annotations
@@ -37,6 +39,7 @@ from pathlib import Path
 import numpy as np
 
 from throughtunnel.evaluation.benchmark import (
+    DEV_ESTIMATORS,
     Case,
     _estimators,
     _label,
@@ -65,6 +68,7 @@ from throughtunnel.sensors.mounting import MOUNT_PRESETS, CalibrationErrorConfig
 TUNNEL_KM = 5.0
 CHECKPOINTS_KM = (0.5, 1.0, 2.0, 3.0, 4.0, 5.0)
 TRAFFIC = ("free", "stop_and_go")
+DEV_CONDITIONS = ("floor", "gps_speed", "gps_degr", "gps_degr_harsh", "realistic")
 TEXT = ("case", "condition", "group", "traffic", "estimator")
 
 
@@ -271,8 +275,9 @@ def handover_state(track, res) -> tuple[float, float]:
 
 
 # ---------------------------------------------------------------------- running
-def run_condition(key: str, traffic: str, seeds: list[int]) -> list[dict]:
-    """All runs of one condition (passed by key: worker processes cannot receive its functions)."""
+def run_condition(key: str, traffic: str, seeds: list[int], names: list[str] | None = None) -> list[dict]:
+    """All runs of one condition (passed by key: worker processes cannot receive its functions);
+    ``names``: only these estimators (default: all)."""
     condition = BY_KEY[key]
     records = []
     for seed in seeds:
@@ -282,7 +287,7 @@ def run_condition(key: str, traffic: str, seeds: list[int]) -> list[dict]:
         times = {
             km: float(np.interp(sec.entrance_s + 1000.0 * km, motion.s, motion.t)) for km in CHECKPOINTS_KM
         }
-        cmp = compare_estimators(res)
+        cmp = compare_estimators(res, names)
         for track, ev in zip(cmp.tracks, cmp.evaluations, strict=True):
             dv, dpsi = handover_state(track, res)
             rec = {
@@ -476,6 +481,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--seeds", type=int, default=20)
     parser.add_argument("--conditions", default="", help="only conditions whose key contains this text")
+    parser.add_argument(
+        "--dev", action="store_true", help="development subset: DEV_CONDITIONS, DEV_ESTIMATORS"
+    )
     parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--label", default="")
@@ -489,10 +497,20 @@ def main() -> None:
         meta = json.loads((args.out / "meta.json").read_text(encoding="utf-8"))
     else:
         seeds = list(range(args.seeds))
-        jobs = [(c, t) for c in CONDITIONS if args.conditions in c.key for t in TRAFFIC]
+        chosen = [
+            c for c in CONDITIONS if args.conditions in c.key and (not args.dev or c.key in DEV_CONDITIONS)
+        ]
+        jobs = [(c, t) for c in chosen for t in TRAFFIC]
+        names = list(DEV_ESTIMATORS) if args.dev else None
         with ProcessPoolExecutor(max_workers=args.workers) as pool:
             results = list(
-                pool.map(run_condition, [c.key for c, _ in jobs], [t for _, t in jobs], [seeds] * len(jobs))
+                pool.map(
+                    run_condition,
+                    [c.key for c, _ in jobs],
+                    [t for _, t in jobs],
+                    [seeds] * len(jobs),
+                    [names] * len(jobs),
+                )
             )
         records = [r for recs in results for r in recs]
         meta = {
@@ -501,7 +519,8 @@ def main() -> None:
             "label": args.label,
             "seeds": seeds,
             "conditions": list(dict.fromkeys(c.key for c, _ in jobs)),
-            "estimators": list(ESTIMATORS),
+            "estimators": names or list(ESTIMATORS),
+            "dev": args.dev,
             "runtime_s": round(time.perf_counter() - t0),
         }
         write_runs(records, args.out / "runs.csv")

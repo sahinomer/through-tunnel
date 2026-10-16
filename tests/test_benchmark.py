@@ -51,12 +51,14 @@ def test_run_case_records_and_csv_round_trip(tmp_path):
 
 def test_comparison_flags_regressions_only():
     base = [{"case": "g/flat/free", "road": "flat", "traffic": "free", "map_grade": False, "seed": s,
+             "tunnel_max_m": 20.0,
              "estimator": "route_imu", "exit_total_m": 20.0} for s in range(5)]  # fmt: skip
     same = compare_markdown(base, base, {"commit": "b"}, {"commit": "a"})
     assert "**Regressions:** none" in same
     worse = [r | {"exit_total_m": 30.0} for r in base]
     text = compare_markdown(worse, base, {"commit": "b"}, {"commit": "a"})
     assert "20 → 30 ⚠" in text and "Route + filtered IMU speed, flat / free" in text
+    assert "## Per scenario" in text and "20 (20) → 30 (30)" in text
     slightly = [r | {"exit_total_m": 23.0} for r in base]  # 3 m worse: below the 5 m threshold
     assert "**Regressions:** none" in compare_markdown(slightly, base, {}, {})
 
@@ -86,3 +88,13 @@ def test_configuration_snapshot_lists_shared_and_varying_settings():
     assert "| Accelerometer bias | 10 mg, direction random per seed |" in text  # shared
     assert "### Traffic by scenario" in text and "### Driver by scenario" in text  # varying
     assert "## Where this setup is optimistic" in text
+
+
+def test_development_subset_is_part_of_the_full_set():
+    from throughtunnel.evaluation.benchmark import DEV_CASES, DEV_ESTIMATORS
+    from throughtunnel.evaluation.error_sources import BY_KEY, DEV_CONDITIONS
+
+    keys = {c.key for c in cases()}
+    assert set(DEV_CASES) <= keys and len(DEV_CASES) == 8
+    assert set(DEV_ESTIMATORS) <= set(ESTIMATORS)
+    assert set(DEV_CONDITIONS) <= set(BY_KEY)

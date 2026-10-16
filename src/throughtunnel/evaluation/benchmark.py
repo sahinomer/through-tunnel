@@ -28,7 +28,11 @@ tables). Per run and estimator, two failure states and one data-quality flag (D4
     uv run python -m throughtunnel.evaluation.benchmark --seeds 20 --out docs/benchmark/baseline
     uv run python -m throughtunnel.evaluation.benchmark --quick --out <dir> --compare docs/benchmark/baseline
 
-``--quick`` = 5 seeds (development). ``--compare`` writes ``compare.md``: per estimator and scenario
+``--dev`` = the development subset (agreed 2026-10-16): the guard scenarios ``DEV_CASES`` (short and long
+flat tunnel, the long tunnel with a climb and underwater, both traffic cases), sloped roads with the map
+grade on only (map grade is a settled requirement), and only the estimators an estimator change can
+affect (``DEV_ESTIMATORS``). The full set is rerun at milestones, not after every change.
+``--quick`` = 5 seeds. ``--compare`` writes ``compare.md``: per estimator and scenario
 family, the median change of the error at C against the baseline on the shared runs, with regressions
 flagged. ``--from-csv`` regenerates the tables of an existing output directory.
 
@@ -90,6 +94,13 @@ ANNOUNCE_OK_S = 3.0  # "good" announcement: within ±3 s of the ideal time
 ANNOUNCE_OFF_S = 15.0  # failure: announcement more than 15 s early or late (or never)
 GROSS_ERROR_M = 200.0  # failure: the estimate more than 200 m off at some time in the tunnel or at C
 REGRESSION_REL, REGRESSION_ABS_M = 0.10, 5.0  # flagged if the median gets worse by both
+# Development subset (--dev): guard scenarios, map grade on, the calibrated estimators + the reference.
+DEV_CASES = tuple(
+    f"ladder_{km}/{road}/{traffic}"
+    for km, road in (("0.5km", "flat"), ("5km", "flat"), ("5km", "climb3"), ("5km", "underwater"))
+    for traffic in ("free", "stop_and_go")
+)
+DEV_ESTIMATORS = ("dr_calibrated", "dr_filtered", "route_imu", "route_vspeed")
 VERTEX_SPACING_M = 15.0
 
 
@@ -162,15 +173,17 @@ def run_config(case: Case, seed: int) -> ScenarioConfig:
 
 
 # ---------------------------------------------------------------------- running
-def run_case(case: Case, seeds: list[int]) -> list[dict]:
+def run_case(case: Case, seeds: list[int], dev: bool = False) -> list[dict]:
+    """All runs of one scenario; ``dev``: map grade on only (sloped roads), ``DEV_ESTIMATORS`` only."""
     records = []
-    grades = (False,) if case.road == "flat" else (False, True)
+    grades = (False,) if case.road == "flat" else ((True,) if dev else (False, True))
+    names = list(DEV_ESTIMATORS) if dev else None
     for seed in seeds:
         res = run_scenario(run_config(case, seed))
         c_t, length = res.sections.exit_t, res.route_map.length_m
         outage = res.gnss_events.reacquire_t - res.gnss_events.loss_t
         for grade in grades:
-            cmp = compare_estimators(with_map_data(res, MapDataConfig(road_grade=grade)))
+            cmp = compare_estimators(with_map_data(res, MapDataConfig(road_grade=grade)), names)
             for track, ev in zip(cmp.tracks, cmp.evaluations, strict=True):
                 rd = track.route_distance[track.t < c_t]
                 s = ev.summary
@@ -261,7 +274,9 @@ def tables_markdown(records, meta: dict) -> str:
     out = [
         "# Benchmark: generated tables\n",
         f"{meta.get('label', '')} · commit `{meta.get('commit', '?')}` · {meta.get('date', '')} · "
-        f"{len({r['case'] for r in records})} scenarios × {n_seeds} runs. † = reference estimator (uses "
+        f"{len({r['case'] for r in records})} scenarios × {n_seeds} runs"
+        + (" (**development subset**: map grade on, calibrated estimators only)" if meta.get("dev") else "")
+        + ". † = reference estimator (uses "
         "the car's speed reading; not a phone-only solution). Realism options on (bias drift, GPS "
         "degradation before the portal).\n",
         "## How to read the failure states\n",
@@ -343,7 +358,34 @@ def compare_markdown(records, baseline, meta: dict, base_meta: dict) -> str:
         markdown_table(rows) + "\n",
         "**Regressions:** " + ("; ".join(regressions) if regressions else "none") + "\n",
     ]
+    cases_ = list(dict.fromkeys((r["case"], r["map_grade"]) for r, _ in shared))
+    if len(cases_) <= PER_SCENARIO_MAX:
+        head += [
+            "## Per scenario\n",
+            "Error at C [m], median (p90) ✗gross errors, baseline → this run.\n",
+            markdown_table(per_scenario_rows(shared, cases_)) + "\n",
+        ]
     return "\n".join(head)
+
+
+PER_SCENARIO_MAX = 12  # compare.md lists every scenario for runs up to this size (development subsets)
+
+
+def per_scenario_rows(shared, cases_) -> list[dict[str, str]]:
+    def cell(rs) -> str:
+        gross = sum(gross_error(r) for r in rs)
+        return _med_p90([r["exit_total_m"] for r in rs]) + (f" ✗{gross}" if gross else "")
+
+    rows = []
+    for name in _estimators([r for r, _ in shared]):
+        row = {"estimator": _label(name)}
+        for case, grade in cases_:
+            pairs = [(r, b) for r, b in shared if r["estimator"] == name and r["case"] == case
+                     and r["map_grade"] == grade]  # fmt: skip
+            label = case.removeprefix("ladder_").replace("stop_and_go", "s&g") + (" (grade)" if grade else "")
+            row[label] = f"{cell([b for _, b in pairs])} → {cell([r for r, _ in pairs])}" if pairs else "–"
+        rows.append(row)
+    return rows
 
 
 # ---------------------------------------------------------------------- configuration snapshot
@@ -592,6 +634,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--seeds", type=int, default=20, help="runs per scenario")
     parser.add_argument("--quick", action="store_true", help=f"{QUICK_SEEDS} runs per scenario")
+    parser.add_argument("--dev", action="store_true", help="development subset: DEV_CASES, map grade on, "
+                        "DEV_ESTIMATORS")  # fmt: skip
     parser.add_argument("--cases", default="", help="only scenarios whose key contains this text")
     parser.add_argument("--workers", type=int, default=2, help="parallel processes (memory: ~0.5 GB each)")
     parser.add_argument("--out", type=Path, required=True)
@@ -609,14 +653,16 @@ def main() -> None:
         meta = json.loads((args.out / "meta.json").read_text(encoding="utf-8"))
     else:
         seeds = list(range(QUICK_SEEDS if args.quick else args.seeds))
-        selected = [c for c in cases() if args.cases in c.key]
+        selected = [c for c in cases() if args.cases in c.key and (not args.dev or c.key in DEV_CASES)]
+        n = len(selected)
         with ProcessPoolExecutor(max_workers=args.workers) as pool:
-            results = list(pool.map(run_case, selected, [seeds] * len(selected)))
+            results = list(pool.map(run_case, selected, [seeds] * n, [args.dev] * n))
         records = [r for recs in results for r in recs]
         meta = {
             "commit": git_commit(), "date": datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
-            "label": args.label, "seeds": seeds, "cases": [c.key for c in selected],
-            "estimators": list(ESTIMATORS), "runtime_s": round(time.perf_counter() - t0),
+            "label": args.label, "seeds": seeds, "cases": [c.key for c in selected], "dev": args.dev,
+            "estimators": list(DEV_ESTIMATORS if args.dev else ESTIMATORS),
+            "runtime_s": round(time.perf_counter() - t0),
         }  # fmt: skip
         write_runs(records, args.out / "runs.csv")
         (args.out / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
