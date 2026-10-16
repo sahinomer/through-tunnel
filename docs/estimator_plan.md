@@ -148,7 +148,9 @@ evening used letters for steps: "step 2b" = 2.1, "step 3a" = 3.1, "step 3b" = 3.
      * Timing is critical with the naive use: a release 0.5 s late makes the offset variant worse than
        no oracle, and 1 s removes the speed reset's gain. A 3 km/h threshold acts like a 1 s release
        delay.
-   * **3.3. Proposed, awaiting the user's decision: "trim and replay" for the oracle variants**. Exclude the stop's margins
+   * **3.3. Parked (user, 2026-10-16): "trim and replay" for the oracle variants.** Not built: it would refine
+     an assumption, not a phone model; the filter (step 4) is more valuable. The idea carries into the filter as
+     a standstill measurement with a validity window. Exclude the stop's margins
      from the offset and re-integrate the last M seconds at release, to tolerate delays up to M.
 4. **Route-constrained Kalman filter** (state: distance, speed, forward offset). The home for 2b, 3d,
    4c and the 3a/3b updates; honest uncertainty for the announcement.
