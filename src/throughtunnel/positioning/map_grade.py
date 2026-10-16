@@ -18,8 +18,9 @@ the route. What it cannot remove:
 Gravity is the standard value; the simulator uses normal gravity at the latitude. The difference
 (≈0.05 % at 40° N) scales only the grade correction: ≈1·10⁻⁴ m/s² on a 2 % grade, i.e. ~14 m after a
 7.6 min stop-and-go outage on Eisenhower +2 % (measured). Using the matched value there gives 56 m
-instead of 42 m with ideal sensors: a second small term of opposite sign remains unidentified
-(map_grade_study.md, open items).
+instead of 42 m with ideal sensors. The second term is a levelling offset from the calibration (a yaw
+error caused by the grade ramp in the calibration window, plus a half-sample timing lag while braking),
+identified in residual_study.md.
 """
 
 from __future__ import annotations

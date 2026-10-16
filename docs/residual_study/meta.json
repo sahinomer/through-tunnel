@@ -1,0 +1,13 @@
+{
+ "commit": "d9090ce",
+ "date": "2026-10-16 10:33 UTC",
+ "cases": [
+  "eisenhower_tunnel/up2",
+  "eisenhower_tunnel/flat",
+  "synthetic_demo_track/down2",
+  "synthetic_demo_track/flat",
+  "seattle_sr99_tunnel/v4",
+  "seattle_sr99_tunnel/flat"
+ ],
+ "runtime_s": 64
+}

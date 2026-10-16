@@ -128,6 +128,11 @@ Realistic sensors, error at C, median (p90) [m], map grade off / on:
     levelling on the grade transition during the approach).
   * Small against the realistic results (52–228 m median), but worth resolving before an estimator
     claims sub-50 m in long outages.
+  * **Resolved (2026-10-16, [residual_study.md](residual_study.md)):** the unidentified term is a
+    levelling offset (+46 m): the grade ramp inside the calibration window biases the yaw fit by 0.15°,
+    which leaks the approach's mean lateral acceleration into the levelling, plus a half-sample timing
+    lag of the interval means while braking. Together with the gravity constant (−11 m) it explains
+    the 42 m.
 * The second-order terms are listed in `positioning/map_grade.py`.
 
 ## Reproduce

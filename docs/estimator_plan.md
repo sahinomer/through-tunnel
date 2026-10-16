@@ -56,7 +56,7 @@ calibration removes them).
 | **1a. Freeze the calibration before the portal** | The map knows B: stop updating the calibration a set distance before B (e.g. 200 m) and keep the last clean result | the degradation part, if the freeze lies before it; realistic 5 km free flow ≈ 220 → 110 m predicted (step 0) | small | Hard-coded distance; the freeze fix is another noisy endpoint, so the speed-noise part stays |
 | 1e. Fit the offset over all fixes | Least-squares slope of (GPS speed − integrated forward IMU) over the approach instead of the endpoint difference; handover speed from the fitted line | speed-noise offset term about ÷4 (theory, √(6/N)) | medium | A small version of the filter's offset state (3d); combinable with 1a |
 | **1b. Consistency gating** | Reject GPS intervals whose speed change disagrees with the acceleration the IMU measured | most of it, adaptive | medium | Threshold; noisy at low speed |
-| 1c. Weight by reported accuracy | Down-weight fixes with poor reported accuracy | some in reality; **none in the simulation** | small | The simulated degradation is deliberately not in the reported accuracy (D38) |
+| 1c. Weight by reported accuracy | Down-weight fixes with poor reported accuracy | some in reality; in the simulation for speed | small | Correction 2026-10-16: the simulated degradation *is* in the reported speed accuracy (only the position jumps are not, D38), so 1c works here, flatteringly (the reported accuracy equals the injected noise). Best inside a fit over all fixes (1e) or the filter: weighting intervals of the endpoint form barely helps |
 | 1d. Long-term robust calibration | Robust (median) fit over the whole drive | partial | medium | Slower if the phone moves |
 
 ### P2: noisy handover state
@@ -114,11 +114,16 @@ calibration removes them).
    200 m zone removed. Remaining in free flow: the endpoint noise of ordinary GPS speed (1e or the
    filter). Flagged: underwater stop-and-go 490 → 767 m median (gross 14 → 13); more runs end ahead,
    likely the one-sided clamp (step 3).
-2. **The 42 m residual and the 12–13 m stop-and-go floor**, before standstill detection, which would
-   hide them. Step 0 lead: the floor is a tiny positive forward offset (≈ 0.004 mg) from the
-   calibration with error-free sensors, not the stop handling. Step 1: the freeze removes the floor
-   (13 → 0 m), so that offset is learned in the last 200 m before the portal. Check the 42 m residual
-   with the freeze on and off.
+2. **Diagnosed (2026-10-16): the 42 m residual and the 12–13 m stop-and-go floor**
+   ([residual_study.md](residual_study.md)). Both are explained, with at most 0.002 mg left over:
+   * the stop-and-go floor is a half-sample timing lag of the calibration's interval means while
+     braking (T2a);
+   * the 42 m is a yaw error from the grade ramp in the calibration window, leaking lateral
+     acceleration into the levelling (T2b, +46 m), plus the gravity constant (T1, −11 m);
+   * T1 alone is the synthetic −2 % residual (23–29 m).
+   The freeze removes T2a and T2b here only because both happen within 200 m of B. Proposed fixes
+   F1–F3 (local gravity from the calibration, interval timing, map grade in the yaw fit) are
+   **awaiting the user's decision**.
 3. **Standstill detection + zero-velocity updates (5a + 3a/4a).** The main lever for stop-and-go;
    partly addresses pitch and drift. Comes with the no-vibration caveat. After step 1 the one-sided
    clamp decides the sign of most stop-and-go errors (portal_freeze.md, finding 6).
