@@ -1,8 +1,8 @@
 # Estimator work: problems, candidate solutions, plan (state point 2026-10-15)
 
 State point at the end of the session of 2026-10-15, to resume the estimator phase. **Update
-2026-10-16:** the order is agreed; steps 0 (handover diagnostic), 1 (portal freeze, D46), 2 (residual diagnostic), 2b
-(calibration fixes, D48) 3a (standstill oracle, D49) and 3b (oracle sensitivity, D50) are done,
+2026-10-16:** the order is agreed; steps 0 (handover diagnostic), 1 (portal freeze, D46), 2 (residual diagnostic), 2.1
+(calibration fixes, D48), 3.1 (standstill oracle, D49) and 3.2 (oracle sensitivity, D50) are done,
 see "Order" below. User's working mode: discuss first, one step at a time, compare every change
 against the benchmarks.
 
@@ -108,6 +108,10 @@ calibration removes them).
 
 ## Order (agreed with the user on 2026-10-16)
 
+**Naming:** steps are numbered 0, 1, 2, 2.1, 3, 3.1 …; letters (1a, 2b, 3a, 3c …) are only the solution
+IDs of the tables above. Commit messages, decisions D48–D50 and run labels written before 2026-10-16
+evening used letters for steps: "step 2b" = 2.1, "step 3a" = 3.1, "step 3b" = 3.2.
+
 0. **Done (2026-10-16): handover diagnostic** ([handover_study.md](handover_study.md)). Agreed order
    with the user: 0 → 1 → 42 m residual → standstill → filter → map features.
 1. **Done (2026-10-16): portal freeze (1a + 2a, D46, [portal_freeze.md](portal_freeze.md)).** Realistic
@@ -123,7 +127,7 @@ calibration removes them).
      acceleration into the levelling (T2b, +46 m), plus the gravity constant (T1, −11 m);
    * T1 alone is the synthetic −2 % residual (23–29 m).
    The freeze removes T2a and T2b here only because both happen within 200 m of B.
-   **2b. Done (2026-10-16): calibration fixes F1–F3 (D48, [calibration_fixes.md](calibration_fixes.md)).**
+   **2.1. Done (2026-10-16): calibration fixes F1–F3 (D48, [calibration_fixes.md](calibration_fixes.md)).**
    Normal gravity at the route's latitude, exact interval timing, map grade in the yaw fit.
    * Ideal sensors: every case within 7 m at C (42 → 1.4 m), with or without the freeze.
    * Realistic flat roads unchanged.
@@ -133,18 +137,18 @@ calibration removes them).
 3. **Standstill, as an oracle (user decision, D49).** No vibration model; standstill is given from the
    true motion, labelled ‡ oracle, and kept out of the phone-only set. Vibration and engine audio are
    future research (roadmap R12).
-   * **3a. Done (2026-10-16): perfect oracle ([standstill_oracle.md](standstill_oracle.md)).**
+   * **3.1. Done (2026-10-16): perfect oracle ([standstill_oracle.md](standstill_oracle.md)).**
      Realistic 5 km stop-and-go: 385 → 131 m with the two-sided speed reset alone, and → 103 m with the
      offset also measured at each stop. Gross errors 16 → 9 → 2. The clamp creep behind the two
      regression flags of steps 1 and 2b is gone.
    * Remaining: runaway runs in the underwater V stop-and-go, independent of the oracle (likely
      map-grade feedback).
-   * **3b. Done (2026-10-16): sensitivity (D50).**
+   * **3.2. Done (2026-10-16): sensitivity (D50).**
      * Missed stops are harmless (30 % missed: 126 m).
      * Timing is critical with the naive use: a release 0.5 s late makes the offset variant worse than
        no oracle, and 1 s removes the speed reset's gain. A 3 km/h threshold acts like a 1 s release
        delay.
-   * **3c. Proposed, awaiting the user's decision: "trim and replay"**. Exclude the stop's margins
+   * **3.3. Proposed, awaiting the user's decision: "trim and replay" for the oracle variants**. Exclude the stop's margins
      from the offset and re-integrate the last M seconds at release, to tolerate delays up to M.
 4. **Route-constrained Kalman filter** (state: distance, speed, forward offset). The home for 2b, 3d,
    4c and the 3a/3b updates; honest uncertainty for the announcement.

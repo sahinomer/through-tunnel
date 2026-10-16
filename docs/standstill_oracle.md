@@ -1,4 +1,4 @@
-# Standstill oracle (step 3a): what is knowing standstill worth?
+# Standstill oracle (step 3.1): what is knowing standstill worth?
 
 Step 3 of [estimator_plan.md](estimator_plan.md), decision D49 (2026-10-16).
 
@@ -105,7 +105,7 @@ Announcement more than 15 s off (stop-and-go, 5 km): route + IMU 14–16 of 20; 
 * Stops are 10–60 s (traffic model T3). Short creeping stops in dense traffic are not modelled.
 * Development runs only; the full benchmarks are rerun at the next milestone.
 
-## Sensitivity (step 3b): how good would a detector have to be?
+## Sensitivity (step 3.2): how good would a detector have to be?
 
 Decision D50 (2026-10-16). The oracle gets an error model (`StandstillOracleConfig`, schema v11; perfect
 by default), tied to the real motion as the user asked ("false standstill should be logical like when

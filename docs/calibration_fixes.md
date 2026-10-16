@@ -1,6 +1,6 @@
-# Calibration fixes F1–F3 (step 2b): gravity, interval timing, grade in the yaw fit
+# Calibration fixes F1–F3 (step 2.1): gravity, interval timing, grade in the yaw fit
 
-Step 2b of [estimator_plan.md](estimator_plan.md), decision D48 (2026-10-16). The residual diagnostic
+Step 2.1 of [estimator_plan.md](estimator_plan.md), decision D48 (2026-10-16). The residual diagnostic
 ([residual_study.md](residual_study.md)) explained the error-free-sensor residuals by three systematic
 terms. This step removes them in the calibration and the map-grade correction. They are fixed now,
 before standstill detection (step 3), because zero-velocity updates would hide them.
