@@ -36,9 +36,9 @@ import numpy as np
 from numpy.typing import NDArray
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from throughtunnel.geodesy import STANDARD_GRAVITY  # g-based unit conversions (mg, µg)
 from throughtunnel.randomness import rng_stream
 
-STANDARD_GRAVITY = 9.80665  # m/s^2, used for g-based unit conversions (mg, µg)
 MG = 1e-3 * STANDARD_GRAVITY  # 1 mg in m/s^2
 UG = 1e-6 * STANDARD_GRAVITY  # 1 µg in m/s^2
 DEG = math.pi / 180.0  # 1 degree in rad

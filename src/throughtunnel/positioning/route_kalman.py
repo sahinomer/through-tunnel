@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import math
 
+from throughtunnel.geodesy import STANDARD_GRAVITY
 from throughtunnel.observations import GnssFix, RouteMap
 from throughtunnel.positioning.alignment import VehicleImu
 from throughtunnel.positioning.base import StateEstimate
@@ -42,10 +43,9 @@ from throughtunnel.positioning.route_constrained import (
     RouteImuDeadReckoning,
 )
 
-G = 9.80665
 ACCEL_PSD = 0.005**2  # [(m/s^2)^2/Hz]: sensor noise (180 µg/√Hz) + model error while driving
-OFFSET_PSD = (0.05e-3 * G) ** 2  # [(m/s^2)^2/s]: random walk of the forward offset
-OFFSET_SIGMA0 = 1e-3 * G  # [m/s^2]: initial offset uncertainty
+OFFSET_PSD = (0.05e-3 * STANDARD_GRAVITY) ** 2  # [(m/s^2)^2/s]: random walk of the forward offset
+OFFSET_SIGMA0 = 1e-3 * STANDARD_GRAVITY  # [m/s^2]: initial offset uncertainty
 YAW_SIGMA = math.radians(0.5)  # nominal yaw residual of the calibration: lateral acceleration leaks in
 GATE_SIGMA = 4.0  # position jumps beyond this many σ are rejected (multipath) ...
 MAX_REJECTED_IN_ROW = 3  # ... but never more than this many fixes in a row (no lock-out)

@@ -5,17 +5,21 @@ import math
 import numpy as np
 import pytest
 
+from throughtunnel.geodesy import STANDARD_GRAVITY, normal_gravity
 from throughtunnel.observations import GnssFix
-from throughtunnel.positioning import map_grade, portal
-from throughtunnel.positioning.map_grade import GradeCompensation, normal_gravity
+from throughtunnel.positioning import portal
+from throughtunnel.positioning.map_grade import GradeCompensation
 from throughtunnel.positioning.mount_estimation import MountAlignmentEstimator
-from throughtunnel.sensors.imu import normal_gravity as simulator_normal_gravity
 
 
 # ------------------------------------------------------------------ F1: gravity
-@pytest.mark.parametrize("lat", [0.0, 39.68, 47.6, -33.9, 90.0])
-def test_normal_gravity_is_the_wgs84_formula(lat):
-    assert normal_gravity(lat) == pytest.approx(float(simulator_normal_gravity(lat)), abs=1e-12)
+def test_one_gravity_definition_for_simulator_and_estimators():
+    """Simulator and estimators share geodesy.normal_gravity (known values in test_sensors.py)."""
+    import throughtunnel.positioning.map_grade as mg
+    import throughtunnel.sensors.imu as imu
+
+    assert imu.normal_gravity is normal_gravity and mg.normal_gravity is normal_gravity
+    assert not hasattr(mg, "GRAVITY")
 
 
 def test_grade_compensation_uses_normal_gravity_at_the_route(monkeypatch):
@@ -23,10 +27,10 @@ def test_grade_compensation_uses_normal_gravity_at_the_route(monkeypatch):
 
     res = with_map_data(run_scenario(load_preset("eisenhower_tunnel")), MapDataConfig(road_grade=True))
     comp = GradeCompensation(res.route_map)
-    assert comp.gravity == pytest.approx(normal_gravity(float(res.route_map.lat[0])))
-    assert comp.gravity < 9.80665 - 4e-3  # 39.7° N: ~0.05 % below standard gravity
+    assert comp.gravity == float(normal_gravity(float(res.route_map.lat[0])))
+    assert comp.gravity < STANDARD_GRAVITY - 4e-3  # 39.7° N: ~0.05 % below standard gravity
     monkeypatch.setattr(GradeCompensation, "use_normal_gravity", False)
-    assert GradeCompensation(res.route_map).gravity == map_grade.GRAVITY
+    assert GradeCompensation(res.route_map).gravity == STANDARD_GRAVITY
 
 
 # ------------------------------------------------------------------ F2: interval timing

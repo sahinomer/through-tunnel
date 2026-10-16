@@ -1,4 +1,4 @@
-"""WGS84 geodetic <-> ECEF <-> local ENU conversions.
+"""WGS84 geodetic <-> ECEF <-> local ENU conversions, and WGS84 normal gravity.
 
 The simulation runs in a local East-North-Up (ENU) tangent plane anchored at a
 reference point (normally the route start). Conversions are exact on the WGS84
@@ -21,6 +21,22 @@ WGS84_B = WGS84_A * (1.0 - WGS84_F)
 WGS84_E2 = WGS84_F * (2.0 - WGS84_F)  # first eccentricity squared
 WGS84_EP2 = WGS84_E2 / (1.0 - WGS84_E2)  # second eccentricity squared
 EARTH_MEAN_RADIUS = 6_371_008.8  # [m], used only for the haversine helper
+
+# Gravity. The single definition for the simulator and the estimators (both may import this module).
+STANDARD_GRAVITY = 9.80665  # [m/s^2], conventional standard gravity (units mg, µg; the 'standard' model)
+# WGS84 normal gravity (Somigliana): equatorial gravity, the k constant and e² as published literals.
+_GAMMA_E = 9.7803253359
+_K_SOMIGLIANA = 0.00193185265241
+_E2_SOMIGLIANA = 6.69437999014e-3
+
+
+def normal_gravity(lat_deg: NDArray[np.float64] | float) -> NDArray[np.float64]:
+    """WGS84 normal gravity on the ellipsoid surface [m/s^2] (9.780 at the equator, 9.832 at the poles).
+
+    Latitude only: the fall with altitude (−0.03 % per km) and local anomalies are not modelled
+    (limitations.md)."""
+    s2 = np.sin(np.radians(lat_deg)) ** 2
+    return _GAMMA_E * (1.0 + _K_SOMIGLIANA * s2) / np.sqrt(1.0 - _E2_SOMIGLIANA * s2)
 
 
 def geodetic_to_ecef(lat_deg: ArrayLike, lon_deg: ArrayLike, alt_m: ArrayLike = 0.0) -> NDArray[np.float64]:

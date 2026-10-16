@@ -40,13 +40,13 @@ import numpy as np
 from throughtunnel.evaluation.benchmark import git_commit, read_runs, write_runs
 from throughtunnel.evaluation.error_sources import BY_KEY, TEXT, TRAFFIC, run_config
 from throughtunnel.evaluation.experiment import markdown_table
+from throughtunnel.geodesy import normal_gravity
 from throughtunnel.observations import ImuStream, Observations
 from throughtunnel.positioning.alignment import GpsImuAlignment
 from throughtunnel.positioning.route_constrained import BLEND_SPEED_TAU_S
 from throughtunnel.positioning.runner import align_imu
 from throughtunnel.scenario import run_scenario, truth_at
 from throughtunnel.sensors.errors import MG
-from throughtunnel.sensors.imu import normal_gravity
 
 CONDITIONS = ("floor", "gps_speed", "gps_degr", "gps_degr_harsh", "realistic")
 ESTIMATORS = ("route_imu", "dr_filtered")

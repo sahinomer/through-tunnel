@@ -34,22 +34,13 @@ import numpy as np
 from numpy.typing import NDArray
 from pydantic import BaseModel, ConfigDict, Field
 
+from throughtunnel.geodesy import STANDARD_GRAVITY, normal_gravity
 from throughtunnel.observations import ImuStream
-from throughtunnel.sensors.errors import STANDARD_GRAVITY, ImuErrorConfig
+from throughtunnel.sensors.errors import ImuErrorConfig
 from throughtunnel.sensors.mounting import PhoneMount
 from throughtunnel.vehicle.truth import GroundTruth
 
 OMEGA_EARTH = 7.292115e-5  # WGS84 Earth rotation rate [rad/s]
-# WGS84 normal gravity (Somigliana): equatorial gravity and the k constant.
-_GAMMA_E = 9.7803253359
-_K_SOMIGLIANA = 0.00193185265241
-_E2 = 6.69437999014e-3
-
-
-def normal_gravity(lat_deg: NDArray[np.float64] | float) -> NDArray[np.float64]:
-    """WGS84 normal gravity on the ellipsoid surface [m/s^2] (9.780 at the equator, 9.832 at the poles)."""
-    s2 = np.sin(np.radians(lat_deg)) ** 2
-    return _GAMMA_E * (1.0 + _K_SOMIGLIANA * s2) / np.sqrt(1.0 - _E2 * s2)
 
 
 class ImuConfig(BaseModel):

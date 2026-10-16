@@ -55,6 +55,7 @@ from throughtunnel.evaluation.benchmark import (
     run_config as benchmark_run_config,
 )
 from throughtunnel.evaluation.experiment import compare_estimators, markdown_table
+from throughtunnel.geodesy import normal_gravity
 from throughtunnel.observations import ImuStream, Observations
 from throughtunnel.positioning import ESTIMATORS, REFERENCE_ESTIMATORS, portal
 from throughtunnel.positioning.alignment import GpsImuAlignment
@@ -62,7 +63,6 @@ from throughtunnel.positioning.runner import align_imu
 from throughtunnel.scenario import ScenarioConfig, run_scenario, truth_at
 from throughtunnel.sensors.errors import MG, ImuErrorConfig
 from throughtunnel.sensors.gnss import GnssConfig
-from throughtunnel.sensors.imu import normal_gravity
 from throughtunnel.sensors.mounting import MOUNT_PRESETS, CalibrationErrorConfig
 from throughtunnel.sensors.standstill import StandstillOracleConfig
 

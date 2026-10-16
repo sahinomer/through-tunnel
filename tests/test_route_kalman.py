@@ -5,12 +5,12 @@ import numpy as np
 import pytest
 
 from throughtunnel.evaluation.error_sources import BY_KEY, run_config
+from throughtunnel.geodesy import normal_gravity
 from throughtunnel.positioning import MAIN_ESTIMATORS, align_imu, run_estimator
 from throughtunnel.positioning.alignment import GpsImuAlignment
 from throughtunnel.positioning.route_kalman import RouteKalman
 from throughtunnel.scenario import run_scenario, with_calibration
 from throughtunnel.sensors.errors import MG
-from throughtunnel.sensors.imu import normal_gravity
 from throughtunnel.sensors.mounting import CalibrationErrorConfig
 
 

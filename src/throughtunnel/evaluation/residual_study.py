@@ -42,6 +42,7 @@ from throughtunnel.evaluation.benchmark import git_commit, read_runs, write_runs
 from throughtunnel.evaluation.experiment import compare_estimators, markdown_table
 from throughtunnel.evaluation.map_grade_study import BY_KEY
 from throughtunnel.evaluation.slope_study import ideal_sensors, profile_config
+from throughtunnel.geodesy import normal_gravity
 from throughtunnel.observations import ImuStream, Observations
 from throughtunnel.positioning import map_grade, portal
 from throughtunnel.positioning.alignment import GpsImuAlignment
@@ -54,7 +55,6 @@ from throughtunnel.scenario import (
     with_sensor_config,
 )
 from throughtunnel.sensors.errors import MG
-from throughtunnel.sensors.imu import normal_gravity
 from throughtunnel.vehicle.traffic import TrafficConfig
 
 # (preset, profile): the ideal-sensor residuals of the map-grade study, plus the flat road of each

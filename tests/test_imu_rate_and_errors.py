@@ -5,6 +5,7 @@ import json
 import numpy as np
 import pytest
 
+from throughtunnel.geodesy import normal_gravity
 from throughtunnel.randomness import rng_stream
 from throughtunnel.scenario import (
     SCHEMA_VERSION,
@@ -25,7 +26,7 @@ from throughtunnel.sensors.errors import (
     SensorErrorConfig,
     apply_sensor_errors,
 )
-from throughtunnel.sensors.imu import ImuConfig, normal_gravity
+from throughtunnel.sensors.imu import ImuConfig
 from throughtunnel.vehicle.truth import build_ground_truth
 
 

@@ -28,16 +28,8 @@ from __future__ import annotations
 
 import math
 
+from throughtunnel.geodesy import STANDARD_GRAVITY, normal_gravity
 from throughtunnel.observations import RouteMap
-
-GRAVITY = 9.80665  # m/s^2, standard gravity (used only with use_normal_gravity = False)
-GAMMA_EQUATOR, K_SOMIGLIANA, E2 = 9.7803253359, 0.00193185265241, 6.69437999014e-3  # WGS84
-
-
-def normal_gravity(lat_deg: float) -> float:
-    """WGS84 normal gravity on the ellipsoid [m/s^2] (Somigliana)."""
-    s2 = math.sin(math.radians(lat_deg)) ** 2
-    return GAMMA_EQUATOR * (1.0 + K_SOMIGLIANA * s2) / math.sqrt(1.0 - E2 * s2)
 
 
 class GradeCompensation:
@@ -49,7 +41,9 @@ class GradeCompensation:
         if not route.has_grade:
             raise ValueError("the route map has no grade data")
         self.route = route
-        self.gravity = normal_gravity(float(route.lat[0])) if self.use_normal_gravity else GRAVITY
+        self.gravity = (
+            float(normal_gravity(float(route.lat[0]))) if self.use_normal_gravity else STANDARD_GRAVITY
+        )
 
     def angle_at(self, distance_m: float) -> float:
         """Road grade angle [rad] at ``distance_m`` along the route (+ = uphill)."""

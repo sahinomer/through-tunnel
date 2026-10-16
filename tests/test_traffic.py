@@ -4,10 +4,11 @@ import numpy as np
 import pytest
 from helpers import stationary_truth
 
+from throughtunnel.geodesy import normal_gravity
 from throughtunnel.scenario import load_preset, run_scenario, with_imu_config
 from throughtunnel.sensors.errors import ImuErrorConfig
 from throughtunnel.sensors.gnss import GnssConfig, GnssEvents, simulate_gnss
-from throughtunnel.sensors.imu import ImuConfig, normal_gravity
+from throughtunnel.sensors.imu import ImuConfig
 from throughtunnel.sensors.mounting import PhoneMount
 from throughtunnel.vehicle.traffic import SCENARIO_LABELS, TrafficConfig, build_traffic_plan
 

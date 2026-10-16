@@ -33,8 +33,9 @@ from dataclasses import dataclass, replace
 import numpy as np
 from numpy.typing import NDArray
 
+from throughtunnel.geodesy import STANDARD_GRAVITY
 from throughtunnel.observations import GnssFix, RouteMap
-from throughtunnel.positioning.map_grade import GRAVITY, grade_compensation
+from throughtunnel.positioning.map_grade import grade_compensation
 from throughtunnel.positioning.mount_estimation import ALIGNED, Alignment, MountAlignmentEstimator
 from throughtunnel.positioning.portal import portal_freeze
 
@@ -104,7 +105,7 @@ class AlignmentStage(ABC):
             # reading changes by −g·(up_new · F_old); the map-grade compensation moves with the grade the
             # calibration absorbed (+g·Δφ_cal). Second-order terms (current grade vs. the levelled up,
             # bias × rotation) are below 0.01 mg.
-            self._pending_shift += GRAVITY * (
+            self._pending_shift += STANDARD_GRAVITY * (
                 -float(axes.up @ old.forward) + axes.calibration_grade_angle - old.calibration_grade_angle
             )
         self._axes = axes

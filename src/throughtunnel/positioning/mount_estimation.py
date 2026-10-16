@@ -32,8 +32,8 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
+from throughtunnel.geodesy import STANDARD_GRAVITY
 from throughtunnel.observations import GnssFix
-from throughtunnel.positioning.map_grade import GRAVITY
 
 MIN_INTERVALS = 20  # ~20 s of GPS
 MIN_EXCITATION = 0.05  # rms predicted vehicle acceleration [m/s^2] needed to observe the yaw angle
@@ -155,7 +155,7 @@ class MountAlignmentEstimator:
         # longer mistakes the ramp's gravity for acceleration (0.34° yaw error with ideal sensors before,
         # which leaked the approach's lateral acceleration into the levelling, residual_study.md).
         grade = np.array([r[9] for r in self._rows])
-        a_long = (v1 - v0) / dt + GRAVITY * np.sin(grade - grade.mean())
+        a_long = (v1 - v0) / dt + STANDARD_GRAVITY * np.sin(grade - grade.mean())
         v_mid = 0.5 * (v0 + v1)
 
         up = _unit(f.sum(axis=0))

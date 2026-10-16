@@ -11,11 +11,11 @@ import numpy as np
 import pytest
 from helpers import stationary_truth
 
-from throughtunnel.geodesy import LocalFrame
+from throughtunnel.geodesy import LocalFrame, normal_gravity
 from throughtunnel.routing.synthetic import Straight, synthetic_route
 from throughtunnel.scenario import ScenarioConfig, load_preset, run_scenario, with_imu_config
 from throughtunnel.sensors.errors import ImuErrorConfig
-from throughtunnel.sensors.imu import OMEGA_EARTH, ImuConfig, ImuStream, ideal_imu, normal_gravity
+from throughtunnel.sensors.imu import OMEGA_EARTH, ImuConfig, ImuStream, ideal_imu
 from throughtunnel.sensors.mounting import MOUNT_PRESETS, PhoneMount, describe_phone_axes, euler_zyx
 from throughtunnel.vehicle.config import KMH, DriverConfig
 
