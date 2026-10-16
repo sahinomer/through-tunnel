@@ -24,8 +24,14 @@ step at a time, compare every change against the benchmarks).
   * reference: 5 m median, 0 % gross errors;
   * realistic, 5 km flat: 217–231 m (free flow), 470–482 m (stop-and-go);
   * error-free sensors: 0 m (free flow), 12–13 m (stop-and-go).
-* **Central finding:** the state handed over at GPS loss decides the error. The along-track error 5 km
-  in is ½ · forward offset · t² + speed error · t (correlation 0.99–1.00 per run; bias drift excepted).
+* **Central finding:** the state handed over at GPS loss decides the error. In free flow the along-track
+  error 5 km in is ½ · forward offset · t² + speed error · t (correlation 0.99–1.00 per run; bias drift
+  excepted). In stop-and-go the v ≥ 0 clamp breaks this formula ([handover_study.md](handover_study.md)).
+* **Step 0 (diagnostic, 2026-10-16, [handover_study.md](handover_study.md)):** the forward offset is
+  exactly (δv_last − δv_first)/T. The levelling's Δv_GPS terms telescope, so only the GPS speed errors of
+  the first and last approach fix count (T = 82–84 s here). The handover speed is the 5 s blend of the
+  last GPS speed errors. P1 and P2 are therefore one mechanism, and the offset term dominates in free
+  flow.
 
 ## Problems (from both benchmarks)
 
@@ -47,7 +53,8 @@ calibration removes them).
 
 | Solution | How | Expected gain | Effort | Catch |
 |---|---|---|---|---|
-| **1a. Freeze the calibration before the portal** | The map knows B: stop updating the calibration a set distance before B (e.g. 200 m) and keep the last clean result | most of the 170–190 m | small | Hard-coded distance; the calibration ages by a few seconds (harmless) |
+| **1a. Freeze the calibration before the portal** | The map knows B: stop updating the calibration a set distance before B (e.g. 200 m) and keep the last clean result | the degradation part, if the freeze lies before it; realistic 5 km free flow ≈ 220 → 110 m predicted (step 0) | small | Hard-coded distance; the freeze fix is another noisy endpoint, so the speed-noise part stays |
+| 1e. Fit the offset over all fixes | Least-squares slope of (GPS speed − integrated forward IMU) over the approach instead of the endpoint difference; handover speed from the fitted line | speed-noise offset term about ÷4 (theory, √(6/N)) | medium | A small version of the filter's offset state (3d); combinable with 1a |
 | **1b. Consistency gating** | Reject GPS intervals whose speed change disagrees with the acceleration the IMU measured | most of it, adaptive | medium | Threshold; noisy at low speed |
 | 1c. Weight by reported accuracy | Down-weight fixes with poor reported accuracy | some in reality; **none in the simulation** | small | The simulated degradation is deliberately not in the reported accuracy (D38) |
 | 1d. Long-term robust calibration | Robust (median) fit over the whole drive | partial | medium | Slower if the phone moves |
@@ -98,16 +105,23 @@ calibration removes them).
   (3d/4c). 85–89 % of the bad announcements come from gross position errors, so better positions fix
   most of them.
 
-## Recommended order (proposed, not yet agreed)
+## Order (agreed with the user on 2026-10-16)
 
+0. **Done (2026-10-16): handover diagnostic** ([handover_study.md](handover_study.md)). Agreed order
+   with the user: 0 → 1 → 42 m residual → standstill → filter → map features.
 1. **Freeze the calibration and hand over from the last trusted state (1a + 2a).** Small change that
-   attacks the largest *realistic* error source. Expected: the realistic free-flow case from ~220 m
-   toward 50–80 m at 5 km. It fits the current estimators, so the benchmark shows the effect cleanly.
-2. **Standstill detection + zero-velocity updates (5a + 3a/4a).** The main lever for stop-and-go;
+   attacks the largest *realistic* error source. Expected after step 0: the realistic free-flow case
+   from ~220 m to ~110 m at 5 km (formula prediction; the earlier guess of 50–80 m was too optimistic).
+   It fits the current estimators, so the benchmark shows the effect cleanly. The remaining part is the
+   endpoint noise of ordinary GPS speed: the case for 1e or the filter.
+2. **The 42 m residual and the 12–13 m stop-and-go floor**, before standstill detection, which would
+   hide them. Step 0 lead: the floor is a tiny positive forward offset (≈ 0.004 mg) from the
+   calibration with error-free sensors, not the stop handling.
+3. **Standstill detection + zero-velocity updates (5a + 3a/4a).** The main lever for stop-and-go;
    partly addresses pitch and drift. Comes with the no-vibration caveat.
-3. **Route-constrained Kalman filter** (state: distance, speed, forward offset). The home for 2b, 3d,
+4. **Route-constrained Kalman filter** (state: distance, speed, forward offset). The home for 2b, 3d,
    4c and the 3a/3b updates; honest uncertainty for the announcement.
-4. **Map-feature fixes (3b) and the yaw-leak correction (6a).** The only way to bound long free-flow
+5. **Map-feature fixes (3b) and the yaw-leak correction (6a).** The only way to bound long free-flow
    tunnels without stops, once the filter exists.
 
 Each step is checked against both baselines with `--compare` before the next.
@@ -115,9 +129,10 @@ Each step is checked against both baselines with `--compare` before the next.
 ## Open items carried over
 
 * The unexplained 42 m residual with ideal sensors in long outages ([map_grade_study.md](map_grade_study.md),
-  open items). It may be related to the 12–13 m stop-and-go floor (P5); worth checking first.
-* Thresholds chosen by Claude and open to change: gross error 200 m, announcement off 15 s,
-  announcement good ±3 s, regression 10 % and 5 m.
+  open items): now step 2, together with the 12–13 m stop-and-go floor.
+* Thresholds kept as they are (user, 2026-10-16): gross error 200 m, announcement off 15 s,
+  announcement good ±3 s, regression 10 % and 5 m. With 20 runs a p90 is about the 2nd-worst run, so
+  p90 regression flags are hints, not verdicts.
 * Optional: rerun the baseline with a longer route after C, so capped errors (§) become real values.
 * Optional: save each benchmark job when it finishes, so a run interrupted by low memory (as happened
   once) loses at most the jobs in progress.
