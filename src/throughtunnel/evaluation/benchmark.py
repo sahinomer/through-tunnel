@@ -529,6 +529,10 @@ SNAPSHOT_FIELDS = (
      lambda m: "route polyline, exact; map grade off and on for sloped roads (both evaluated)"),
     ("Route and map", "Car speed reading (reference only)", "vehicle_speed",
      lambda v: f"{v['scale_error_pct']:+g} % scale error, {v['rate_hz']:g} Hz"),
+    ("Route and map", "Standstill oracle (‡ oracle estimators only)", "standstill_oracle",
+     lambda o: "perfect (from the truth)" if not any(o.values()) else
+     f"delay {o['delay_s']:g} s, missed {100 * o['miss_probability']:g} %, "
+     f"standstill below {o['false_standstill_kmh']:g} km/h"),
 )  # fmt: skip
 
 

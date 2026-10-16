@@ -1,0 +1,43 @@
+{
+ "commit": "1c56b9f+dirty",
+ "date": "2026-10-16 12:36 UTC",
+ "label": "step 3b: oracle miss10",
+ "seeds": [
+  0,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19
+ ],
+ "freeze_m": "default",
+ "oracle": {
+  "delay_s": 0.0,
+  "miss_probability": 0.1,
+  "false_standstill_kmh": 0.0
+ },
+ "conditions": [
+  "realistic"
+ ],
+ "estimators": [
+  "route_imu",
+  "route_imu_stop",
+  "route_imu_zupt"
+ ],
+ "dev": false,
+ "runtime_s": 73
+}

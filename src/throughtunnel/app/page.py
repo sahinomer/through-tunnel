@@ -47,7 +47,7 @@ from throughtunnel.app.profile_overlay import ProfileOverlay
 from throughtunnel.app.readouts import estimate_readout_html, route_info_html, state_readout_html
 from throughtunnel.app.route_picker import RoutePicker
 from throughtunnel.evaluation.experiment import Comparison, compare_estimators
-from throughtunnel.positioning import ESTIMATORS
+from throughtunnel.positioning import ESTIMATORS, ORACLE_ESTIMATORS
 from throughtunnel.road import RoadConfig
 from throughtunnel.road_profile import RoadProfileConfig
 from throughtunnel.routing import OsrmRouteProvider, RawRoute
@@ -88,7 +88,8 @@ class SimulatorPage:
         self.base_gnss = GnssConfig()
         self.base_vehicle_speed = VehicleSpeedConfig()  # rate etc. (no controls) come from here
         self.comparison: Comparison | None = None
-        self.visible_estimators: set[str] = set(ESTIMATORS)
+        # Oracle estimators (D49: standstill from the truth) start hidden; default: phone-only + reference.
+        self.visible_estimators: set[str] = set(ESTIMATORS) - set(ORACLE_ESTIMATORS)
         self._last_tick = time.perf_counter()
         self._tick_count = 0
         self._shown_playing: bool | None = None
@@ -212,7 +213,9 @@ class SimulatorPage:
             with ui.row().classes("w-full gap-x-4 gap-y-0"):
                 self.est_toggles = {}
                 for name, cls in ESTIMATORS.items():
-                    box = ui.checkbox(value=True, on_change=self._on_estimator_toggle)
+                    box = ui.checkbox(
+                        value=name in self.visible_estimators, on_change=self._on_estimator_toggle
+                    )
                     with box.add_slot("default"):
                         ui.html(
                             f"<span style='color:{color_of(name)}'>■</span> {html.escape(cls.label)}"

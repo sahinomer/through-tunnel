@@ -2,7 +2,7 @@
 
 State point at the end of the session of 2026-10-15, to resume the estimator phase. **Update
 2026-10-16:** the order is agreed; steps 0 (handover diagnostic), 1 (portal freeze, D46), 2 (residual diagnostic), 2b
-(calibration fixes, D48) and 3a (standstill oracle, D49) are done,
+(calibration fixes, D48) 3a (standstill oracle, D49) and 3b (oracle sensitivity, D50) are done,
 see "Order" below. User's working mode: discuss first, one step at a time, compare every change
 against the benchmarks.
 
@@ -139,8 +139,13 @@ calibration removes them).
      regression flags of steps 1 and 2b is gone.
    * Remaining: runaway runs in the underwater V stop-and-go, independent of the oracle (likely
      map-grade feedback).
-   * **3b. Next: sensitivity**: detection delays, missed stops, false standstills tied to real
-     slow-downs. Ranges to be agreed.
+   * **3b. Done (2026-10-16): sensitivity (D50).**
+     * Missed stops are harmless (30 % missed: 126 m).
+     * Timing is critical with the naive use: a release 0.5 s late makes the offset variant worse than
+       no oracle, and 1 s removes the speed reset's gain. A 3 km/h threshold acts like a 1 s release
+       delay.
+   * **3c. Proposed, awaiting the user's decision: "trim and replay"**. Exclude the stop's margins
+     from the offset and re-integrate the last M seconds at release, to tolerate delays up to M.
 4. **Route-constrained Kalman filter** (state: distance, speed, forward offset). The home for 2b, 3d,
    4c and the 3a/3b updates; honest uncertainty for the announcement.
 5. **Map-feature fixes (3b) and the yaw-leak correction (6a).** The only way to bound long free-flow

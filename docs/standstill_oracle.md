@@ -104,3 +104,70 @@ Announcement more than 15 s off (stop-and-go, 5 km): route + IMU 14–16 of 20; 
   offset measurement at a stop cleaner than with a running engine.
 * Stops are 10–60 s (traffic model T3). Short creeping stops in dense traffic are not modelled.
 * Development runs only; the full benchmarks are rerun at the next milestone.
+
+## Sensitivity (step 3b): how good would a detector have to be?
+
+Decision D50 (2026-10-16). The oracle gets an error model (`StandstillOracleConfig`, schema v11; perfect
+by default), tied to the real motion as the user asked ("false standstill should be logical like when
+slow down, not randomly"):
+* **delay:** every report starts and ends late;
+* **missed stops:** each stop is dropped with a probability, drawn per stop from the run's seed (nested:
+  the 10 % misses are a subset of the 30 % misses);
+* **slow threshold:** standstill is reported whenever the true speed is below it. A detector cannot tell
+  creeping from standing, so it fires early while braking and releases late while pulling away.
+  * At 3 km/h: about 2.3 s early and 1 s late.
+  * At 5 km/h: about 3 s early and 1.4 s late.
+
+The parameters are configuration only, not in the UI (agreed): the question is statistical, and
+sliders would make the oracle look like a tunable feature. In the UI the oracle estimators are now
+hidden by default (still selectable).
+
+Realistic 5 km tunnel, stop-and-go, error 5 km in, median (p90) ✗ gross errors, 20 paired runs
+([sensitivity/](standstill_oracle/sensitivity/)); free flow is unchanged in every setting:
+
+| oracle | route + IMU | (a) speed reset ‡ | (b) + offset ‡ |
+|---|---|---|---|
+| perfect | 385 (782) ✗16 | 131 (607) ✗9 | **103 (199) ✗2** |
+| delay 0.5 s | 385 (782) ✗16 | 164 (579) ✗9 | 528 (847) ✗20 |
+| delay 1 s | 385 (782) ✗16 | 389 (851) ✗16 | 1689 (2100) ✗20 |
+| delay 2 s | 385 (782) ✗16 | 994 (1528) ✗20 | 3057 (3422) ✗20 |
+| delay 3 s | 385 (782) ✗16 | 1553 (2185) ✗20 | 3405 (3766) ✗20 |
+| missed 10 % | 385 (782) ✗16 | 155 (607) ✗10 | **84 (199) ✗2** |
+| missed 30 % | 385 (782) ✗16 | 204 (685) ✗11 | **126 (221) ✗3** |
+| below 1 km/h | 385 (782) ✗16 | 167 (577) ✗8 | 130 (293) ✗7 |
+| below 3 km/h | 385 (782) ✗16 | 383 (845) ✗16 | 398 (673) ✗20 |
+| below 5 km/h | 385 (782) ✗16 | 642 (1105) ✗18 | 697 (1005) ✗20 |
+| combined: 1 s, 10 %, 3 km/h | 385 (782) ✗16 | 985 (1521) ✗20 | 2819 (3235) ✗20 |
+
+### Findings
+
+1. **Missed stops are harmless.** A missed stop only loses one reset and one measurement; nothing wrong
+   is injected. With 30 % of the stops missed, (b) still gives 126 m. (At 10 %, 84 m is
+   slightly better than perfect: run-to-run spread; the cause was not examined.)
+2. **Timing is critical, above all the end of a stop.** With the naive use above, a late release breaks
+   both variants. Verified on one run with 0.5 s delay:
+   * when the oracle releases, the car already rolls at 0.26 m/s, but the estimator restarts from 0.05–0.08 m/s;
+   * every stop therefore leaves a lasting speed error;
+   * in (b) the stop's offset measurement also contains the start of the acceleration: +0.29 to
+     +1.94 mg, against the real −0.03 to −0.22 mg.
+   * Result: (b) is worse than no oracle already at 0.5 s (528 m), and (a) loses its whole gain at 1 s.
+3. **A slow threshold acts mostly like a release delay.** Pulling away below 3 km/h takes about 1 s, so
+   3 km/h behaves like the 1 s delay. The early report while braking costs little: the car is already
+   slow, and the estimator's own speed is near zero.
+4. **So, used naively, a detector would have to be nearly perfect:** release within ~0.25–0.5 s, below
+   ~1 km/h. A real vibration or audio detector is unlikely to manage that.
+5. **The naive use is the problem, not the information. A robust use is possible (proposed, not
+   built): "trim and replay".**
+   * Keep the last M seconds of forward IMU samples, M ≥ the worst expected delay (e.g. 3 s).
+   * Leave the first and last M seconds of each stop out of the offset average.
+   * At the release, re-integrate the buffered samples from speed 0 at t − M: if the car really stood
+     still that adds only noise; if it was already moving, it recovers the true speed and distance.
+   * This should tolerate release delays up to M and the slow threshold, turning "nearly perfect" into
+     "right within a few seconds". It needs its own sweep to confirm.
+
+### Limits of the sensitivity study
+
+* One condition (realistic, 5 km flat tunnel, stop-and-go); the sloped dev scenarios were not swept.
+* One setting per parameter except the combined case; interactions are not mapped.
+* Stops in the traffic model start from smooth constant-jerk manoeuvres (speed and acceleration reach
+  zero together); harsher real starts make release timing even more critical.

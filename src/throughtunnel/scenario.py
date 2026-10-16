@@ -46,7 +46,7 @@ from throughtunnel.sensors.errors import ImuErrorConfig, ImuErrorRealization, ap
 from throughtunnel.sensors.gnss import GnssConfig, GnssEvents, gnss_timestamps, simulate_gnss
 from throughtunnel.sensors.imu import ImuConfig, ImuStream, ideal_imu, imu_timestamps
 from throughtunnel.sensors.mounting import CalibrationErrorConfig
-from throughtunnel.sensors.standstill import standstill_oracle
+from throughtunnel.sensors.standstill import StandstillOracleConfig, standstill_oracle
 from throughtunnel.sensors.vehicle_speed import VehicleSpeedConfig, simulate_vehicle_speed
 from throughtunnel.vehicle.config import DriverConfig
 from throughtunnel.vehicle.longitudinal import LongitudinalTrajectory, simulate_longitudinal
@@ -66,7 +66,8 @@ from throughtunnel.vehicle.truth import GroundTruth, build_ground_truth
 # v8: added `traffic` (traffic scenario in the tunnel, D37); default free flow.
 # v9: added `map_data` (what the navigation map provides to the estimators, D39); default no grade.
 # v10: added `vehicle_speed` (the car's speed reading, reference only, D41); default +2 % scale error.
-SCHEMA_VERSION = 10
+# v11: added `standstill_oracle` (errors of the standstill oracle, D49/D50); default perfect.
+SCHEMA_VERSION = 11
 MAP_GRADE_STEP_M = 10.0
 
 TUNNEL_MIN_LENGTH_M = 500.0
@@ -137,6 +138,10 @@ class ScenarioConfig(BaseModel):
     vehicle_speed: VehicleSpeedConfig = Field(
         default_factory=VehicleSpeedConfig,
         description="The car's speed reading (OBD / speedometer), reference estimator only (D41)",
+    )
+    standstill_oracle: StandstillOracleConfig = Field(
+        default_factory=StandstillOracleConfig,
+        description="Errors of the standstill oracle (from the truth), oracle estimators only (D49, D50)",
     )
     tunnel: TunnelConfig | None = Field(None, description="None = no tunnel (GPS on the whole route)")
     gnss: GnssConfig = Field(default_factory=GnssConfig)
@@ -261,7 +266,7 @@ def run_scenario(config: ScenarioConfig, path: RoadPath | None = None) -> Simula
         gnss_events=gnss_events,
         traffic=traffic,
         vehicle_speed=simulate_vehicle_speed(truth, config.vehicle_speed),
-        standstill=standstill_oracle(truth),
+        standstill=standstill_oracle(truth, config.standstill_oracle, config.seed),
     )
     return with_map_data(result, config.map_data)
 
@@ -472,6 +477,12 @@ def with_map_data(result: SimulationResult, map_data: MapDataConfig) -> Simulati
     route_map = replace(result.route_map, road_grade=grade, grade_step_m=MAP_GRADE_STEP_M)
     config = result.config.model_copy(update={"map_data": map_data})
     return replace(result, config=config, route_map=route_map)
+
+
+def with_standstill_oracle(result: SimulationResult, oracle: StandstillOracleConfig) -> SimulationResult:
+    """Same simulation with other standstill-oracle errors; only the oracle stream is re-derived."""
+    config = result.config.model_copy(update={"standstill_oracle": oracle})
+    return replace(result, config=config, standstill=standstill_oracle(result.truth, oracle, config.seed))
 
 
 def with_vehicle_speed(result: SimulationResult, vehicle_speed: VehicleSpeedConfig) -> SimulationResult:

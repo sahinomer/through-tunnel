@@ -64,6 +64,7 @@ from throughtunnel.sensors.errors import MG, ImuErrorConfig
 from throughtunnel.sensors.gnss import GnssConfig
 from throughtunnel.sensors.imu import normal_gravity
 from throughtunnel.sensors.mounting import MOUNT_PRESETS, CalibrationErrorConfig
+from throughtunnel.sensors.standstill import StandstillOracleConfig
 
 TUNNEL_KM = 5.0
 CHECKPOINTS_KM = (0.5, 1.0, 2.0, 3.0, 4.0, 5.0)
@@ -275,18 +276,33 @@ def handover_state(track, res) -> tuple[float, float]:
 
 
 # ---------------------------------------------------------------------- running
+def parse_oracle(text: str) -> StandstillOracleConfig:
+    """ "delay_s=1,miss_probability=0.1,false_standstill_kmh=3" (any subset; empty = perfect)."""
+    fields = dict(item.split("=") for item in text.split(",") if item.strip())
+    return StandstillOracleConfig(**{k.strip(): float(v) for k, v in fields.items()})
+
+
 def run_condition(
-    key: str, traffic: str, seeds: list[int], names: list[str] | None = None, freeze_m: str = "default"
+    key: str,
+    traffic: str,
+    seeds: list[int],
+    names: list[str] | None = None,
+    freeze_m: str = "default",
+    oracle: str = "",
 ) -> list[dict]:
     """All runs of one condition (passed by key: worker processes cannot receive its functions);
     ``names``: only these estimators (default: all); ``freeze_m``: the portal freeze distance in metres,
-    "off", or "default" (D46; set per worker process)."""
+    "off", or "default" (D46; set per worker process); ``oracle``: errors of the standstill oracle
+    (``parse_oracle``; D50)."""
     if freeze_m != "default":
         portal.FREEZE_BEFORE_ENTRANCE_M = None if freeze_m == "off" else float(freeze_m)
     condition = BY_KEY[key]
+    oracle_cfg = parse_oracle(oracle)
     records = []
     for seed in seeds:
-        res = run_scenario(run_config(condition, seed, traffic))
+        res = run_scenario(
+            run_config(condition, seed, traffic).model_copy(update={"standstill_oracle": oracle_cfg})
+        )
         sec, motion = res.sections, res.motion
         align = alignment_at_loss(res)
         times = {
@@ -494,6 +510,10 @@ def main() -> None:
     parser.add_argument(
         "--freeze-m", default="default", help="portal freeze distance before B [m], 'off', or 'default' (D46)"
     )
+    parser.add_argument(
+        "--oracle", default="", help="standstill oracle errors, e.g. 'delay_s=1,miss_probability=0.1' (D50)"
+    )
+    parser.add_argument("--estimators", default="", help="comma-separated estimator names (default: all)")
     parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--label", default="")
@@ -512,6 +532,8 @@ def main() -> None:
         ]
         jobs = [(c, t) for c in chosen for t in TRAFFIC]
         names = list(DEV_ESTIMATORS) if args.dev else None
+        if args.estimators:
+            names = [n.strip() for n in args.estimators.split(",")]
         with ProcessPoolExecutor(max_workers=args.workers) as pool:
             results = list(
                 pool.map(
@@ -521,6 +543,7 @@ def main() -> None:
                     [seeds] * len(jobs),
                     [names] * len(jobs),
                     [args.freeze_m] * len(jobs),
+                    [args.oracle] * len(jobs),
                 )
             )
         records = [r for recs in results for r in recs]
@@ -530,6 +553,7 @@ def main() -> None:
             "label": args.label,
             "seeds": seeds,
             "freeze_m": args.freeze_m,
+            "oracle": parse_oracle(args.oracle).model_dump(),
             "conditions": list(dict.fromkeys(c.key for c, _ in jobs)),
             "estimators": names or list(ESTIMATORS),
             "dev": args.dev,
