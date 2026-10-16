@@ -480,6 +480,7 @@ are committed (F9).
 | R9 | Re-check road smoothing defaults on new real roads (D03) | [ ] |
 | R10 | Calibration error: injected orientation residual + controlled study (D34, calibration_error.md) | [x] model + study; no correction methods (by request); applied in the alignment stage since D40 |
 | R11 | Calibration error from physical causes instead of injection: body pitch under acceleration/braking/load, phone shifting in the holder, grade during calibration (with R1); random per-drive residuals | [ ] |
+| R12 | **Future research, outside the case study's scope (user, 2026-10-16): vehicle vibration and engine audio as phone-side information.** They may reveal standstill (engine idle vs. rolling), and possibly speed too: road and tyre vibration and engine and drivetrain frequencies change with speed and gear. Needs signal processing, probably machine learning, real recordings from many cars, phones and mounts, and a literature review first. Practical questions: microphone permission and privacy, battery, robustness to music, speech and other traffic. Not simulated, because a simulated vibration model could not be validated within this study. Step 3 uses standstill as an explicit oracle observation instead (estimator_plan.md). | [ ] future research |
 
 ### Phase F: final evaluation and deliverables
 | ID | Task | Status |

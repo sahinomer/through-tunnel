@@ -33,7 +33,7 @@ methods.
 | White noise, constant bias | modelled | — | Studied in [factor_study.md](factor_study.md). |
 | In-run bias drift (instability, temperature) | optional (D38) | worse for IMU methods, growing with outage length | Gauss-Markov per axis. See the realism check. |
 | Calibration (orientation) residual | optional (D34) | worse for IMU methods | Studied in [calibration_error.md](calibration_error.md). |
-| Vehicle and engine vibration | not modelled | neutral for today's estimators; needed for standstill detection | Without it, a stopped car and a car at constant speed look the same to the IMU; a standstill detector would be unrealistically easy or impossible. |
+| Vehicle and engine vibration | not modelled | neutral for today's estimators; needed for standstill detection | Without it, a stopped car and a car at constant speed look the same to the IMU; a standstill detector would be unrealistically easy or impossible. Not simulated by decision (user, 2026-10-16): a vibration model could not be validated here. Standstill is studied as an explicitly labelled oracle observation instead, kept out of the phone-only baseline. Vibration and engine audio for standstill and possibly speed are future research (roadmap R12). |
 | Scale factor and cross-axis errors | not modelled | slightly worse | Small next to the dominant effects. |
 | Timestamp jitter, separate accelerometer/gyro clocks | not modelled | slightly worse | |
 | Phone moved or handled during the tunnel | not modelled | much worse (any method using the IMU orientation) | Scenario-specific; breaks the calibration. |
