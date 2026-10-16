@@ -22,6 +22,7 @@ baseline on exactly the same runs:
 |---|---|---|---|
 | `baseline/` | `36904cb` (2026-10-15) | the 5 phone-only estimators before any estimator work, + the reference | [tables](baseline/tables.md) · [configuration](baseline/config.md) |
 | `error_sources/` (D45) | `e69543f` (2026-10-15) | the same estimators; one error source at a time on the 5 km flat tunnel | [tables](error_sources/tables.md) · [configuration](error_sources/config.md) |
+| `milestone_step4/` | `00ab89b` (2026-10-16) | both benchmarks in full after steps 1–4 (portal freeze, calibration fixes, standstill oracle ‡, Kalman filter `route_kf`) | benchmark: [tables](milestone_step4/benchmark/tables.md) · [vs. baseline](milestone_step4/benchmark/compare.md) · [configuration](milestone_step4/benchmark/config.md); error sources: [tables](milestone_step4/error_sources/tables.md) · [vs. baseline](milestone_step4/error_sources/compare.md) |
 
 Each baseline directory holds, next to its results, the configuration it ran with: `config.md` (readable,
 including where the setup is optimistic) and `config.json` (the complete effective configuration of every
@@ -115,3 +116,67 @@ median [m]. Each condition adds one error source to an error-free setup:
 * **Stop-and-go doubles the time-driven errors** (drift, offsets): 738 s instead of 258 s to 5 km. The
   floor itself is 12–13 m there (error-free sensors), so the algorithm alone loses some accuracy at
   stops.
+
+## Milestone after step 4 (2026-10-16, `milestone_step4/`)
+
+Both benchmarks in full (all 48 scenarios / 18 conditions, 20 seeds, every estimator) after the portal
+freeze (D46), the calibration fixes (D48), the standstill oracle (D49/D50) and the Kalman filter (D51),
+compared on the same runs with the baselines above. `compare.md` reports no regression in any scenario
+family. ‡ = oracle (standstill from the truth, not phone-only), † = reference (car speed).
+
+**All 48 scenarios, map grade on**, error at C median (p90), share of runs:
+
+| estimator | error at C [m] | gross error | announcement off (> 15 s) | announcement good (±3 s) |
+|---|---|---|---|---|
+| Route + filtered IMU speed, **baseline** | 39 (544) | 21 % | 20 % | 59 % |
+| Route + filtered IMU speed, now | 31 (413) | 16 % | 16 % | 65 % |
+| **Route + IMU Kalman filter (new)** | **30 (325)** | **15 %** | **14 %** | 65 % |
+| DR calibrated + GPS-blended, now (baseline: 58 (543), 22 %) | 51 (443) | 17 % | 16 % | 64 % |
+| Route + IMU + standstill oracle: speed reset ‡ | 22 (142) | 7 % | 8 % | 71 % |
+| Route + IMU + standstill oracle: speed reset + offset ‡ | 17 (87) | 3 % | 4 % | 78 % |
+| Route + vehicle speed † | 5 (14) | 0 % | 0 % | 99 % |
+
+**5 km flat tunnel** (error at C, median (p90) ✗ gross errors):
+
+| | free flow | stop-and-go |
+|---|---|---|
+| Route + IMU, baseline | 231 (420) ✗11 | 482 (804) ✗16 |
+| Route + IMU, now | 103 (257) ✗4 | 385 (782) ✗16 |
+| Kalman filter | 85 (283) ✗4 | 188 (782) ✗9 |
+| oracle: speed reset + offset ‡ | 103 (257) ✗4 | 103 (199) ✗2 |
+
+**Error sources** (error 5 km in, median [m]; Route + IMU baseline → now / Kalman filter):
+
+| condition | free flow | stop-and-go |
+|---|---|---|
+| realistic | 231 → 103 / **85** | 482 → 385 / **188** |
+| calibration pitch 0.1° | 588 → 628 / **3** | 953 → 977 / **5** |
+| calibration pitch 0.5° | 2617 → 2777 / **17** | 3290 → 3354 / **24** |
+| hard (tilted mount + calibration error) | 2610 → 2760 / **255** | 3277 → 3390 / 782 (capped) |
+| GPS degradation / harsh | 184 → 4 / 4; 188 → 133 / **31** | 354 → 3 / 6; 373 → 289 / **57** |
+| GPS speed noise | 98 → 102 / 85 | 196 → 393 / 182 |
+| bias drift | 85 → 90 / 92 | 354 → 353 / 306 |
+| error-free floor | 0 → 0 / 1 | 13 → 0 / 3 |
+| **calibration yaw 2°** | 58 → 67 / 65 | 82 → 96 / **204** |
+
+What the milestone shows:
+* **The phone-only error roughly halved** where it was largest. Realistic 5 km free flow went from 231 m
+  to 103 m (Route + IMU) and 85 m (filter); stop-and-go from 482 m to 188 m (filter). Gross errors over
+  all scenarios fell from 21 % to 15 %.
+* **A calibration pitch residual is no longer the dominant risk** for the filter: 0.1° costs 3–5 m
+  instead of 600–1000 m, and 0.5° costs 17–24 m instead of ~3 km. The `hard` condition drops from 2.8 km
+  to 255 m in free flow.
+* **The yaw residual is the new limit.** With a 2° yaw error the filter is worse than Route + IMU in
+  stop-and-go (204 vs. 96 m): in turns the yaw residual leaks lateral acceleration into the forward
+  channel, and the filter takes it for offset. Next candidate: yaw as a filter state (6b).
+* **Free-flow tails are mixed.** The filter has better medians but worse p90 at 2–3 km (72 vs. 46 m,
+  134 vs. 77 m) and similar at 5 km (283 vs. 257 m).
+* **Route + IMU got slightly worse with an injected calibration pitch** (588 → 628 m). Likely, not
+  verified: the portal freeze ends the speed blending about 10 s earlier, so the pitch error acts
+  over a slightly longer stretch.
+* **The oracle's ceiling stays well ahead**: 17 m median and 3 % gross errors over all scenarios,
+  against the filter's 30 m and 15 %. Most of the gap is in stop-and-go, and a detector would need
+  release timing within ~0.5 s to deliver it (D50).
+* Still optimistic in this setup: an exact map, the reported speed accuracy equal to the injected noise
+  (flatters the filter's weighting), and no vibration.
+

@@ -155,7 +155,10 @@ evening used letters for steps: "step 2b" = 2.1, "step 3a" = 3.1, "step 3b" = 3.
      offset and re-integrate the last M seconds at release, to tolerate delays up to M.)
 4. **Route-constrained Kalman filter** (state: distance, speed, forward offset). **First version done
    (2026-10-16, D51, [route_kalman.md](route_kalman.md)):** pitch 0.1° 628 → 3 m, realistic stop-and-go
-   385 → 188 m, realistic free 103 → 85 m (tails mixed). Next limit: the yaw residual (6b). The home for 2b, 3d,
+   385 → 188 m, realistic free 103 → 85 m (tails mixed). Next limit: the yaw residual (6b).
+   **Milestone rerun done (2026-10-16, `00ab89b`, [benchmark/README.md](benchmark/README.md#milestone-after-step-4-2026-10-16-milestone_step4)):**
+   all scenarios with map grade: Route + IMU 39 → 31 m median, filter 30 m; gross errors 21 % → 15 %. Flagged:
+   calibration yaw 2° in stop-and-go, filter 204 m vs. Route + IMU 96 m (yaw leak). The home for 2b, 3d,
    4c and the 3a/3b updates; honest uncertainty for the announcement.
 5. **Map-feature fixes (3b) and the yaw-leak correction (6a).** The only way to bound long free-flow
    tunnels without stops, once the filter exists.
