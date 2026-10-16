@@ -1,0 +1,13 @@
+{
+ "commit": "460680b+dirty",
+ "date": "2026-10-16 11:01 UTC",
+ "cases": [
+  "eisenhower_tunnel/up2",
+  "eisenhower_tunnel/flat",
+  "synthetic_demo_track/down2",
+  "synthetic_demo_track/flat",
+  "seattle_sr99_tunnel/v4",
+  "seattle_sr99_tunnel/flat"
+ ],
+ "runtime_s": 70
+}

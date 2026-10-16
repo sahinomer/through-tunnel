@@ -15,12 +15,13 @@ the route. What it cannot remove:
   acceleration (a factor √(1 + grade²), 0.08 % at 4 %), and the vertical acceleration in dips and
   crests leaks in multiplied by sin(φ - φ_cal).
 
-Gravity is the standard value; the simulator uses normal gravity at the latitude. The difference
-(≈0.05 % at 40° N) scales only the grade correction: ≈1·10⁻⁴ m/s² on a 2 % grade, i.e. ~14 m after a
-7.6 min stop-and-go outage on Eisenhower +2 % (measured). Using the matched value there gives 56 m
-instead of 42 m with ideal sensors. The second term is a levelling offset from the calibration (a yaw
-error caused by the grade ramp in the calibration window, plus a half-sample timing lag while braking),
-identified in residual_study.md.
+Gravity (F1, D48): the normal gravity of the WGS84 ellipsoid at the route's latitude (the phone knows
+it from GPS), as inertial navigation does. The standard value 9.80665 m/s² was 0.05 % off at 40° N and
+scaled the grade correction wrongly: −11 m (Eisenhower +2 %) and +23–29 m (synthetic −2 %) after
+stop-and-go outages with ideal sensors (residual_study.md). Taking g from the calibration's measured
+|f| would be worse: an accelerometer bias along the up axis (~10 mg) is not calibrated away. Not
+modelled: altitude (−0.03 % per km) and local anomalies (~0.01 %); the simulator uses the same
+formula without altitude, so here the value is exact (limitations.md).
 """
 
 from __future__ import annotations
@@ -29,16 +30,26 @@ import math
 
 from throughtunnel.observations import RouteMap
 
-GRAVITY = 9.80665  # m/s^2
+GRAVITY = 9.80665  # m/s^2, standard gravity (used only with use_normal_gravity = False)
+GAMMA_EQUATOR, K_SOMIGLIANA, E2 = 9.7803253359, 0.00193185265241, 6.69437999014e-3  # WGS84
+
+
+def normal_gravity(lat_deg: float) -> float:
+    """WGS84 normal gravity on the ellipsoid [m/s^2] (Somigliana)."""
+    s2 = math.sin(math.radians(lat_deg)) ** 2
+    return GAMMA_EQUATOR * (1.0 + K_SOMIGLIANA * s2) / math.sqrt(1.0 - E2 * s2)
 
 
 class GradeCompensation:
     """Gravity leakage on the forward axis predicted from the map's road grade."""
 
+    use_normal_gravity = True  # False: the standard value (the behaviour before D48, for comparisons)
+
     def __init__(self, route: RouteMap) -> None:
         if not route.has_grade:
             raise ValueError("the route map has no grade data")
         self.route = route
+        self.gravity = normal_gravity(float(route.lat[0])) if self.use_normal_gravity else GRAVITY
 
     def angle_at(self, distance_m: float) -> float:
         """Road grade angle [rad] at ``distance_m`` along the route (+ = uphill)."""
@@ -46,7 +57,7 @@ class GradeCompensation:
 
     def forward_gravity(self, distance_m: float, calibration_angle: float) -> float:
         """Specific force [m/s^2] that gravity adds to the levelled forward axis at ``distance_m``."""
-        return GRAVITY * math.sin(self.angle_at(distance_m) - calibration_angle)
+        return self.gravity * math.sin(self.angle_at(distance_m) - calibration_angle)
 
 
 def grade_compensation(route: RouteMap) -> GradeCompensation | None:

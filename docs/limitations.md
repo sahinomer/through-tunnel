@@ -38,6 +38,7 @@ methods.
 | Timestamp jitter, separate accelerometer/gyro clocks | not modelled | slightly worse | |
 | Phone moved or handled during the tunnel | not modelled | much worse (any method using the IMU orientation) | Scenario-specific; breaks the calibration. |
 | Magnetometer | not modelled | — | Unreliable in tunnels (steel, electrical installations). |
+| Gravity: altitude and local anomalies | not modelled | slightly worse for the map-grade correction | The simulator uses WGS84 normal gravity at the latitude, and since D48 so do the estimators, so their gravity is exact here. Real gravity also falls with altitude (−0.03 % per km, Eisenhower at 3.4 km: −0.1 %) and has local anomalies (~0.01 %). That scales the grade correction: 0.02 mg per 0.1 % of g on a 2 % grade change, ≈ 20 m after an 8 min stop-and-go outage at Eisenhower's altitude. GPS altitude would remove the altitude part (free-air gradient), but the simulated fixes carry no altitude. |
 | Barometer | not modelled | could make IMU methods better (grade) | Tunnel ventilation and the pressure wave pushed by traffic disturb pressure by tens of pascals (1 Pa ≈ 8 cm); needs research. |
 
 ## GPS

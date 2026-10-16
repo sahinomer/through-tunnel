@@ -1,7 +1,8 @@
 # Estimator work: problems, candidate solutions, plan (state point 2026-10-15)
 
 State point at the end of the session of 2026-10-15, to resume the estimator phase. **Update
-2026-10-16:** the order is agreed; steps 0 (handover diagnostic) and 1 (portal freeze, D46) are done,
+2026-10-16:** the order is agreed; steps 0 (handover diagnostic), 1 (portal freeze, D46), 2 (residual diagnostic) and 2b
+(calibration fixes, D48) are done,
 see "Order" below. User's working mode: discuss first, one step at a time, compare every change
 against the benchmarks.
 
@@ -121,12 +122,18 @@ calibration removes them).
    * the 42 m is a yaw error from the grade ramp in the calibration window, leaking lateral
      acceleration into the levelling (T2b, +46 m), plus the gravity constant (T1, −11 m);
    * T1 alone is the synthetic −2 % residual (23–29 m).
-   The freeze removes T2a and T2b here only because both happen within 200 m of B. Proposed fixes
-   F1–F3 (local gravity from the calibration, interval timing, map grade in the yaw fit) are
-   **awaiting the user's decision**.
+   The freeze removes T2a and T2b here only because both happen within 200 m of B.
+   **2b. Done (2026-10-16): calibration fixes F1–F3 (D48, [calibration_fixes.md](calibration_fixes.md)).**
+   Normal gravity at the route's latitude, exact interval timing, map grade in the yaw fit.
+   * Ideal sensors: every case within 7 m at C (42 → 1.4 m), with or without the freeze.
+   * Realistic flat roads unchanged.
+   * Sloped roads: climb free flow 109 → 93 m, underwater stop-and-go 767 → 613 m.
+   * Flagged: climb stop-and-go 297 → 501 m. The old gravity error had masked the clamp's forward
+     creep, which makes step 3 more urgent.
 3. **Standstill detection + zero-velocity updates (5a + 3a/4a).** The main lever for stop-and-go;
-   partly addresses pitch and drift. Comes with the no-vibration caveat. After step 1 the one-sided
-   clamp decides the sign of most stop-and-go errors (portal_freeze.md, finding 6).
+   partly addresses pitch and drift. Comes with the no-vibration caveat. After steps 1 and 2b the
+   one-sided clamp decides the sign of most stop-and-go errors and has two regression flags against it
+   (underwater, portal_freeze.md finding 6; climb, calibration_fixes.md).
 4. **Route-constrained Kalman filter** (state: distance, speed, forward offset). The home for 2b, 3d,
    4c and the 3a/3b updates; honest uncertainty for the announcement.
 5. **Map-feature fixes (3b) and the yaw-leak correction (6a).** The only way to bound long free-flow

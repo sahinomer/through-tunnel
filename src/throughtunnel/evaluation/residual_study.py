@@ -21,8 +21,8 @@ with the along-track error of ``dr_calibrated`` (no speed blending) at C. What t
 explain is the rest (position feedback at grade changes, the v ≥ 0 clamp at stops).
 
 Variants per case: portal freeze (D46) off / on × the estimators' gravity standard / local. "Local" =
-the simulator's normal gravity at the tunnel, set as the estimators' constant for this diagnostic; an
-implementation would take it from the calibration's measured |f|.
+normal gravity at the route's latitude, the estimators' default since D48 (F1); "standard" = 9.80665,
+the value before (``GradeCompensation.use_normal_gravity = False``).
 
     uv run python -m throughtunnel.evaluation.residual_study --out docs/residual_study
 """
@@ -106,7 +106,7 @@ def diagnose(res, freeze: bool, local_gravity: bool) -> dict:
     t_loss, c_t = res.gnss_events.loss_t, res.sections.exit_t
     g_local = float(normal_gravity(np.interp(t_loss, res.truth.t, res.truth.lat)))
     portal.FREEZE_BEFORE_ENTRANCE_M = 200.0 if freeze else None
-    map_grade.GRAVITY = g_local if local_gravity else 9.80665
+    map_grade.GradeCompensation.use_normal_gravity = local_gravity
     try:
         stage = stage_at_loss(res)
         a = stage.alignment
@@ -130,14 +130,14 @@ def diagnose(res, freeze: bool, local_gravity: bool) -> dict:
         m = (res.truth.t >= t_fix) & (res.truth.t <= c_t)
         t, phi = res.truth.t[m], np.arctan(res.truth.grade[m])
         g_sim = normal_gravity(res.truth.lat[m])
-        big_g = map_grade.GRAVITY
+        big_g = map_grade.GradeCompensation(res.route_map).gravity
         t1 = (g_sim - big_g) * np.sin(phi - phi_cal)
         t2 = g_sim * (np.sin(phi + p) - np.sin(phi - phi_cal))
         cmp = compare_estimators(res, list(ESTIMATORS))
         along = {ev.name: ev.summary["exit_along_m"] for ev in cmp.evaluations}
     finally:
         portal.FREEZE_BEFORE_ENTRANCE_M = 200.0
-        map_grade.GRAVITY = 9.80665
+        map_grade.GradeCompensation.use_normal_gravity = True
     return {
         "outage_s": c_t - t_fix,
         "p_plus_phi_cal_mg": g_local * (p + phi_cal) / MG,

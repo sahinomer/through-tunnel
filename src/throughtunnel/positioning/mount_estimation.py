@@ -33,11 +33,13 @@ import numpy as np
 from numpy.typing import NDArray
 
 from throughtunnel.observations import GnssFix
+from throughtunnel.positioning.map_grade import GRAVITY
 
 MIN_INTERVALS = 20  # ~20 s of GPS
 MIN_EXCITATION = 0.05  # rms predicted vehicle acceleration [m/s^2] needed to observe the yaw angle
 MIN_CORRELATION = 0.6  # agreement between predicted and measured horizontal acceleration
 MIN_SPEED_FOR_BEARING = 5.0  # [m/s]; GPS bearing noise grows as 1/speed
+MAX_SAMPLE_SPACING_S = 0.1  # IMU samples further apart than this are a gap, not the sample spacing
 
 
 @dataclass(frozen=True)
@@ -72,26 +74,55 @@ class MountAlignmentEstimator:
         self._max_gap = max_gap_s
         self._sum_f = np.zeros(3)
         self._sum_w = np.zeros(3)
-        self._n = 0
+        self._weight = 0.0  # time covered by the samples of the current interval [s]
+        self._last: tuple | None = None  # (t, accel, gyro, h) of the last sample
+        self._covered_to: float | None = None  # end of the time the samples so far stand for
         self._prev: GnssFix | None = None
         self._prev_grade_angle = 0.0
         self._rows: list[tuple] = []  # (f̄(3), ω̄(3), dt, v0, v1, yaw0, yaw1, t, σ_bearing, grade angle)
 
-    def add_imu(self, accel, gyro) -> None:
-        self._sum_f += accel
-        self._sum_w += gyro
-        self._n += 1
+    def add_imu(self, accel, gyro, t: float) -> None:
+        """One IMU sample at time ``t``. Samples stand for contiguous time: each one from where the
+        previous one ended up to t + h/2 (h = sample spacing; after a fix without an adjacent sample,
+        from the fix time). So the interval means are time averages over exactly the GPS interval (F2,
+        D48), and a sample that straddles a fix is split between the two intervals. Before, each
+        interval took its samples up to and including the fix time, a half-sample lag that left
+        −(h/2)·(a_last − a_first)/T in the levelling (the stop-and-go floor, residual_study.md)."""
+        accel, gyro = np.asarray(accel, dtype=float), np.asarray(gyro, dtype=float)
+        h = t - self._last[0] if self._last is not None else 0.0
+        if not 0.0 < h <= MAX_SAMPLE_SPACING_S:
+            h = self._last[3] if self._last is not None else 0.0  # after a gap: the previous spacing
+        end = t + 0.5 * h
+        start = self._covered_to if self._covered_to is not None else t - 0.5 * h
+        weight = max(end - start, 0.0)
+        self._sum_f += weight * accel
+        self._sum_w += weight * gyro
+        self._weight += weight
+        self._covered_to = end
+        self._last = (t, accel, gyro, h)
 
     def add_fix(self, fix: GnssFix, grade_angle: float = 0.0) -> None:
         """``grade_angle``: the map's road grade angle at this fix [rad] (0 without map grade)."""
+        # The covered time beyond the fix (or the gap up to it) belongs to the next interval. Without
+        # an adjacent sample (start, or after a gap) the next interval simply starts at the fix.
+        carry_f, carry_w, carry = np.zeros(3), np.zeros(3), 0.0
+        if self._last is not None and abs(self._last[0] - fix.t) <= max(self._last[3], 1e-9):
+            _, accel, gyro, _ = self._last
+            carry = self._covered_to - fix.t
+            carry_f, carry_w = carry * accel, carry * gyro
+            self._sum_f -= carry_f
+            self._sum_w -= carry_w
+            self._weight -= carry
+        else:
+            self._covered_to = fix.t
         prev = self._prev
-        if prev is not None and self._n > 0 and 0.0 < fix.t - prev.t <= self._max_gap:
+        if prev is not None and self._weight > 0.0 and 0.0 < fix.t - prev.t <= self._max_gap:
             yaw0 = math.radians(90.0 - prev.bearing_deg)
             yaw1 = math.radians(90.0 - fix.bearing_deg)
             self._rows.append(
                 (
-                    self._sum_f / self._n,
-                    self._sum_w / self._n,
+                    self._sum_f / self._weight,
+                    self._sum_w / self._weight,
                     fix.t - prev.t,
                     prev.speed_mps,
                     fix.speed_mps,
@@ -104,9 +135,7 @@ class MountAlignmentEstimator:
             )
         self._prev = fix
         self._prev_grade_angle = grade_angle
-        self._sum_f = np.zeros(3)
-        self._sum_w = np.zeros(3)
-        self._n = 0
+        self._sum_f, self._sum_w, self._weight = carry_f, carry_w, carry
 
     @property
     def intervals(self) -> int:
@@ -120,7 +149,13 @@ class MountAlignmentEstimator:
         dt = np.array([r[2] for r in self._rows])
         v0 = np.array([r[3] for r in self._rows])
         v1 = np.array([r[4] for r in self._rows])
-        a_long = (v1 - v0) / dt
+        # Predicted forward specific force: the speed change plus the gravity of the grade change since the
+        # mean grade the levelling absorbs (F3, D48; zero without map grade). Its mean is zero, so the
+        # levelling still absorbs the mean grade; but on a grade ramp inside the window the yaw fit no
+        # longer mistakes the ramp's gravity for acceleration (0.34° yaw error with ideal sensors before,
+        # which leaked the approach's lateral acceleration into the levelling, residual_study.md).
+        grade = np.array([r[9] for r in self._rows])
+        a_long = (v1 - v0) / dt + GRAVITY * np.sin(grade - grade.mean())
         v_mid = 0.5 * (v0 + v1)
 
         up = _unit(f.sum(axis=0))

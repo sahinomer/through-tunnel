@@ -171,7 +171,7 @@ class GpsImuAlignment(AlignmentStage):
 
     def on_imu(self, t: float, accel: Sequence[float], gyro: Sequence[float]) -> VehicleImu | None:
         if t - self._last_fix_t <= GNSS_TIMEOUT_S and not self._frozen:
-            self._solver.add_imu(accel, gyro)  # calibration data only while GPS is available
+            self._solver.add_imu(accel, gyro, t)  # calibration data only while GPS is available
         return self._rotate(t, accel, gyro)
 
 
