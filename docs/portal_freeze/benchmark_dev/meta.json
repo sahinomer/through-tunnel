@@ -1,0 +1,45 @@
+{
+ "commit": "1811edd+dirty",
+ "date": "2026-10-16 10:05 UTC",
+ "label": "step 1: portal freeze 200 m",
+ "seeds": [
+  0,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19
+ ],
+ "cases": [
+  "ladder_0.5km/flat/free",
+  "ladder_0.5km/flat/stop_and_go",
+  "ladder_5km/flat/free",
+  "ladder_5km/flat/stop_and_go",
+  "ladder_5km/climb3/free",
+  "ladder_5km/climb3/stop_and_go",
+  "ladder_5km/underwater/free",
+  "ladder_5km/underwater/stop_and_go"
+ ],
+ "dev": true,
+ "estimators": [
+  "dr_calibrated",
+  "dr_filtered",
+  "route_imu",
+  "route_vspeed"
+ ],
+ "runtime_s": 333
+}

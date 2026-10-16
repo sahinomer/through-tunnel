@@ -56,7 +56,7 @@ from throughtunnel.evaluation.benchmark import (
 )
 from throughtunnel.evaluation.experiment import compare_estimators, markdown_table
 from throughtunnel.observations import ImuStream, Observations
-from throughtunnel.positioning import ESTIMATORS, REFERENCE_ESTIMATORS
+from throughtunnel.positioning import ESTIMATORS, REFERENCE_ESTIMATORS, portal
 from throughtunnel.positioning.alignment import GpsImuAlignment
 from throughtunnel.positioning.runner import align_imu
 from throughtunnel.scenario import ScenarioConfig, run_scenario, truth_at
@@ -275,9 +275,14 @@ def handover_state(track, res) -> tuple[float, float]:
 
 
 # ---------------------------------------------------------------------- running
-def run_condition(key: str, traffic: str, seeds: list[int], names: list[str] | None = None) -> list[dict]:
+def run_condition(
+    key: str, traffic: str, seeds: list[int], names: list[str] | None = None, freeze_m: str = "default"
+) -> list[dict]:
     """All runs of one condition (passed by key: worker processes cannot receive its functions);
-    ``names``: only these estimators (default: all)."""
+    ``names``: only these estimators (default: all); ``freeze_m``: the portal freeze distance in metres,
+    "off", or "default" (D46; set per worker process)."""
+    if freeze_m != "default":
+        portal.FREEZE_BEFORE_ENTRANCE_M = None if freeze_m == "off" else float(freeze_m)
     condition = BY_KEY[key]
     records = []
     for seed in seeds:
@@ -484,6 +489,9 @@ def main() -> None:
     parser.add_argument(
         "--dev", action="store_true", help="development subset: DEV_CONDITIONS, DEV_ESTIMATORS"
     )
+    parser.add_argument(
+        "--freeze-m", default="default", help="portal freeze distance before B [m], 'off', or 'default' (D46)"
+    )
     parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--label", default="")
@@ -510,6 +518,7 @@ def main() -> None:
                     [t for _, t in jobs],
                     [seeds] * len(jobs),
                     [names] * len(jobs),
+                    [args.freeze_m] * len(jobs),
                 )
             )
         records = [r for recs in results for r in recs]
@@ -518,6 +527,7 @@ def main() -> None:
             "date": datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
             "label": args.label,
             "seeds": seeds,
+            "freeze_m": args.freeze_m,
             "conditions": list(dict.fromkeys(c.key for c, _ in jobs)),
             "estimators": names or list(ESTIMATORS),
             "dev": args.dev,

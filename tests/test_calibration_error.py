@@ -13,7 +13,7 @@ from pydantic import ValidationError
 
 from throughtunnel.evaluation.experiment import compare_estimators
 from throughtunnel.evaluation.metrics import evaluate_track
-from throughtunnel.positioning import ESTIMATORS, run_estimator
+from throughtunnel.positioning import ESTIMATORS, portal, run_estimator
 from throughtunnel.positioning.alignment import with_orientation_error
 from throughtunnel.positioning.mount_estimation import ALIGNED
 from throughtunnel.routing.synthetic import Straight, synthetic_route
@@ -123,9 +123,15 @@ def test_pitch_error_leaks_gravity_into_the_forward_channel(ideal_straight, pitc
     assert dr == pytest.approx(predicted, rel=0.02)
     # GPS speed blending during the approach settles to a speed lag of ~4 g sin(pitch) (5 s filter, 1 Hz),
     # which the route estimator carries into the tunnel: worse than plain dead reckoning, never better.
+    # Blending stops at the portal freeze zone (D46), so the leak also acts for the Δ seconds between the
+    # last blended fix and the last fix (position still follows the fixes there).
     route = evaluate_track(run(res, "route_imu", cal), res).summary["exit_along_m"]
-    lag = 4.0 * G * math.sin(math.radians(pitch)) * tau
-    assert route == pytest.approx(predicted - lag, rel=0.03)
+    t_zone = float(
+        np.interp(res.sections.entrance_s - portal.FREEZE_BEFORE_ENTRANCE_M, res.motion.s, res.motion.t)
+    )
+    delta = last_fix_before_loss(res) - float(res.gnss.t[res.gnss.t < t_zone][-1])
+    g_pitch = G * math.sin(math.radians(pitch))
+    assert route == pytest.approx(predicted - 4.0 * g_pitch * tau - g_pitch * delta * tau, rel=0.03)
 
 
 @pytest.mark.parametrize("yaw", [2.0, -2.0, 5.0])

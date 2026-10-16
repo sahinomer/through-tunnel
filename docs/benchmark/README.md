@@ -6,6 +6,17 @@ baseline on exactly the same runs:
 
     uv run python -m throughtunnel.evaluation.benchmark --quick --out out/dev --compare docs/benchmark/baseline
 
+**During development (D47)** each change runs the development subsets, ~6 min each instead of 32–42:
+
+    uv run python -m throughtunnel.evaluation.benchmark --dev --out out/dev/<step> --compare docs/benchmark/baseline
+    uv run python -m throughtunnel.evaluation.error_sources --dev --out out/dev/<step>_es --compare docs/benchmark/error_sources
+
+* `--dev` (benchmark): the 0.5 and 5 km flat tunnels, the 5 km climb and underwater tunnels, both traffic
+  cases; map grade on only; the calibrated estimators and the reference; 20 seeds.
+* `--dev` (error sources): floor, GPS speed noise, degradation (normal, harsh), realistic.
+* On unchanged code both reproduce the baselines exactly.
+* The full set is rerun at milestones.
+
 | Baseline | Commit | Estimators | Tables |
 |---|---|---|---|
 | `baseline/` | `36904cb` (2026-10-15) | the 5 phone-only estimators before any estimator work, + the reference | [tables](baseline/tables.md) · [configuration](baseline/config.md) |

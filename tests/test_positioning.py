@@ -298,8 +298,13 @@ def test_gyro_bias_calibration_survives_a_slow_turn_in_the_approach():
         assert abs(math.degrees(calibrated_alignment(res).gyro_bias_up - true_bias)) < 0.02
 
 
-def test_gps_blending_improves_the_handover_state():
+def test_gps_blending_improves_the_handover_state(monkeypatch):
+    """Blending vs. resetting to each fix, with the portal freeze (D46) off: it isolates the blending.
+    (With the freeze on and clean GPS up to B, the frozen speed is ~10 s older; test_portal_freeze.py.)"""
+    from throughtunnel.positioning import portal
     from throughtunnel.positioning.dead_reckoning import FilteredDeadReckoning
+
+    monkeypatch.setattr(portal, "FREEZE_BEFORE_ENTRANCE_M", None)
 
     cfg = load_preset("synthetic_demo_track")
     base = run_scenario(cfg)

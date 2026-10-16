@@ -30,6 +30,11 @@ subtracted from the forward channel (``map_grade.GradeCompensation``). The grade
 along-route distance the estimator keeps for this purpose only: each fix projected onto the route
 (searched near the previous value), advanced by the estimated speed in between. Without map grade
 nothing changes.
+
+Portal freeze (D46): with GPS blending (``dr_filtered``), inside [B − 200 m, C] speed and heading are not
+pulled towards the fixes; the IMU carries them, so the state handed over is the last one trusted.
+Position still resets to each fix. The zone is looked up at the same projected along-route distance.
+``dr_calibrated`` resets to every fix by design and keeps doing so (its calibration still freezes).
 """
 
 from __future__ import annotations
@@ -41,6 +46,7 @@ from throughtunnel.observations import GnssFix, RouteMap
 from throughtunnel.positioning.alignment import VehicleImu
 from throughtunnel.positioning.base import Estimator, StateEstimate
 from throughtunnel.positioning.map_grade import grade_compensation
+from throughtunnel.positioning.portal import portal_freeze
 
 SEARCH_BACK_M = 50.0  # window for projecting a fix onto the route near the previous distance
 SEARCH_AHEAD_M = 200.0
@@ -67,21 +73,35 @@ class VehicleDeadReckoning(Estimator):
         self._e = self._n = self._v = self._psi = 0.0
         self._initialised = False
         self._grade = grade_compensation(route)
-        self._d: float | None = None  # along-route distance, used only for the map-grade lookup
+        blends = self.config.blend_speed_tau_s or self.config.blend_heading_tau_s
+        self._freeze = portal_freeze(route) if blends else None
+        self._d: float | None = None  # along-route distance: map-grade lookup and freeze zone only
 
     # ------------------------------------------------------------------ observations
     def on_gnss(self, fix: GnssFix) -> None:
         cfg = self.config
         blending = self._initialised and self._aligned and fix.t - self._last_fix_t <= cfg.gnss_timeout_s
         self._e, self._n = self.fix_enu(fix)
+        if self._grade is not None or self._freeze is not None:
+            if self._d is None:
+                self._d = self.route.project_enu(self._e, self._n)[0]
+            else:
+                lo, hi = self._d - SEARCH_BACK_M, self._d + SEARCH_AHEAD_M
+                self._d = self.route.project_enu(self._e, self._n, lo_m=lo, hi_m=hi)[0]
+        # Portal freeze zone: the IMU carries speed and heading (D46).
+        hold = blending and self._freeze is not None and self._freeze.active(self._d)
         yaw_gps = self.bearing_to_yaw(fix.bearing_deg)
-        if blending and cfg.blend_speed_tau_s:
+        if hold:
+            pass
+        elif blending and cfg.blend_speed_tau_s:
             self._v += min(1.0, (fix.t - self._last_fix_t) / cfg.blend_speed_tau_s) * (
                 fix.speed_mps - self._v
             )
         else:
             self._v = fix.speed_mps
-        if blending and cfg.blend_heading_tau_s:
+        if hold:
+            pass
+        elif blending and cfg.blend_heading_tau_s:
             if fix.speed_mps >= cfg.min_speed_for_bearing:
                 gain = min(1.0, (fix.t - self._last_fix_t) / cfg.blend_heading_tau_s)
                 self._psi += gain * math.remainder(yaw_gps - self._psi, 2.0 * math.pi)
@@ -90,12 +110,6 @@ class VehicleDeadReckoning(Estimator):
         self._last_fix_t = fix.t
         self._t = fix.t
         self._initialised = True
-        if self._grade is not None:
-            if self._d is None:
-                self._d = self.route.project_enu(self._e, self._n)[0]
-            else:
-                lo, hi = self._d - SEARCH_BACK_M, self._d + SEARCH_AHEAD_M
-                self._d = self.route.project_enu(self._e, self._n, lo_m=lo, hi_m=hi)[0]
 
     def on_imu(self, t: float, imu: VehicleImu | None) -> None:
         self._aligned = imu is not None

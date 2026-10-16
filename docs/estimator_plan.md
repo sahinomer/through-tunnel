@@ -1,9 +1,9 @@
 # Estimator work: problems, candidate solutions, plan (state point 2026-10-15)
 
-State point at the end of the session of 2026-10-15, to resume the estimator phase. **Nothing in this
-document is implemented yet.** The user stopped here to continue later; the next step is to discuss
-these solutions and agree the order before building anything (user's working mode: discuss first, one
-step at a time, compare every change against the benchmarks).
+State point at the end of the session of 2026-10-15, to resume the estimator phase. **Update
+2026-10-16:** the order is agreed; steps 0 (handover diagnostic) and 1 (portal freeze, D46) are done,
+see "Order" below. User's working mode: discuss first, one step at a time, compare every change
+against the benchmarks.
 
 ## Where we are
 
@@ -109,22 +109,26 @@ calibration removes them).
 
 0. **Done (2026-10-16): handover diagnostic** ([handover_study.md](handover_study.md)). Agreed order
    with the user: 0 → 1 → 42 m residual → standstill → filter → map features.
-1. **Freeze the calibration and hand over from the last trusted state (1a + 2a).** Small change that
-   attacks the largest *realistic* error source. Expected after step 0: the realistic free-flow case
-   from ~220 m to ~110 m at 5 km (formula prediction; the earlier guess of 50–80 m was too optimistic).
-   It fits the current estimators, so the benchmark shows the effect cleanly. The remaining part is the
-   endpoint noise of ordinary GPS speed: the case for 1e or the filter.
+1. **Done (2026-10-16): portal freeze (1a + 2a, D46, [portal_freeze.md](portal_freeze.md)).** Realistic
+   5 km free flow 231 → 103 m (predicted ~110), gross errors 11 → 4 of 20; degradation inside the
+   200 m zone removed. Remaining in free flow: the endpoint noise of ordinary GPS speed (1e or the
+   filter). Flagged: underwater stop-and-go 490 → 767 m median (gross 14 → 13); more runs end ahead,
+   likely the one-sided clamp (step 3).
 2. **The 42 m residual and the 12–13 m stop-and-go floor**, before standstill detection, which would
    hide them. Step 0 lead: the floor is a tiny positive forward offset (≈ 0.004 mg) from the
-   calibration with error-free sensors, not the stop handling.
+   calibration with error-free sensors, not the stop handling. Step 1: the freeze removes the floor
+   (13 → 0 m), so that offset is learned in the last 200 m before the portal. Check the 42 m residual
+   with the freeze on and off.
 3. **Standstill detection + zero-velocity updates (5a + 3a/4a).** The main lever for stop-and-go;
-   partly addresses pitch and drift. Comes with the no-vibration caveat.
+   partly addresses pitch and drift. Comes with the no-vibration caveat. After step 1 the one-sided
+   clamp decides the sign of most stop-and-go errors (portal_freeze.md, finding 6).
 4. **Route-constrained Kalman filter** (state: distance, speed, forward offset). The home for 2b, 3d,
    4c and the 3a/3b updates; honest uncertainty for the announcement.
 5. **Map-feature fixes (3b) and the yaw-leak correction (6a).** The only way to bound long free-flow
    tunnels without stops, once the filter exists.
 
-Each step is checked against both baselines with `--compare` before the next.
+Each step is checked against both baselines with `--compare` before the next, on the development
+subsets (`--dev`, D47); the full benchmarks are rerun at milestones.
 
 ## Open items carried over
 
@@ -144,6 +148,7 @@ Each step is checked against both baselines with `--compare` before the next.
 
 1. Read this file and [benchmark/README.md](benchmark/README.md).
 2. Discuss with the user: the solutions, the order, and the open thresholds.
-3. For each agreed step: implement → `uv run python -m throughtunnel.evaluation.benchmark --quick
-   --out out/dev --compare docs/benchmark/baseline` and the error-source benchmark on the conditions
-   it targets → write up → commit → stop for review.
+3. For each agreed step: implement → `uv run python -m throughtunnel.evaluation.benchmark --dev
+   --out out/dev/<step> --compare docs/benchmark/baseline` and `uv run python -m
+   throughtunnel.evaluation.error_sources --dev --out out/dev/<step>_es --compare
+   docs/benchmark/error_sources` (D47) → write up → commit → stop for review.

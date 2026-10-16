@@ -14,6 +14,10 @@ along-track error (speed error integrated over time) and the map's own deviation
 If the route map provides the road grade (D39), ``RouteImuDeadReckoning`` subtracts the gravity
 leakage predicted from it at the estimated distance d (``map_grade.GradeCompensation``).
 
+Portal freeze (D46): inside [B − 200 m, C] ``RouteImuDeadReckoning`` does not blend the speed towards the
+fixes; the IMU carries it, so it hands over the last speed it trusted. d still follows the fixes.
+``RouteSpeedHold`` (the naive reference) keeps the last GPS speed as before.
+
 While GPS is available, d is the projection of each fix onto the route (searched near the previous
 value, so a fix cannot snap to a far-away part of the route).
 """
@@ -26,6 +30,7 @@ from throughtunnel.observations import GnssFix, RouteMap
 from throughtunnel.positioning.alignment import VehicleImu
 from throughtunnel.positioning.base import Estimator, StateEstimate
 from throughtunnel.positioning.map_grade import grade_compensation
+from throughtunnel.positioning.portal import portal_freeze
 
 GNSS_TIMEOUT_S = 1.5
 BLEND_SPEED_TAU_S = 5.0
@@ -46,6 +51,7 @@ class RouteConstrained(Estimator):
         self._d: float | None = None
         self._v = 0.0
         self._grade = grade_compensation(route) if self.use_imu_speed else None
+        self._freeze = portal_freeze(route) if self.use_imu_speed else None
 
     def on_gnss(self, fix: GnssFix) -> None:
         e, n = self.fix_enu(fix)
@@ -56,7 +62,9 @@ class RouteConstrained(Estimator):
                 e, n, lo_m=self._d - SEARCH_BACK_M, hi_m=self._d + SEARCH_AHEAD_M
             )[0]
         blending = self.use_imu_speed and self._aligned and fix.t - self._last_fix_t <= GNSS_TIMEOUT_S
-        if blending:
+        if blending and self._freeze is not None and self._freeze.active(self._d):
+            pass  # portal freeze zone: the IMU carries the speed (D46)
+        elif blending:
             self._v += min(1.0, (fix.t - self._last_fix_t) / BLEND_SPEED_TAU_S) * (fix.speed_mps - self._v)
         else:
             self._v = fix.speed_mps

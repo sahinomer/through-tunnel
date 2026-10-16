@@ -14,7 +14,8 @@ Methods (``ALIGNMENTS``), swappable per estimator:
 * ``GpsImuAlignment``: levelling, yaw and gyro bias from approach GPS and IMU
   (``mount_estimation.MountAlignmentEstimator``). If the map provides the grade (D39), the grade
   angle at each fix goes into the calibration, and every sample carries the mean grade the calibration
-  absorbed (``calibration_grade_angle``).
+  absorbed (``calibration_grade_angle``). Inside the portal freeze zone [B − 200 m, C] (D46,
+  ``portal.py``) it stops calibrating and keeps the orientation solved before the zone.
 
 Calibration error (D34, D40): an experiment setting, not information. The orientation the stage uses
 is rotated by it before any sample leaves the stage, so it acts on every method alike, and the
@@ -35,6 +36,7 @@ from numpy.typing import NDArray
 from throughtunnel.observations import GnssFix, RouteMap
 from throughtunnel.positioning.map_grade import grade_compensation
 from throughtunnel.positioning.mount_estimation import ALIGNED, Alignment, MountAlignmentEstimator
+from throughtunnel.positioning.portal import portal_freeze
 
 GNSS_TIMEOUT_S = 1.5  # calibration data only while fixes arrive at least this often
 SEARCH_BACK_M = 50.0  # window for projecting a fix onto the route near the previous fix ...
@@ -141,12 +143,14 @@ class GpsImuAlignment(AlignmentStage):
         super().__init__(route, calibration_error)
         self._solver = MountAlignmentEstimator()
         self._grade = grade_compensation(route)
-        self._d: float | None = None  # last fix projected onto the route (grade lookup only)
+        self._freeze = portal_freeze(route)
+        self._frozen = False  # the last fix lay in the portal freeze zone
+        self._d: float | None = None  # last fix projected onto the route (grade lookup, freeze zone)
         self._last_fix_t = -math.inf
 
     def on_gnss(self, fix: GnssFix) -> None:
         grade_angle = 0.0
-        if self._grade is not None:
+        if self._grade is not None or self._freeze is not None:
             e, n, _ = self.route.frame.to_enu(fix.lat, fix.lon)
             if self._d is None:
                 self._d = self.route.project_enu(float(e), float(n))[0]
@@ -154,15 +158,19 @@ class GpsImuAlignment(AlignmentStage):
                 ahead = SEARCH_AHEAD_M + MAX_SPEED_MPS * (fix.t - self._last_fix_t)
                 lo, hi = self._d - SEARCH_BACK_M, self._d + ahead
                 self._d = self.route.project_enu(float(e), float(n), lo_m=lo, hi_m=hi)[0]
-            grade_angle = self._grade.angle_at(self._d)
+            if self._grade is not None:
+                grade_angle = self._grade.angle_at(self._d)
         self._last_fix_t = fix.t
+        self._frozen = self._freeze is not None and self._freeze.active(self._d)
+        if self._frozen:  # keep the orientation solved before the zone (D46)
+            return
         self._solver.add_fix(fix, grade_angle)
         solved = self._solver.solve()
         if solved is not None and solved.ready:
             self._use(solved)
 
     def on_imu(self, t: float, accel: Sequence[float], gyro: Sequence[float]) -> VehicleImu | None:
-        if t - self._last_fix_t <= GNSS_TIMEOUT_S:
+        if t - self._last_fix_t <= GNSS_TIMEOUT_S and not self._frozen:
             self._solver.add_imu(accel, gyro)  # calibration data only while GPS is available
         return self._rotate(t, accel, gyro)
 

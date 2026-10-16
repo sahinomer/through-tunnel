@@ -1,0 +1,43 @@
+{
+ "commit": "1811edd+dirty",
+ "date": "2026-10-16 09:53 UTC",
+ "label": "step 1: portal freeze 200",
+ "seeds": [
+  0,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19
+ ],
+ "freeze_m": "200",
+ "conditions": [
+  "floor",
+  "gps_speed",
+  "gps_degr",
+  "gps_degr_harsh",
+  "realistic"
+ ],
+ "estimators": [
+  "dr_calibrated",
+  "dr_filtered",
+  "route_imu",
+  "route_vspeed"
+ ],
+ "dev": true,
+ "runtime_s": 412
+}

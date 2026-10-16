@@ -37,7 +37,11 @@ def test_profiles_are_valid_and_shaped_as_labelled(key):
         assert prof.evaluate([mid])[1][0] == pytest.approx(design, rel=0.1)
 
 
-def test_gravity_leakage_prediction_matches_the_estimator():
+def test_gravity_leakage_prediction_matches_the_estimator(monkeypatch):
+    # The slope study predates the portal freeze (D46): its predictor takes the calibration up to GPS loss.
+    from throughtunnel.positioning import portal
+
+    monkeypatch.setattr(portal, "FREEZE_BEFORE_ENTRANCE_M", None)
     cfg = load_preset("synthetic_demo_track")
     base = run_scenario(cfg.model_copy(update={"road_profile": profile_config(cfg, BY_KEY["up2"])}))
     imu, gnss = ideal_sensors(cfg)
