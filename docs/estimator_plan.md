@@ -5,7 +5,8 @@ State point at the end of the session of 2026-10-15, to resume the estimator pha
 (calibration fixes, D48), 3.1 (standstill oracle, D49), 3.2 (oracle sensitivity, D50) and 4 (Kalman filter, first version,
 D51) are done,
 see "Order" below. **Update 2026-10-17:** order after step 4 agreed with the user: 4.1 (yaw) → 5 (map features) → 3d
-(announcements); step 4.1 is done ([yaw_study.md](yaw_study.md), [route_kalman_yaw.md](route_kalman_yaw.md), D52): `route_kf_yaw` next to `route_kf`. User's working mode: discuss first, one step at a time, compare every change
+(announcements). Step 4.1 is done ([yaw_study.md](yaw_study.md), [route_kalman_yaw.md](route_kalman_yaw.md), D52):
+`route_kf_yaw` next to `route_kf`. Step 5 is deprioritised but kept as a viable solution, so step 6 (3d) is next. User's working mode: discuss first, one step at a time, compare every change
 against the benchmarks.
 
 ## Where we are
@@ -187,8 +188,37 @@ evening used letters for steps: "step 2b" = 2.1, "step 3a" = 3.1, "step 3b" = 3.
      stop-and-go leans worse (fresh seeds 355 → 503 m, p = 0.14; a reshuffle under the clamp, P5).
      `route_kf` stays the headline phone-only filter, `route_kf_yaw` the robustness variant. The
      lateral-channel measurement is not built.
-5. **Map-feature fixes (3b) and the yaw-leak correction (6a).** The only way to bound long free-flow
-   tunnels without stops, once the filter exists.
+5. **Map-feature fixes (3b): deprioritised, kept as a viable solution (user decision, 2026-10-17).** Not
+   rejected; the announcement (step 6) comes first. Reasons:
+   * the gain depends entirely on the tunnel's geometry: none in a straight tunnel. From general knowledge,
+     long mountain tunnels (Mont Blanc, Fréjus, Gotthard road tunnel) are essentially straight, while urban
+     tunnels (Seattle SR99, Boston's Central Artery) curve;
+   * the method trusts the map's curve geometry metre for metre, and how accurately maps draw curves
+     *inside* tunnels is unknown here (map errors are not modelled, R3);
+   * our benchmark would flatter it: every ladder tunnel has two S-arcs by construction, the map is exact,
+     and the simulated car never changes lanes;
+   * simplicity: a 6-state filter whose gain depends on geometry and an unverified map is hard to defend
+     without real data.
+
+   Revisit when there is real drive data, evidence on map quality in tunnels, or a product focus on urban
+   tunnels. Those curve, and stop-and-go, the worst remaining failure, is mostly urban: there this method
+   would help most. Lane changes are not the main risk (a few degrees for a few seconds, net zero, gateable).
+   *Design kept (proposed 2026-10-17, not built):*
+   * a new estimator `route_kf_map` on top of `route_kf`, with two more states: the heading error of the
+     integrated gyro and the gyro-bias residual (realistic: 1.7 mdps after the calibration, plus drift);
+   * heading measurement in the tunnel every ~10 m driven: integrated gyro heading minus a smoothed map
+     heading at d̂ (`heading_at` is piecewise constant per polyline segment). On straights it calibrates the
+     heading drift; on curves it corrects d, and through the filter's correlations v and b;
+   * precision ≈ heading error / curvature: ~2 m on an 800 m arc;
+   * grade changes (pitch gyro vs. the map's grade profile) as a later sub-step: gentler signal, and the
+     pitch gyro bias is not calibrated;
+   * checks: a nearly straight dev control (Eisenhower, 18.5° of turning over 2.7 km) and a straight-route
+     test where it must equal `route_kf`.
+
+   6a (predict the yaw leak from the map) is dropped from this step: `route_kf_yaw` (D52) covers the need.
+6. **Uncertainty-aware announcement (3d), next.** Applies to every tunnel and targets the product output.
+   Starts with a consistency check of `position_std_m`; then the announcement policy and the tunnel-length
+   ideas above. To be designed with the user.
 
 Each step is checked against both baselines with `--compare` before the next, on the development
 subsets (`--dev`, D47); the full benchmarks are rerun at milestones.
