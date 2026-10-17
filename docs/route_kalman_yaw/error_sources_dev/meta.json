@@ -1,0 +1,54 @@
+{
+ "commit": "d6f657d+dirty",
+ "date": "2026-10-17 11:20 UTC",
+ "label": "",
+ "seeds": [
+  0,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19
+ ],
+ "freeze_m": "default",
+ "oracle": {
+  "delay_s": 0.0,
+  "miss_probability": 0.0,
+  "false_standstill_kmh": 0.0
+ },
+ "conditions": [
+  "floor",
+  "cal_pitch_0.1",
+  "cal_yaw_2",
+  "gps_speed",
+  "gps_degr",
+  "gps_degr_harsh",
+  "realistic",
+  "hard"
+ ],
+ "estimators": [
+  "dr_calibrated",
+  "dr_filtered",
+  "route_imu",
+  "route_kf",
+  "route_vspeed",
+  "route_imu_stop",
+  "route_imu_zupt"
+ ],
+ "dev": true,
+ "runtime_s": 1145
+}

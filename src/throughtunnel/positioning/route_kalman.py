@@ -1,14 +1,19 @@
-"""Route-constrained Kalman filter (D51, step 4 of estimator_plan.md): distance, speed, forward offset.
+"""Route-constrained Kalman filter (D51, step 4; yaw state D52, step 4.1 of estimator_plan.md).
 
 Phone-only. The same information as ``route_imu`` (GPS + IMU alignment stage, route map, map grade,
 portal freeze), but the fixed 5 s speed blend and the unquestioned calibration are replaced by a
 filter with the state
 
-    x = [d, v, b]    d: distance along the route [m], v: speed [m/s], b: forward offset [m/s^2]
+    x = [d, v, b, ψ]    d: distance along the route [m], v: speed [m/s], b: forward offset [m/s^2],
+                        ψ: yaw residual of the calibrated axes [rad]
 
-* Prediction, every IMU sample: the grade-compensated forward specific force a, minus b, is integrated
-  (d += v·dt + ½(a − b)·dt², v += (a − b)·dt). The offset b is what the calibration left in the forward
-  channel (pitch residual, bias, drift): a random walk.
+* Prediction, every IMU sample: the grade-compensated forward specific force a, minus b and minus the
+  yaw leak ψ·f_lat (f_lat: the measured lateral channel), is integrated (d += v·dt + ½·â·dt²,
+  v += â·dt, â = a − b − ψ·f_lat). The offset b is what the calibration left in the forward channel
+  (pitch residual, bias, drift): a random walk. ψ is the calibration's yaw error: in turns it leaks
+  lateral acceleration into the forward channel (P6). It is observable where f_lat varies, i.e. on curves
+  with GPS speed; without it, b absorbed the leak of the approach curves (yaw_study.md). A slow random
+  walk (the phone may shift in its holder).
 * Updates, every GPS fix: the fix projected onto the route (d) and the GPS speed (v), each weighted by the
   accuracy the phone reports (solution 1c). Position jumps beyond 4σ are rejected (multipath), at most 3
   fixes in a row. The speed is not gated: a gate there rejected exactly the updates that should correct a
@@ -16,16 +21,20 @@ filter with the state
   through how the speed measurements diverge from the integrated IMU, over all fixes: the offset is fitted
   over the approach, not set by its last fix (solution 1e).
 * Portal freeze zone (D46): no speed updates; position updates continue (gated).
-* After a GPS outage the first fix resets d and v (as ``route_imu``); b and its uncertainty are kept.
+* After a GPS outage the first fix resets d and v (as ``route_imu``); b, ψ and their uncertainty are kept.
+* Each re-solve of the calibration moves its axes; the stage reports by how much (``offset_shift``,
+  ``yaw_shift``), and b and ψ move with it: they describe the residual of the axes in use.
 * The v ≥ 0 clamp stays (no standstill information in the phone-only solution, P5).
 * ``position_std_m`` is the filter's 1σ along-route uncertainty (for uncertainty-aware announcements).
 
 Tuning (PD6: nominal values of the estimator, never read from the scenario configuration):
 * accelerometer noise 180 µg/√Hz (a typical phone MEMS datasheet value; the simulator's preset happens to
-  use the same order) plus a model-error term for what the forward channel gets wrong while driving (yaw
-  residual × lateral acceleration, map grade errors): together 0.005 m/s²/√Hz;
+  use the same order) plus a model-error term for what the forward channel gets wrong while driving (map
+  grade errors and the like): together 0.005 m/s²/√Hz;
 * offset random walk 0.05 mg/√s (bias instability of ~0.5 mg over minutes);
-* initial offset uncertainty 1 mg (what a GPS-levelled calibration typically leaves).
+* initial offset uncertainty 1 mg (what a GPS-levelled calibration typically leaves);
+* initial yaw uncertainty 3° (a GPS-based mount calibration over a short approach), random walk
+  0.01°/√s (a phone settling in its holder: ~0.1° over a 2 min tunnel).
 """
 
 from __future__ import annotations
@@ -46,7 +55,9 @@ from throughtunnel.positioning.route_constrained import (
 ACCEL_PSD = 0.005**2  # [(m/s^2)^2/Hz]: sensor noise (180 µg/√Hz) + model error while driving
 OFFSET_PSD = (0.05e-3 * STANDARD_GRAVITY) ** 2  # [(m/s^2)^2/s]: random walk of the forward offset
 OFFSET_SIGMA0 = 1e-3 * STANDARD_GRAVITY  # [m/s^2]: initial offset uncertainty
-YAW_SIGMA = math.radians(0.5)  # nominal yaw residual of the calibration: lateral acceleration leaks in
+YAW_SIGMA0 = math.radians(3.0)  # [rad]: initial yaw uncertainty
+YAW_PSD = math.radians(0.01) ** 2  # [rad^2/s]: random walk of the yaw residual
+YAW_SIGMA = math.radians(0.5)  # turn noise of the first version (``turn_noise``; comparison only)
 GATE_SIGMA = 4.0  # position jumps beyond this many σ are rejected (multipath) ...
 MAX_REJECTED_IN_ROW = 3  # ... but never more than this many fixes in a row (no lock-out)
 MIN_POSITION_SIGMA_M = 1.0
@@ -55,15 +66,22 @@ MIN_SPEED_SIGMA_MPS = 0.05
 
 class RouteKalman(RouteImuDeadReckoning):
     name = "route_kf"
-    label = "Route + IMU Kalman filter (distance, speed, offset)"
-    turn_noise = 1.0  # 0: no turn-dependent process noise (comparison)
+    label = "Route + IMU Kalman filter (distance, speed, offset, yaw)"
+    # 1: the first version's turn noise (lateral acceleration × a nominal 0.5° yaw residual) on top of the
+    # yaw state; 0 (default): the yaw state alone carries the turn uncertainty (comparison)
+    turn_noise = 0.0
+    # False: ψ fixed at 0 (no prior, no random walk, re-solve yaw shifts ignored). With turn_noise = 1 this is
+    # exactly the first version (D51), bit for bit (comparison)
+    yaw_state = True
 
     def __init__(self, route: RouteMap) -> None:
         super().__init__(route)
         self._b = 0.0
-        # covariance of (d, v, b), symmetric: dd, dv, db, vv, vb, bb
-        self._p = [0.0] * 6
-        self._p[5] = OFFSET_SIGMA0**2
+        self._psi = 0.0
+        # covariance of (d, v, b, ψ), full 4 × 4, symmetric
+        self._p = [[0.0] * 4 for _ in range(4)]
+        self._p[2][2] = OFFSET_SIGMA0**2
+        self._p[3][3] = YAW_SIGMA0**2 if self.yaw_state else 0.0
         self.rejected = 0  # gated position fixes (diagnostics)
         self._rejected_in_row = 0
 
@@ -71,6 +89,11 @@ class RouteKalman(RouteImuDeadReckoning):
     def offset(self) -> float:
         """Current estimate of the forward offset b [m/s^2] (diagnostics)."""
         return self._b
+
+    @property
+    def yaw(self) -> float:
+        """Current estimate of the yaw residual ψ [rad] (diagnostics)."""
+        return self._psi
 
     # ------------------------------------------------------------------ GPS
     def on_gnss(self, fix: GnssFix) -> None:
@@ -85,8 +108,12 @@ class RouteKalman(RouteImuDeadReckoning):
                 lo = self._d - SEARCH_BACK_M
                 self._d = self.route.project_enu(e, n, lo_m=lo, hi_m=self._d + SEARCH_AHEAD_M)[0]
             self._v = fix.speed_mps
-            pbb = self._p[5]
-            self._p = [sigma_d**2, 0.0, 0.0, sigma_v**2, 0.0, pbb]
+            p = self._p
+            for i in range(4):  # d and v restart, uncorrelated; the (b, ψ) block is kept
+                for j in range(4):
+                    if i < 2 or j < 2:
+                        p[i][j] = 0.0
+            p[0][0], p[1][1] = sigma_d**2, sigma_v**2
         else:
             z_d = self.route.project_enu(e, n, lo_m=self._d - SEARCH_BACK_M, hi_m=self._d + SEARCH_AHEAD_M)[0]
             self._reset_distance(z_d, sigma_d)
@@ -103,36 +130,31 @@ class RouteKalman(RouteImuDeadReckoning):
         slowly wandering position error looks like acceleration (~0.3 mg) and, as a normal measurement,
         corrupted the offset estimate in a first version (wrong sign in half the realistic runs). The
         speed (Doppler) errors are white, so v and b are estimated from the speed alone."""
-        dd = self._p[0]
+        p = self._p
         if (z_d - self._d) ** 2 > GATE_SIGMA**2 * (
-            dd + sigma_d**2
+            p[0][0] + sigma_d**2
         ) and self._rejected_in_row < MAX_REJECTED_IN_ROW:
             self.rejected += 1
             self._rejected_in_row += 1
             return
         self._rejected_in_row = 0
         self._d = z_d
-        _, _, _, vv, vb, bb = self._p
-        self._p = [sigma_d**2, 0.0, 0.0, vv, vb, bb]
+        for j in range(1, 4):
+            p[0][j] = p[j][0] = 0.0
+        p[0][0] = sigma_d**2
 
     def _update(self, i: int, innovation: float, r: float) -> None:
         """Scalar measurement of state component i (0: d, 1: v)."""
-        dd, dv, db, vv, vb, bb = self._p
-        col = (dd, dv, db) if i == 0 else (dv, vv, vb)  # P[:, i]
+        p = self._p
+        col = [p[j][i] for j in range(4)]  # P[:, i]
         s = col[i] + r
-        k = (col[0] / s, col[1] / s, col[2] / s)
+        k = [c / s for c in col]
         self._d += k[0] * innovation
         self._v += k[1] * innovation
         self._b += k[2] * innovation
+        self._psi += k[3] * innovation
         # P -= K · P[i, :]
-        self._p = [
-            dd - k[0] * col[0],
-            dv - k[0] * col[1],
-            db - k[0] * col[2],
-            vv - k[1] * col[1],
-            vb - k[1] * col[2],
-            bb - k[2] * col[2],
-        ]
+        self._p = [[p[a][c] - k[a] * col[c] for c in range(4)] for a in range(4)]
 
     # ------------------------------------------------------------------ IMU
     def on_imu(self, t: float, imu: VehicleImu | None) -> None:
@@ -146,31 +168,43 @@ class RouteKalman(RouteImuDeadReckoning):
         if imu is None:  # no orientation yet: coast
             self._d = min(self._d + self._v * dt, self.route.length_m)
             return
-        self._b += imu.offset_shift  # the calibration re-solved: same offset, new frame
-        a = self._forward_accel(imu) - self._b
+        self._b += imu.offset_shift  # the calibration re-solved: same residuals, new frame
+        if self.yaw_state:
+            self._psi += imu.yaw_shift
+        f_lat = imu.accel[1]
+        a = self._forward_accel(imu) - self._b - self._psi * f_lat
         v_new = self._v + a * dt
         self._d = min(self._d + 0.5 * (self._v + max(v_new, 0.0)) * dt, self.route.length_m)
         self._v = max(v_new, 0.0)
-        # While turning, the yaw residual leaks lateral acceleration (v·ω) into the forward channel; the
-        # filter cannot separate it from b, so it widens the process noise instead of blaming the offset.
-        leak = self.turn_noise * YAW_SIGMA * self._v * imu.gyro[2]
-        self._predict_covariance(dt, leak * leak * dt)
+        leak = self.turn_noise * YAW_SIGMA * self._v * imu.gyro[2]  # first version's turn noise (comparison)
+        self._predict_covariance(dt, f_lat, leak * leak * dt)
 
-    def _predict_covariance(self, dt: float, extra_q: float = 0.0) -> None:
-        """P = F P Fᵀ + Q with F = [[1, dt, −dt²/2], [0, 1, −dt], [0, 0, 1]]."""
-        dd, dv, db, vv, vb, bb = self._p
+    def _predict_covariance(self, dt: float, f_lat: float, extra_q: float = 0.0) -> None:
+        """P = F P Fᵀ + Q, F = I + [[0, dt, −h, −h·f_lat], [0, 0, −dt, −dt·f_lat], [0]*4, [0]*4], h = dt²/2.
+
+        b and ψ act only through the effective offset b + ψ·f_lat (w below)."""
+        p = self._p
         h = 0.5 * dt * dt
-        r1 = (dd + dt * dv - h * db, dv + dt * vv - h * vb, db + dt * vb - h * bb)
-        r2 = (dv - dt * db, vv - dt * vb, vb - dt * bb)
+        w = [p[2][j] + f_lat * p[3][j] for j in range(4)]
+        rows = (  # F P
+            [p[0][j] + dt * p[1][j] - h * w[j] for j in range(4)],
+            [p[1][j] - dt * w[j] for j in range(4)],
+            p[2],
+            p[3],
+        )
+        out = []  # (F P) Fᵀ
+        for r in rows:
+            wr = r[2] + f_lat * r[3]
+            out.append([r[0] + dt * r[1] - h * wr, r[1] - dt * wr, r[2], r[3]])
         q = ACCEL_PSD + extra_q / dt  # extra_q: variance added to v over this step
-        self._p = [
-            r1[0] + dt * r1[1] - h * r1[2] + q * dt**3 / 3.0,
-            r1[1] - dt * r1[2] + q * dt * dt / 2.0,
-            r1[2],
-            r2[1] - dt * r2[2] + q * dt,
-            r2[2],
-            bb + OFFSET_PSD * dt,
-        ]
+        out[0][0] += q * dt**3 / 3.0
+        out[0][1] += q * dt * dt / 2.0
+        out[1][0] += q * dt * dt / 2.0
+        out[1][1] += q * dt
+        out[2][2] += OFFSET_PSD * dt
+        if self.yaw_state:
+            out[3][3] += YAW_PSD * dt
+        self._p = out
 
     def state(self) -> StateEstimate | None:
         est = super().state()
@@ -184,5 +218,5 @@ class RouteKalman(RouteImuDeadReckoning):
             heading=est.heading,
             mode=est.mode,
             route_distance=est.route_distance,
-            position_std_m=math.sqrt(max(self._p[0], 0.0)),
+            position_std_m=math.sqrt(max(self._p[0][0], 0.0)),
         )

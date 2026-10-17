@@ -69,7 +69,16 @@ from throughtunnel.sensors.standstill import StandstillOracleConfig
 TUNNEL_KM = 5.0
 CHECKPOINTS_KM = (0.5, 1.0, 2.0, 3.0, 4.0, 5.0)
 TRAFFIC = ("free", "stop_and_go")
-DEV_CONDITIONS = ("floor", "gps_speed", "gps_degr", "gps_degr_harsh", "realistic")
+DEV_CONDITIONS = (
+    "floor",
+    "gps_speed",
+    "gps_degr",
+    "gps_degr_harsh",
+    "realistic",
+    "cal_pitch_0.1",
+    "cal_yaw_2",
+    "hard",
+)
 TEXT = ("case", "condition", "group", "traffic", "estimator")
 
 

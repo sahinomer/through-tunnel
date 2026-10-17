@@ -14,7 +14,8 @@ baseline on exactly the same runs:
 * `--dev` (benchmark): the 0.5 and 5 km flat tunnels, the 5 km climb and underwater tunnels, both traffic
   cases; map grade on only; the calibrated estimators, the reference and (since D49) the two standstill
   oracle variants; 20 seeds.
-* `--dev` (error sources): floor, GPS speed noise, degradation (normal, harsh), realistic.
+* `--dev` (error sources): floor, GPS speed noise, degradation (normal, harsh), realistic; since D52 also
+  calibration pitch 0.1°, calibration yaw 2° and hard.
 * On unchanged code both reproduce the baselines exactly.
 * The full set is rerun at milestones.
 

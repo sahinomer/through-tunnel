@@ -57,6 +57,10 @@ class VehicleImu:
     # orientation just before this sample [m/s^2]; 0 on all other samples (D51). An estimator that tracks
     # the forward offset shifts it by this much; the others can ignore it.
     offset_shift: float = 0.0
+    # Change of the forward axis' yaw caused by the same re-solve [rad], + = towards the left axis (step 4.1):
+    # the lateral specific force leaking into the forward channel changes by this factor. An estimator that
+    # tracks the yaw residual shifts it by this much; the others can ignore it.
+    yaw_shift: float = 0.0
 
 
 def with_orientation_error(alignment: Alignment, rotation: NDArray[np.float64] | None) -> Alignment:
@@ -83,6 +87,7 @@ class AlignmentStage(ABC):
         self._axes: Alignment | None = None
         self._rows: tuple | None = None  # the axes as plain floats (per-sample arithmetic)
         self._pending_shift = 0.0  # offset_shift for the next sample
+        self._pending_yaw = 0.0  # yaw_shift for the next sample
 
     @abstractmethod
     def on_gnss(self, fix: GnssFix) -> None:
@@ -108,6 +113,9 @@ class AlignmentStage(ABC):
             self._pending_shift += STANDARD_GRAVITY * (
                 -float(axes.up @ old.forward) + axes.calibration_grade_angle - old.calibration_grade_angle
             )
+            # Leak of lateral specific force into the forward channel: F·L. It changes by
+            # (F_new − F_old)·L ≈ F_new · L_old (second-order terms below 0.001°).
+            self._pending_yaw += float(axes.forward @ old.left)
         self._axes = axes
         self._rows = (
             *(tuple(float(x) for x in a) for a in (axes.forward, axes.left, axes.up)),
@@ -120,6 +128,7 @@ class AlignmentStage(ABC):
             return None
         f, lf, u, bias, grade_angle = self._rows
         shift, self._pending_shift = self._pending_shift, 0.0
+        yaw_shift, self._pending_yaw = self._pending_yaw, 0.0
         return VehicleImu(
             t,
             (
@@ -134,6 +143,7 @@ class AlignmentStage(ABC):
             ),
             grade_angle,
             shift,
+            yaw_shift,
         )
 
 
