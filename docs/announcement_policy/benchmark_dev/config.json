@@ -1,0 +1,1776 @@
+{
+ "seed_rule": "run k: scenario seed 1000 + k; IMU, GPS and traffic seed k",
+ "seeds": [
+  0,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19
+ ],
+ "shown_for_seed": 0,
+ "cases": {
+  "ladder_0.5km/flat/free": {
+   "schema_version": 11,
+   "name": "Benchmark ladder, 0.5 km tunnel",
+   "description": "Analytic straights and arcs (R = 150\u2013600 m) sampled every 15 m like a map polyline: 1.6 km approach with turns, 2.0 km curvy tunnel, 0.8 km recovery. Placed at 0\u00b0N 0\u00b0E (clearly not a real road).",
+   "route": {
+    "source": "synthetic:ladder-0.5km",
+    "vertices": 196
+   },
+   "road": {
+    "min_vertex_spacing_m": 0.5,
+    "spike_angle_deg": 150.0,
+    "spike_max_segment_m": 25.0,
+    "max_corner_cut_m": 4.0,
+    "smoothing_wavelength_m": 150.0,
+    "smoothing_corridor_m": 1.0,
+    "resample_step_m": 1.0
+   },
+   "traffic": {
+    "scenario": "free",
+    "seed": 0,
+    "jitter": 0.2,
+    "brake_decel": 1.5,
+    "go_accel": 1.0,
+    "portal_drop_kmh": 15.0,
+    "portal_brake": 0.6,
+    "portal_recovery_m": 400.0,
+    "speed_limit_kmh": 60.0,
+    "moving_speed_kmh": 30.0,
+    "stop_count": 3,
+    "stop_min_s": 10.0,
+    "stop_max_s": 60.0,
+    "queue_length_m": 400.0,
+    "queue_speed_kmh": 15.0,
+    "queue_stops": 1,
+    "congested_speed_kmh": 30.0,
+    "congested_variation_kmh": 8.0
+   },
+   "road_profile": {
+    "points": [],
+    "max_grade_pct": 6.0
+   },
+   "driver": {
+    "style": "normal",
+    "cruise_speed_kmh": 70.0,
+    "speed_variability_kmh": 4.0,
+    "speed_correlation_length_m": 300.0,
+    "initial_speed_kmh": null,
+    "min_speed_kmh": 10.0,
+    "max_speed_kmh": 130.0,
+    "max_lateral_accel": 2.0,
+    "max_accel": 1.5,
+    "max_decel": 2.5,
+    "max_jerk": 2.0,
+    "planning_margin": 0.8,
+    "curve_preview_m": 15.0,
+    "speed_tracking_gain": 0.8,
+    "accel_response_rate": 4.0
+   },
+   "imu": {
+    "mount": {
+     "label": "aligned",
+     "yaw_deg": 0.0,
+     "pitch_deg": 0.0,
+     "roll_deg": 0.0,
+     "lever_arm_m": [
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    "gravity_model": "wgs84",
+    "earth_rotation": false,
+    "rate_hz": 200.0,
+    "errors": {
+     "accel": {
+      "noise_enabled": true,
+      "noise_density": 0.0017651969999999998,
+      "bias_enabled": true,
+      "bias_magnitude": 0.0980665,
+      "bias_vector": null,
+      "drift_enabled": true,
+      "drift_sigma": 0.004903325,
+      "drift_tau_s": 300.0
+     },
+     "gyro": {
+      "noise_enabled": true,
+      "noise_density": 0.0001221730476396031,
+      "bias_enabled": true,
+      "bias_magnitude": 0.0017453292519943296,
+      "bias_vector": null,
+      "drift_enabled": true,
+      "drift_sigma": 8.726646259971648e-05,
+      "drift_tau_s": 300.0
+     },
+     "seed": 0
+    }
+   },
+   "calibration": {
+    "enabled": false,
+    "yaw_deg": 2.0,
+    "pitch_deg": 0.5,
+    "roll_deg": 0.5
+   },
+   "map_data": {
+    "road_grade": false
+   },
+   "vehicle_speed": {
+    "scale_error_pct": 2.0,
+    "rate_hz": 10.0
+   },
+   "standstill_oracle": {
+    "delay_s": 0.0,
+    "miss_probability": 0.0,
+    "false_standstill_kmh": 0.0
+   },
+   "tunnel": {
+    "entrance_m": 1599.3180235350799,
+    "exit_m": 2099.3158262791103,
+    "announce_before_exit_m": 300.0
+   },
+   "gnss": {
+    "enabled": true,
+    "rate_hz": 1.0,
+    "position_sigma_m": 2.5,
+    "position_tau_s": 30.0,
+    "white_sigma_m": 0.5,
+    "speed_sigma_mps": 0.2,
+    "loss_window_m": 30.0,
+    "reacquisition_delay_s": 3.0,
+    "reacquisition_jitter_s": 2.0,
+    "seed": 0,
+    "portal_degradation": true,
+    "degradation_length_m": 150.0,
+    "degradation_sigma_m": 8.0,
+    "degradation_tau_s": 5.0,
+    "degradation_speed_sigma_mps": 0.5,
+    "outlier_probability": 0.05,
+    "outlier_sigma_m": 25.0
+   },
+   "seed": 1000,
+   "sample_rate_hz": 100.0
+  },
+  "ladder_0.5km/flat/stop_and_go": {
+   "schema_version": 11,
+   "name": "Benchmark ladder, 0.5 km tunnel",
+   "description": "Analytic straights and arcs (R = 150\u2013600 m) sampled every 15 m like a map polyline: 1.6 km approach with turns, 2.0 km curvy tunnel, 0.8 km recovery. Placed at 0\u00b0N 0\u00b0E (clearly not a real road).",
+   "route": {
+    "source": "synthetic:ladder-0.5km",
+    "vertices": 196
+   },
+   "road": {
+    "min_vertex_spacing_m": 0.5,
+    "spike_angle_deg": 150.0,
+    "spike_max_segment_m": 25.0,
+    "max_corner_cut_m": 4.0,
+    "smoothing_wavelength_m": 150.0,
+    "smoothing_corridor_m": 1.0,
+    "resample_step_m": 1.0
+   },
+   "traffic": {
+    "scenario": "stop_and_go",
+    "seed": 0,
+    "jitter": 0.2,
+    "brake_decel": 1.5,
+    "go_accel": 1.0,
+    "portal_drop_kmh": 15.0,
+    "portal_brake": 0.6,
+    "portal_recovery_m": 400.0,
+    "speed_limit_kmh": 60.0,
+    "moving_speed_kmh": 30.0,
+    "stop_count": 3,
+    "stop_min_s": 10.0,
+    "stop_max_s": 60.0,
+    "queue_length_m": 400.0,
+    "queue_speed_kmh": 15.0,
+    "queue_stops": 1,
+    "congested_speed_kmh": 30.0,
+    "congested_variation_kmh": 8.0
+   },
+   "road_profile": {
+    "points": [],
+    "max_grade_pct": 6.0
+   },
+   "driver": {
+    "style": "normal",
+    "cruise_speed_kmh": 70.0,
+    "speed_variability_kmh": 4.0,
+    "speed_correlation_length_m": 300.0,
+    "initial_speed_kmh": null,
+    "min_speed_kmh": 10.0,
+    "max_speed_kmh": 130.0,
+    "max_lateral_accel": 2.0,
+    "max_accel": 1.5,
+    "max_decel": 2.5,
+    "max_jerk": 2.0,
+    "planning_margin": 0.8,
+    "curve_preview_m": 15.0,
+    "speed_tracking_gain": 0.8,
+    "accel_response_rate": 4.0
+   },
+   "imu": {
+    "mount": {
+     "label": "aligned",
+     "yaw_deg": 0.0,
+     "pitch_deg": 0.0,
+     "roll_deg": 0.0,
+     "lever_arm_m": [
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    "gravity_model": "wgs84",
+    "earth_rotation": false,
+    "rate_hz": 200.0,
+    "errors": {
+     "accel": {
+      "noise_enabled": true,
+      "noise_density": 0.0017651969999999998,
+      "bias_enabled": true,
+      "bias_magnitude": 0.0980665,
+      "bias_vector": null,
+      "drift_enabled": true,
+      "drift_sigma": 0.004903325,
+      "drift_tau_s": 300.0
+     },
+     "gyro": {
+      "noise_enabled": true,
+      "noise_density": 0.0001221730476396031,
+      "bias_enabled": true,
+      "bias_magnitude": 0.0017453292519943296,
+      "bias_vector": null,
+      "drift_enabled": true,
+      "drift_sigma": 8.726646259971648e-05,
+      "drift_tau_s": 300.0
+     },
+     "seed": 0
+    }
+   },
+   "calibration": {
+    "enabled": false,
+    "yaw_deg": 2.0,
+    "pitch_deg": 0.5,
+    "roll_deg": 0.5
+   },
+   "map_data": {
+    "road_grade": false
+   },
+   "vehicle_speed": {
+    "scale_error_pct": 2.0,
+    "rate_hz": 10.0
+   },
+   "standstill_oracle": {
+    "delay_s": 0.0,
+    "miss_probability": 0.0,
+    "false_standstill_kmh": 0.0
+   },
+   "tunnel": {
+    "entrance_m": 1599.3180235350799,
+    "exit_m": 2099.3158262791103,
+    "announce_before_exit_m": 300.0
+   },
+   "gnss": {
+    "enabled": true,
+    "rate_hz": 1.0,
+    "position_sigma_m": 2.5,
+    "position_tau_s": 30.0,
+    "white_sigma_m": 0.5,
+    "speed_sigma_mps": 0.2,
+    "loss_window_m": 30.0,
+    "reacquisition_delay_s": 3.0,
+    "reacquisition_jitter_s": 2.0,
+    "seed": 0,
+    "portal_degradation": true,
+    "degradation_length_m": 150.0,
+    "degradation_sigma_m": 8.0,
+    "degradation_tau_s": 5.0,
+    "degradation_speed_sigma_mps": 0.5,
+    "outlier_probability": 0.05,
+    "outlier_sigma_m": 25.0
+   },
+   "seed": 1000,
+   "sample_rate_hz": 100.0
+  },
+  "ladder_5km/flat/free": {
+   "schema_version": 11,
+   "name": "Benchmark ladder, 5 km tunnel",
+   "description": "Analytic straights and arcs (R = 150\u2013600 m) sampled every 15 m like a map polyline: 1.6 km approach with turns, 2.0 km curvy tunnel, 0.8 km recovery. Placed at 0\u00b0N 0\u00b0E (clearly not a real road).",
+   "route": {
+    "source": "synthetic:ladder-5km",
+    "vertices": 496
+   },
+   "road": {
+    "min_vertex_spacing_m": 0.5,
+    "spike_angle_deg": 150.0,
+    "spike_max_segment_m": 25.0,
+    "max_corner_cut_m": 4.0,
+    "smoothing_wavelength_m": 150.0,
+    "smoothing_corridor_m": 1.0,
+    "resample_step_m": 1.0
+   },
+   "traffic": {
+    "scenario": "free",
+    "seed": 0,
+    "jitter": 0.2,
+    "brake_decel": 1.5,
+    "go_accel": 1.0,
+    "portal_drop_kmh": 15.0,
+    "portal_brake": 0.6,
+    "portal_recovery_m": 400.0,
+    "speed_limit_kmh": 60.0,
+    "moving_speed_kmh": 30.0,
+    "stop_count": 3,
+    "stop_min_s": 10.0,
+    "stop_max_s": 60.0,
+    "queue_length_m": 400.0,
+    "queue_speed_kmh": 15.0,
+    "queue_stops": 1,
+    "congested_speed_kmh": 30.0,
+    "congested_variation_kmh": 8.0
+   },
+   "road_profile": {
+    "points": [],
+    "max_grade_pct": 6.0
+   },
+   "driver": {
+    "style": "normal",
+    "cruise_speed_kmh": 70.0,
+    "speed_variability_kmh": 4.0,
+    "speed_correlation_length_m": 300.0,
+    "initial_speed_kmh": null,
+    "min_speed_kmh": 10.0,
+    "max_speed_kmh": 130.0,
+    "max_lateral_accel": 2.0,
+    "max_accel": 1.5,
+    "max_decel": 2.5,
+    "max_jerk": 2.0,
+    "planning_margin": 0.8,
+    "curve_preview_m": 15.0,
+    "speed_tracking_gain": 0.8,
+    "accel_response_rate": 4.0
+   },
+   "imu": {
+    "mount": {
+     "label": "aligned",
+     "yaw_deg": 0.0,
+     "pitch_deg": 0.0,
+     "roll_deg": 0.0,
+     "lever_arm_m": [
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    "gravity_model": "wgs84",
+    "earth_rotation": false,
+    "rate_hz": 200.0,
+    "errors": {
+     "accel": {
+      "noise_enabled": true,
+      "noise_density": 0.0017651969999999998,
+      "bias_enabled": true,
+      "bias_magnitude": 0.0980665,
+      "bias_vector": null,
+      "drift_enabled": true,
+      "drift_sigma": 0.004903325,
+      "drift_tau_s": 300.0
+     },
+     "gyro": {
+      "noise_enabled": true,
+      "noise_density": 0.0001221730476396031,
+      "bias_enabled": true,
+      "bias_magnitude": 0.0017453292519943296,
+      "bias_vector": null,
+      "drift_enabled": true,
+      "drift_sigma": 8.726646259971648e-05,
+      "drift_tau_s": 300.0
+     },
+     "seed": 0
+    }
+   },
+   "calibration": {
+    "enabled": false,
+    "yaw_deg": 2.0,
+    "pitch_deg": 0.5,
+    "roll_deg": 0.5
+   },
+   "map_data": {
+    "road_grade": false
+   },
+   "vehicle_speed": {
+    "scale_error_pct": 2.0,
+    "rate_hz": 10.0
+   },
+   "standstill_oracle": {
+    "delay_s": 0.0,
+    "miss_probability": 0.0,
+    "false_standstill_kmh": 0.0
+   },
+   "tunnel": {
+    "entrance_m": 1599.3180235350799,
+    "exit_m": 6599.29605097539,
+    "announce_before_exit_m": 300.0
+   },
+   "gnss": {
+    "enabled": true,
+    "rate_hz": 1.0,
+    "position_sigma_m": 2.5,
+    "position_tau_s": 30.0,
+    "white_sigma_m": 0.5,
+    "speed_sigma_mps": 0.2,
+    "loss_window_m": 30.0,
+    "reacquisition_delay_s": 3.0,
+    "reacquisition_jitter_s": 2.0,
+    "seed": 0,
+    "portal_degradation": true,
+    "degradation_length_m": 150.0,
+    "degradation_sigma_m": 8.0,
+    "degradation_tau_s": 5.0,
+    "degradation_speed_sigma_mps": 0.5,
+    "outlier_probability": 0.05,
+    "outlier_sigma_m": 25.0
+   },
+   "seed": 1000,
+   "sample_rate_hz": 100.0
+  },
+  "ladder_5km/flat/stop_and_go": {
+   "schema_version": 11,
+   "name": "Benchmark ladder, 5 km tunnel",
+   "description": "Analytic straights and arcs (R = 150\u2013600 m) sampled every 15 m like a map polyline: 1.6 km approach with turns, 2.0 km curvy tunnel, 0.8 km recovery. Placed at 0\u00b0N 0\u00b0E (clearly not a real road).",
+   "route": {
+    "source": "synthetic:ladder-5km",
+    "vertices": 496
+   },
+   "road": {
+    "min_vertex_spacing_m": 0.5,
+    "spike_angle_deg": 150.0,
+    "spike_max_segment_m": 25.0,
+    "max_corner_cut_m": 4.0,
+    "smoothing_wavelength_m": 150.0,
+    "smoothing_corridor_m": 1.0,
+    "resample_step_m": 1.0
+   },
+   "traffic": {
+    "scenario": "stop_and_go",
+    "seed": 0,
+    "jitter": 0.2,
+    "brake_decel": 1.5,
+    "go_accel": 1.0,
+    "portal_drop_kmh": 15.0,
+    "portal_brake": 0.6,
+    "portal_recovery_m": 400.0,
+    "speed_limit_kmh": 60.0,
+    "moving_speed_kmh": 30.0,
+    "stop_count": 3,
+    "stop_min_s": 10.0,
+    "stop_max_s": 60.0,
+    "queue_length_m": 400.0,
+    "queue_speed_kmh": 15.0,
+    "queue_stops": 1,
+    "congested_speed_kmh": 30.0,
+    "congested_variation_kmh": 8.0
+   },
+   "road_profile": {
+    "points": [],
+    "max_grade_pct": 6.0
+   },
+   "driver": {
+    "style": "normal",
+    "cruise_speed_kmh": 70.0,
+    "speed_variability_kmh": 4.0,
+    "speed_correlation_length_m": 300.0,
+    "initial_speed_kmh": null,
+    "min_speed_kmh": 10.0,
+    "max_speed_kmh": 130.0,
+    "max_lateral_accel": 2.0,
+    "max_accel": 1.5,
+    "max_decel": 2.5,
+    "max_jerk": 2.0,
+    "planning_margin": 0.8,
+    "curve_preview_m": 15.0,
+    "speed_tracking_gain": 0.8,
+    "accel_response_rate": 4.0
+   },
+   "imu": {
+    "mount": {
+     "label": "aligned",
+     "yaw_deg": 0.0,
+     "pitch_deg": 0.0,
+     "roll_deg": 0.0,
+     "lever_arm_m": [
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    "gravity_model": "wgs84",
+    "earth_rotation": false,
+    "rate_hz": 200.0,
+    "errors": {
+     "accel": {
+      "noise_enabled": true,
+      "noise_density": 0.0017651969999999998,
+      "bias_enabled": true,
+      "bias_magnitude": 0.0980665,
+      "bias_vector": null,
+      "drift_enabled": true,
+      "drift_sigma": 0.004903325,
+      "drift_tau_s": 300.0
+     },
+     "gyro": {
+      "noise_enabled": true,
+      "noise_density": 0.0001221730476396031,
+      "bias_enabled": true,
+      "bias_magnitude": 0.0017453292519943296,
+      "bias_vector": null,
+      "drift_enabled": true,
+      "drift_sigma": 8.726646259971648e-05,
+      "drift_tau_s": 300.0
+     },
+     "seed": 0
+    }
+   },
+   "calibration": {
+    "enabled": false,
+    "yaw_deg": 2.0,
+    "pitch_deg": 0.5,
+    "roll_deg": 0.5
+   },
+   "map_data": {
+    "road_grade": false
+   },
+   "vehicle_speed": {
+    "scale_error_pct": 2.0,
+    "rate_hz": 10.0
+   },
+   "standstill_oracle": {
+    "delay_s": 0.0,
+    "miss_probability": 0.0,
+    "false_standstill_kmh": 0.0
+   },
+   "tunnel": {
+    "entrance_m": 1599.3180235350799,
+    "exit_m": 6599.29605097539,
+    "announce_before_exit_m": 300.0
+   },
+   "gnss": {
+    "enabled": true,
+    "rate_hz": 1.0,
+    "position_sigma_m": 2.5,
+    "position_tau_s": 30.0,
+    "white_sigma_m": 0.5,
+    "speed_sigma_mps": 0.2,
+    "loss_window_m": 30.0,
+    "reacquisition_delay_s": 3.0,
+    "reacquisition_jitter_s": 2.0,
+    "seed": 0,
+    "portal_degradation": true,
+    "degradation_length_m": 150.0,
+    "degradation_sigma_m": 8.0,
+    "degradation_tau_s": 5.0,
+    "degradation_speed_sigma_mps": 0.5,
+    "outlier_probability": 0.05,
+    "outlier_sigma_m": 25.0
+   },
+   "seed": 1000,
+   "sample_rate_hz": 100.0
+  },
+  "ladder_5km/climb3/free": {
+   "schema_version": 11,
+   "name": "Benchmark ladder, 5 km tunnel",
+   "description": "Analytic straights and arcs (R = 150\u2013600 m) sampled every 15 m like a map polyline: 1.6 km approach with turns, 2.0 km curvy tunnel, 0.8 km recovery. Placed at 0\u00b0N 0\u00b0E (clearly not a real road).",
+   "route": {
+    "source": "synthetic:ladder-5km",
+    "vertices": 496
+   },
+   "road": {
+    "min_vertex_spacing_m": 0.5,
+    "spike_angle_deg": 150.0,
+    "spike_max_segment_m": 25.0,
+    "max_corner_cut_m": 4.0,
+    "smoothing_wavelength_m": 150.0,
+    "smoothing_corridor_m": 1.0,
+    "resample_step_m": 1.0
+   },
+   "traffic": {
+    "scenario": "free",
+    "seed": 0,
+    "jitter": 0.2,
+    "brake_decel": 1.5,
+    "go_accel": 1.0,
+    "portal_drop_kmh": 15.0,
+    "portal_brake": 0.6,
+    "portal_recovery_m": 400.0,
+    "speed_limit_kmh": 60.0,
+    "moving_speed_kmh": 30.0,
+    "stop_count": 3,
+    "stop_min_s": 10.0,
+    "stop_max_s": 60.0,
+    "queue_length_m": 400.0,
+    "queue_speed_kmh": 15.0,
+    "queue_stops": 1,
+    "congested_speed_kmh": 30.0,
+    "congested_variation_kmh": 8.0
+   },
+   "road_profile": {
+    "points": [
+     [
+      0.0,
+      0.0
+     ],
+     [
+      200.64325543040644,
+      0.0
+     ],
+     [
+      401.2865108608129,
+      0.0
+     ],
+     [
+      601.9297662912193,
+      0.0
+     ],
+     [
+      802.5730217216258,
+      0.0
+     ],
+     [
+      1003.2162771520323,
+      0.0
+     ],
+     [
+      1203.8595325824385,
+      0.0
+     ],
+     [
+      1404.502788012845,
+      0.0010255747306160588
+     ],
+     [
+      1599.3180235350799,
+      1.500016266342466
+     ],
+     [
+      1805.789298873658,
+      6.194138260157346
+     ],
+     [
+      2006.4325543040645,
+      12.213435923069465
+     ],
+     [
+      2207.075809734471,
+      18.232733585981663
+     ],
+     [
+      2407.719065164877,
+      24.252031248894074
+     ],
+     [
+      2608.3623205952836,
+      30.271328911806496
+     ],
+     [
+      2809.00557602569,
+      36.29062657471892
+     ],
+     [
+      3009.6488314560966,
+      42.30992423763134
+     ],
+     [
+      3210.292086886503,
+      48.329221900543764
+     ],
+     [
+      3410.9353423169096,
+      54.348519563456186
+     ],
+     [
+      3611.578597747316,
+      60.36781722636861
+     ],
+     [
+      3812.2218531777226,
+      66.38711488928104
+     ],
+     [
+      4012.865108608129,
+      72.40641255219346
+     ],
+     [
+      4213.508364038536,
+      78.42571021510588
+     ],
+     [
+      4414.151619468942,
+      84.4450078780183
+     ],
+     [
+      4614.7948748993485,
+      90.46430554093072
+     ],
+     [
+      4815.438130329754,
+      96.48360320384312
+     ],
+     [
+      5016.081385760161,
+      102.50290086675554
+     ],
+     [
+      5216.724641190567,
+      108.52219852966797
+     ],
+     [
+      5417.367896620974,
+      114.5414961925804
+     ],
+     [
+      5618.01115205138,
+      120.56079385549282
+     ],
+     [
+      5818.654407481787,
+      126.58009151840524
+     ],
+     [
+      6019.297662912193,
+      132.59938918131763
+     ],
+     [
+      6219.9409183426,
+      138.61868684423007
+     ],
+     [
+      6420.584173773006,
+      144.6209731761993
+     ],
+     [
+      6599.29605097539,
+      148.4993251928543
+     ],
+     [
+      6821.870684633819,
+      149.999340823214
+     ],
+     [
+      7022.513940064226,
+      149.999340823214
+     ],
+     [
+      7223.157195494632,
+      149.999340823214
+     ],
+     [
+      7423.800450925039,
+      149.999340823214
+     ]
+    ],
+    "max_grade_pct": 6.0
+   },
+   "driver": {
+    "style": "normal",
+    "cruise_speed_kmh": 70.0,
+    "speed_variability_kmh": 4.0,
+    "speed_correlation_length_m": 300.0,
+    "initial_speed_kmh": null,
+    "min_speed_kmh": 10.0,
+    "max_speed_kmh": 130.0,
+    "max_lateral_accel": 2.0,
+    "max_accel": 1.5,
+    "max_decel": 2.5,
+    "max_jerk": 2.0,
+    "planning_margin": 0.8,
+    "curve_preview_m": 15.0,
+    "speed_tracking_gain": 0.8,
+    "accel_response_rate": 4.0
+   },
+   "imu": {
+    "mount": {
+     "label": "aligned",
+     "yaw_deg": 0.0,
+     "pitch_deg": 0.0,
+     "roll_deg": 0.0,
+     "lever_arm_m": [
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    "gravity_model": "wgs84",
+    "earth_rotation": false,
+    "rate_hz": 200.0,
+    "errors": {
+     "accel": {
+      "noise_enabled": true,
+      "noise_density": 0.0017651969999999998,
+      "bias_enabled": true,
+      "bias_magnitude": 0.0980665,
+      "bias_vector": null,
+      "drift_enabled": true,
+      "drift_sigma": 0.004903325,
+      "drift_tau_s": 300.0
+     },
+     "gyro": {
+      "noise_enabled": true,
+      "noise_density": 0.0001221730476396031,
+      "bias_enabled": true,
+      "bias_magnitude": 0.0017453292519943296,
+      "bias_vector": null,
+      "drift_enabled": true,
+      "drift_sigma": 8.726646259971648e-05,
+      "drift_tau_s": 300.0
+     },
+     "seed": 0
+    }
+   },
+   "calibration": {
+    "enabled": false,
+    "yaw_deg": 2.0,
+    "pitch_deg": 0.5,
+    "roll_deg": 0.5
+   },
+   "map_data": {
+    "road_grade": false
+   },
+   "vehicle_speed": {
+    "scale_error_pct": 2.0,
+    "rate_hz": 10.0
+   },
+   "standstill_oracle": {
+    "delay_s": 0.0,
+    "miss_probability": 0.0,
+    "false_standstill_kmh": 0.0
+   },
+   "tunnel": {
+    "entrance_m": 1599.3180235350799,
+    "exit_m": 6599.29605097539,
+    "announce_before_exit_m": 300.0
+   },
+   "gnss": {
+    "enabled": true,
+    "rate_hz": 1.0,
+    "position_sigma_m": 2.5,
+    "position_tau_s": 30.0,
+    "white_sigma_m": 0.5,
+    "speed_sigma_mps": 0.2,
+    "loss_window_m": 30.0,
+    "reacquisition_delay_s": 3.0,
+    "reacquisition_jitter_s": 2.0,
+    "seed": 0,
+    "portal_degradation": true,
+    "degradation_length_m": 150.0,
+    "degradation_sigma_m": 8.0,
+    "degradation_tau_s": 5.0,
+    "degradation_speed_sigma_mps": 0.5,
+    "outlier_probability": 0.05,
+    "outlier_sigma_m": 25.0
+   },
+   "seed": 1000,
+   "sample_rate_hz": 100.0
+  },
+  "ladder_5km/climb3/stop_and_go": {
+   "schema_version": 11,
+   "name": "Benchmark ladder, 5 km tunnel",
+   "description": "Analytic straights and arcs (R = 150\u2013600 m) sampled every 15 m like a map polyline: 1.6 km approach with turns, 2.0 km curvy tunnel, 0.8 km recovery. Placed at 0\u00b0N 0\u00b0E (clearly not a real road).",
+   "route": {
+    "source": "synthetic:ladder-5km",
+    "vertices": 496
+   },
+   "road": {
+    "min_vertex_spacing_m": 0.5,
+    "spike_angle_deg": 150.0,
+    "spike_max_segment_m": 25.0,
+    "max_corner_cut_m": 4.0,
+    "smoothing_wavelength_m": 150.0,
+    "smoothing_corridor_m": 1.0,
+    "resample_step_m": 1.0
+   },
+   "traffic": {
+    "scenario": "stop_and_go",
+    "seed": 0,
+    "jitter": 0.2,
+    "brake_decel": 1.5,
+    "go_accel": 1.0,
+    "portal_drop_kmh": 15.0,
+    "portal_brake": 0.6,
+    "portal_recovery_m": 400.0,
+    "speed_limit_kmh": 60.0,
+    "moving_speed_kmh": 30.0,
+    "stop_count": 3,
+    "stop_min_s": 10.0,
+    "stop_max_s": 60.0,
+    "queue_length_m": 400.0,
+    "queue_speed_kmh": 15.0,
+    "queue_stops": 1,
+    "congested_speed_kmh": 30.0,
+    "congested_variation_kmh": 8.0
+   },
+   "road_profile": {
+    "points": [
+     [
+      0.0,
+      0.0
+     ],
+     [
+      200.64325543040644,
+      0.0
+     ],
+     [
+      401.2865108608129,
+      0.0
+     ],
+     [
+      601.9297662912193,
+      0.0
+     ],
+     [
+      802.5730217216258,
+      0.0
+     ],
+     [
+      1003.2162771520323,
+      0.0
+     ],
+     [
+      1203.8595325824385,
+      0.0
+     ],
+     [
+      1404.502788012845,
+      0.0010255747306160588
+     ],
+     [
+      1599.3180235350799,
+      1.500016266342466
+     ],
+     [
+      1805.789298873658,
+      6.194138260157346
+     ],
+     [
+      2006.4325543040645,
+      12.213435923069465
+     ],
+     [
+      2207.075809734471,
+      18.232733585981663
+     ],
+     [
+      2407.719065164877,
+      24.252031248894074
+     ],
+     [
+      2608.3623205952836,
+      30.271328911806496
+     ],
+     [
+      2809.00557602569,
+      36.29062657471892
+     ],
+     [
+      3009.6488314560966,
+      42.30992423763134
+     ],
+     [
+      3210.292086886503,
+      48.329221900543764
+     ],
+     [
+      3410.9353423169096,
+      54.348519563456186
+     ],
+     [
+      3611.578597747316,
+      60.36781722636861
+     ],
+     [
+      3812.2218531777226,
+      66.38711488928104
+     ],
+     [
+      4012.865108608129,
+      72.40641255219346
+     ],
+     [
+      4213.508364038536,
+      78.42571021510588
+     ],
+     [
+      4414.151619468942,
+      84.4450078780183
+     ],
+     [
+      4614.7948748993485,
+      90.46430554093072
+     ],
+     [
+      4815.438130329754,
+      96.48360320384312
+     ],
+     [
+      5016.081385760161,
+      102.50290086675554
+     ],
+     [
+      5216.724641190567,
+      108.52219852966797
+     ],
+     [
+      5417.367896620974,
+      114.5414961925804
+     ],
+     [
+      5618.01115205138,
+      120.56079385549282
+     ],
+     [
+      5818.654407481787,
+      126.58009151840524
+     ],
+     [
+      6019.297662912193,
+      132.59938918131763
+     ],
+     [
+      6219.9409183426,
+      138.61868684423007
+     ],
+     [
+      6420.584173773006,
+      144.6209731761993
+     ],
+     [
+      6599.29605097539,
+      148.4993251928543
+     ],
+     [
+      6821.870684633819,
+      149.999340823214
+     ],
+     [
+      7022.513940064226,
+      149.999340823214
+     ],
+     [
+      7223.157195494632,
+      149.999340823214
+     ],
+     [
+      7423.800450925039,
+      149.999340823214
+     ]
+    ],
+    "max_grade_pct": 6.0
+   },
+   "driver": {
+    "style": "normal",
+    "cruise_speed_kmh": 70.0,
+    "speed_variability_kmh": 4.0,
+    "speed_correlation_length_m": 300.0,
+    "initial_speed_kmh": null,
+    "min_speed_kmh": 10.0,
+    "max_speed_kmh": 130.0,
+    "max_lateral_accel": 2.0,
+    "max_accel": 1.5,
+    "max_decel": 2.5,
+    "max_jerk": 2.0,
+    "planning_margin": 0.8,
+    "curve_preview_m": 15.0,
+    "speed_tracking_gain": 0.8,
+    "accel_response_rate": 4.0
+   },
+   "imu": {
+    "mount": {
+     "label": "aligned",
+     "yaw_deg": 0.0,
+     "pitch_deg": 0.0,
+     "roll_deg": 0.0,
+     "lever_arm_m": [
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    "gravity_model": "wgs84",
+    "earth_rotation": false,
+    "rate_hz": 200.0,
+    "errors": {
+     "accel": {
+      "noise_enabled": true,
+      "noise_density": 0.0017651969999999998,
+      "bias_enabled": true,
+      "bias_magnitude": 0.0980665,
+      "bias_vector": null,
+      "drift_enabled": true,
+      "drift_sigma": 0.004903325,
+      "drift_tau_s": 300.0
+     },
+     "gyro": {
+      "noise_enabled": true,
+      "noise_density": 0.0001221730476396031,
+      "bias_enabled": true,
+      "bias_magnitude": 0.0017453292519943296,
+      "bias_vector": null,
+      "drift_enabled": true,
+      "drift_sigma": 8.726646259971648e-05,
+      "drift_tau_s": 300.0
+     },
+     "seed": 0
+    }
+   },
+   "calibration": {
+    "enabled": false,
+    "yaw_deg": 2.0,
+    "pitch_deg": 0.5,
+    "roll_deg": 0.5
+   },
+   "map_data": {
+    "road_grade": false
+   },
+   "vehicle_speed": {
+    "scale_error_pct": 2.0,
+    "rate_hz": 10.0
+   },
+   "standstill_oracle": {
+    "delay_s": 0.0,
+    "miss_probability": 0.0,
+    "false_standstill_kmh": 0.0
+   },
+   "tunnel": {
+    "entrance_m": 1599.3180235350799,
+    "exit_m": 6599.29605097539,
+    "announce_before_exit_m": 300.0
+   },
+   "gnss": {
+    "enabled": true,
+    "rate_hz": 1.0,
+    "position_sigma_m": 2.5,
+    "position_tau_s": 30.0,
+    "white_sigma_m": 0.5,
+    "speed_sigma_mps": 0.2,
+    "loss_window_m": 30.0,
+    "reacquisition_delay_s": 3.0,
+    "reacquisition_jitter_s": 2.0,
+    "seed": 0,
+    "portal_degradation": true,
+    "degradation_length_m": 150.0,
+    "degradation_sigma_m": 8.0,
+    "degradation_tau_s": 5.0,
+    "degradation_speed_sigma_mps": 0.5,
+    "outlier_probability": 0.05,
+    "outlier_sigma_m": 25.0
+   },
+   "seed": 1000,
+   "sample_rate_hz": 100.0
+  },
+  "ladder_5km/underwater/free": {
+   "schema_version": 11,
+   "name": "Benchmark ladder, 5 km tunnel",
+   "description": "Analytic straights and arcs (R = 150\u2013600 m) sampled every 15 m like a map polyline: 1.6 km approach with turns, 2.0 km curvy tunnel, 0.8 km recovery. Placed at 0\u00b0N 0\u00b0E (clearly not a real road).",
+   "route": {
+    "source": "synthetic:ladder-5km",
+    "vertices": 496
+   },
+   "road": {
+    "min_vertex_spacing_m": 0.5,
+    "spike_angle_deg": 150.0,
+    "spike_max_segment_m": 25.0,
+    "max_corner_cut_m": 4.0,
+    "smoothing_wavelength_m": 150.0,
+    "smoothing_corridor_m": 1.0,
+    "resample_step_m": 1.0
+   },
+   "traffic": {
+    "scenario": "free",
+    "seed": 0,
+    "jitter": 0.2,
+    "brake_decel": 1.5,
+    "go_accel": 1.0,
+    "portal_drop_kmh": 15.0,
+    "portal_brake": 0.6,
+    "portal_recovery_m": 400.0,
+    "speed_limit_kmh": 60.0,
+    "moving_speed_kmh": 30.0,
+    "stop_count": 3,
+    "stop_min_s": 10.0,
+    "stop_max_s": 60.0,
+    "queue_length_m": 400.0,
+    "queue_speed_kmh": 15.0,
+    "queue_stops": 1,
+    "congested_speed_kmh": 30.0,
+    "congested_variation_kmh": 8.0
+   },
+   "road_profile": {
+    "points": [
+     [
+      0.0,
+      0.0
+     ],
+     [
+      200.64325543040644,
+      0.0
+     ],
+     [
+      401.2865108608129,
+      0.0
+     ],
+     [
+      601.9297662912193,
+      0.0
+     ],
+     [
+      802.5730217216258,
+      0.0
+     ],
+     [
+      1003.2162771520323,
+      0.0
+     ],
+     [
+      1203.8595325824385,
+      0.0
+     ],
+     [
+      1404.502788012845,
+      -0.0013674329741547454
+     ],
+     [
+      1599.3180235350799,
+      -2.0000216884566218
+     ],
+     [
+      1805.789298873658,
+      -8.25885101354312
+     ],
+     [
+      2006.4325543040645,
+      -16.28458123075921
+     ],
+     [
+      2207.075809734471,
+      -24.310311447975298
+     ],
+     [
+      2407.719065164877,
+      -32.33604166519137
+     ],
+     [
+      2608.3623205952836,
+      -40.36177188240746
+     ],
+     [
+      2809.00557602569,
+      -48.387502099623546
+     ],
+     [
+      3009.6488314560966,
+      -56.41323231683963
+     ],
+     [
+      3210.292086886503,
+      -64.43896253405579
+     ],
+     [
+      3410.9353423169096,
+      -72.45792072785798
+     ],
+     [
+      3611.578597747316,
+      -78.23748596851016
+     ],
+     [
+      3812.2218531777226,
+      -79.999648439045
+     ],
+     [
+      4012.865108608129,
+      -79.999648439045
+     ],
+     [
+      4213.508364038536,
+      -79.999648439045
+     ],
+     [
+      4414.151619468942,
+      -79.98861006883496
+     ],
+     [
+      4614.7948748993485,
+      -77.67783193391467
+     ],
+     [
+      4815.438130329754,
+      -71.35431682582538
+     ],
+     [
+      5016.081385760161,
+      -63.328586608607985
+     ],
+     [
+      5216.724641190567,
+      -55.3028563913919
+     ],
+     [
+      5417.367896620974,
+      -47.277126174175805
+     ],
+     [
+      5618.01115205138,
+      -39.25139595695972
+     ],
+     [
+      5818.654407481787,
+      -31.22566573974363
+     ],
+     [
+      6019.297662912193,
+      -23.199935522527543
+     ],
+     [
+      6219.9409183426,
+      -15.174205305311453
+     ],
+     [
+      6420.584173773006,
+      -7.171156862686229
+     ],
+     [
+      6599.29605097539,
+      -2.0000208404795154
+     ],
+     [
+      6821.870684633819,
+      2.0358714714063808e-14
+     ],
+     [
+      7022.513940064226,
+      2.0358714714063808e-14
+     ],
+     [
+      7223.157195494632,
+      2.0358714714063808e-14
+     ],
+     [
+      7423.800450925039,
+      2.0358714714063808e-14
+     ]
+    ],
+    "max_grade_pct": 6.0
+   },
+   "driver": {
+    "style": "normal",
+    "cruise_speed_kmh": 70.0,
+    "speed_variability_kmh": 4.0,
+    "speed_correlation_length_m": 300.0,
+    "initial_speed_kmh": null,
+    "min_speed_kmh": 10.0,
+    "max_speed_kmh": 130.0,
+    "max_lateral_accel": 2.0,
+    "max_accel": 1.5,
+    "max_decel": 2.5,
+    "max_jerk": 2.0,
+    "planning_margin": 0.8,
+    "curve_preview_m": 15.0,
+    "speed_tracking_gain": 0.8,
+    "accel_response_rate": 4.0
+   },
+   "imu": {
+    "mount": {
+     "label": "aligned",
+     "yaw_deg": 0.0,
+     "pitch_deg": 0.0,
+     "roll_deg": 0.0,
+     "lever_arm_m": [
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    "gravity_model": "wgs84",
+    "earth_rotation": false,
+    "rate_hz": 200.0,
+    "errors": {
+     "accel": {
+      "noise_enabled": true,
+      "noise_density": 0.0017651969999999998,
+      "bias_enabled": true,
+      "bias_magnitude": 0.0980665,
+      "bias_vector": null,
+      "drift_enabled": true,
+      "drift_sigma": 0.004903325,
+      "drift_tau_s": 300.0
+     },
+     "gyro": {
+      "noise_enabled": true,
+      "noise_density": 0.0001221730476396031,
+      "bias_enabled": true,
+      "bias_magnitude": 0.0017453292519943296,
+      "bias_vector": null,
+      "drift_enabled": true,
+      "drift_sigma": 8.726646259971648e-05,
+      "drift_tau_s": 300.0
+     },
+     "seed": 0
+    }
+   },
+   "calibration": {
+    "enabled": false,
+    "yaw_deg": 2.0,
+    "pitch_deg": 0.5,
+    "roll_deg": 0.5
+   },
+   "map_data": {
+    "road_grade": false
+   },
+   "vehicle_speed": {
+    "scale_error_pct": 2.0,
+    "rate_hz": 10.0
+   },
+   "standstill_oracle": {
+    "delay_s": 0.0,
+    "miss_probability": 0.0,
+    "false_standstill_kmh": 0.0
+   },
+   "tunnel": {
+    "entrance_m": 1599.3180235350799,
+    "exit_m": 6599.29605097539,
+    "announce_before_exit_m": 300.0
+   },
+   "gnss": {
+    "enabled": true,
+    "rate_hz": 1.0,
+    "position_sigma_m": 2.5,
+    "position_tau_s": 30.0,
+    "white_sigma_m": 0.5,
+    "speed_sigma_mps": 0.2,
+    "loss_window_m": 30.0,
+    "reacquisition_delay_s": 3.0,
+    "reacquisition_jitter_s": 2.0,
+    "seed": 0,
+    "portal_degradation": true,
+    "degradation_length_m": 150.0,
+    "degradation_sigma_m": 8.0,
+    "degradation_tau_s": 5.0,
+    "degradation_speed_sigma_mps": 0.5,
+    "outlier_probability": 0.05,
+    "outlier_sigma_m": 25.0
+   },
+   "seed": 1000,
+   "sample_rate_hz": 100.0
+  },
+  "ladder_5km/underwater/stop_and_go": {
+   "schema_version": 11,
+   "name": "Benchmark ladder, 5 km tunnel",
+   "description": "Analytic straights and arcs (R = 150\u2013600 m) sampled every 15 m like a map polyline: 1.6 km approach with turns, 2.0 km curvy tunnel, 0.8 km recovery. Placed at 0\u00b0N 0\u00b0E (clearly not a real road).",
+   "route": {
+    "source": "synthetic:ladder-5km",
+    "vertices": 496
+   },
+   "road": {
+    "min_vertex_spacing_m": 0.5,
+    "spike_angle_deg": 150.0,
+    "spike_max_segment_m": 25.0,
+    "max_corner_cut_m": 4.0,
+    "smoothing_wavelength_m": 150.0,
+    "smoothing_corridor_m": 1.0,
+    "resample_step_m": 1.0
+   },
+   "traffic": {
+    "scenario": "stop_and_go",
+    "seed": 0,
+    "jitter": 0.2,
+    "brake_decel": 1.5,
+    "go_accel": 1.0,
+    "portal_drop_kmh": 15.0,
+    "portal_brake": 0.6,
+    "portal_recovery_m": 400.0,
+    "speed_limit_kmh": 60.0,
+    "moving_speed_kmh": 30.0,
+    "stop_count": 3,
+    "stop_min_s": 10.0,
+    "stop_max_s": 60.0,
+    "queue_length_m": 400.0,
+    "queue_speed_kmh": 15.0,
+    "queue_stops": 1,
+    "congested_speed_kmh": 30.0,
+    "congested_variation_kmh": 8.0
+   },
+   "road_profile": {
+    "points": [
+     [
+      0.0,
+      0.0
+     ],
+     [
+      200.64325543040644,
+      0.0
+     ],
+     [
+      401.2865108608129,
+      0.0
+     ],
+     [
+      601.9297662912193,
+      0.0
+     ],
+     [
+      802.5730217216258,
+      0.0
+     ],
+     [
+      1003.2162771520323,
+      0.0
+     ],
+     [
+      1203.8595325824385,
+      0.0
+     ],
+     [
+      1404.502788012845,
+      -0.0013674329741547454
+     ],
+     [
+      1599.3180235350799,
+      -2.0000216884566218
+     ],
+     [
+      1805.789298873658,
+      -8.25885101354312
+     ],
+     [
+      2006.4325543040645,
+      -16.28458123075921
+     ],
+     [
+      2207.075809734471,
+      -24.310311447975298
+     ],
+     [
+      2407.719065164877,
+      -32.33604166519137
+     ],
+     [
+      2608.3623205952836,
+      -40.36177188240746
+     ],
+     [
+      2809.00557602569,
+      -48.387502099623546
+     ],
+     [
+      3009.6488314560966,
+      -56.41323231683963
+     ],
+     [
+      3210.292086886503,
+      -64.43896253405579
+     ],
+     [
+      3410.9353423169096,
+      -72.45792072785798
+     ],
+     [
+      3611.578597747316,
+      -78.23748596851016
+     ],
+     [
+      3812.2218531777226,
+      -79.999648439045
+     ],
+     [
+      4012.865108608129,
+      -79.999648439045
+     ],
+     [
+      4213.508364038536,
+      -79.999648439045
+     ],
+     [
+      4414.151619468942,
+      -79.98861006883496
+     ],
+     [
+      4614.7948748993485,
+      -77.67783193391467
+     ],
+     [
+      4815.438130329754,
+      -71.35431682582538
+     ],
+     [
+      5016.081385760161,
+      -63.328586608607985
+     ],
+     [
+      5216.724641190567,
+      -55.3028563913919
+     ],
+     [
+      5417.367896620974,
+      -47.277126174175805
+     ],
+     [
+      5618.01115205138,
+      -39.25139595695972
+     ],
+     [
+      5818.654407481787,
+      -31.22566573974363
+     ],
+     [
+      6019.297662912193,
+      -23.199935522527543
+     ],
+     [
+      6219.9409183426,
+      -15.174205305311453
+     ],
+     [
+      6420.584173773006,
+      -7.171156862686229
+     ],
+     [
+      6599.29605097539,
+      -2.0000208404795154
+     ],
+     [
+      6821.870684633819,
+      2.0358714714063808e-14
+     ],
+     [
+      7022.513940064226,
+      2.0358714714063808e-14
+     ],
+     [
+      7223.157195494632,
+      2.0358714714063808e-14
+     ],
+     [
+      7423.800450925039,
+      2.0358714714063808e-14
+     ]
+    ],
+    "max_grade_pct": 6.0
+   },
+   "driver": {
+    "style": "normal",
+    "cruise_speed_kmh": 70.0,
+    "speed_variability_kmh": 4.0,
+    "speed_correlation_length_m": 300.0,
+    "initial_speed_kmh": null,
+    "min_speed_kmh": 10.0,
+    "max_speed_kmh": 130.0,
+    "max_lateral_accel": 2.0,
+    "max_accel": 1.5,
+    "max_decel": 2.5,
+    "max_jerk": 2.0,
+    "planning_margin": 0.8,
+    "curve_preview_m": 15.0,
+    "speed_tracking_gain": 0.8,
+    "accel_response_rate": 4.0
+   },
+   "imu": {
+    "mount": {
+     "label": "aligned",
+     "yaw_deg": 0.0,
+     "pitch_deg": 0.0,
+     "roll_deg": 0.0,
+     "lever_arm_m": [
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    "gravity_model": "wgs84",
+    "earth_rotation": false,
+    "rate_hz": 200.0,
+    "errors": {
+     "accel": {
+      "noise_enabled": true,
+      "noise_density": 0.0017651969999999998,
+      "bias_enabled": true,
+      "bias_magnitude": 0.0980665,
+      "bias_vector": null,
+      "drift_enabled": true,
+      "drift_sigma": 0.004903325,
+      "drift_tau_s": 300.0
+     },
+     "gyro": {
+      "noise_enabled": true,
+      "noise_density": 0.0001221730476396031,
+      "bias_enabled": true,
+      "bias_magnitude": 0.0017453292519943296,
+      "bias_vector": null,
+      "drift_enabled": true,
+      "drift_sigma": 8.726646259971648e-05,
+      "drift_tau_s": 300.0
+     },
+     "seed": 0
+    }
+   },
+   "calibration": {
+    "enabled": false,
+    "yaw_deg": 2.0,
+    "pitch_deg": 0.5,
+    "roll_deg": 0.5
+   },
+   "map_data": {
+    "road_grade": false
+   },
+   "vehicle_speed": {
+    "scale_error_pct": 2.0,
+    "rate_hz": 10.0
+   },
+   "standstill_oracle": {
+    "delay_s": 0.0,
+    "miss_probability": 0.0,
+    "false_standstill_kmh": 0.0
+   },
+   "tunnel": {
+    "entrance_m": 1599.3180235350799,
+    "exit_m": 6599.29605097539,
+    "announce_before_exit_m": 300.0
+   },
+   "gnss": {
+    "enabled": true,
+    "rate_hz": 1.0,
+    "position_sigma_m": 2.5,
+    "position_tau_s": 30.0,
+    "white_sigma_m": 0.5,
+    "speed_sigma_mps": 0.2,
+    "loss_window_m": 30.0,
+    "reacquisition_delay_s": 3.0,
+    "reacquisition_jitter_s": 2.0,
+    "seed": 0,
+    "portal_degradation": true,
+    "degradation_length_m": 150.0,
+    "degradation_sigma_m": 8.0,
+    "degradation_tau_s": 5.0,
+    "degradation_speed_sigma_mps": 0.5,
+    "outlier_probability": 0.05,
+    "outlier_sigma_m": 25.0
+   },
+   "seed": 1000,
+   "sample_rate_hz": 100.0
+  }
+ }
+}

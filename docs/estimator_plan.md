@@ -225,9 +225,15 @@ evening used letters for steps: "step 2b" = 2.1, "step 3a" = 3.1, "step 3b" = 3.
      too large (1.7 km vs. 170–290 m real), from the unbounded offset random walk (t^2.5) and the unmodelled
      clamp. Options for 6.2: a bounded offset drift in the filter, or use σ only to choose precise vs.
      hedged and cap the hedged lead.
-   * **6.2. Next: the announcement policy** (precise vs. hedged; open product question: is a hedged
-     instruction acceptable?), then the tunnel-length prediction. "Hold at C" does not affect the
-     announcement and stays a separate small item.
+   * **6.2. Done (2026-10-17, D53, [announcement_policy.md](announcement_policy.md)): a simple policy** (user: simple
+     over refined). Fires at d̂ + min(2σ, 300 m) ≥ target; precise if σ ≤ 30 m, else hedged; only for the
+     Kalman filters; the plain announcement kept next to it. Late announcements nearly gone (free flow late
+     > 3 s: up to 50 % → 0 %, Eisenhower 30 → 20 %; stop-and-go late > 15 s: up to 25 % → ≤ 5 %); precise up
+     to 2 km in free flow; price: earliness, 1–1.5 min in stop-and-go. Not done: the tunnel-length
+     prediction (6.3), a time-based cap, the bounded offset drift; "hold at C" stays a separate item.
+   * **Flag from 6.2: the Eisenhower approach.** `route_kf_yaw` learns ψ −7° to −14° there (truth ~0°) and
+     fails (250 m median, 12/20 gross, free flow); `route_kf`'s offset is 0.7–3 mg off (ladder ~0.3 mg).
+     Grade and sideslip ruled out. Proposed next: a diagnostic of that approach (both filters).
 
 Each step is checked against both baselines with `--compare` before the next, on the development
 subsets (`--dev`, D47); the full benchmarks are rerun at milestones.

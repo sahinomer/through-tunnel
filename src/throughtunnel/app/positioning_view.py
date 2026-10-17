@@ -144,7 +144,7 @@ def summary_html(evaluations: list[TrackEvaluation], announce_before_exit_m: flo
         return ""
     head = ["Estimator", "error at C", "own σ at C", "max in tunnel", "RMS in tunnel", "recovered after C"]
     if announce_before_exit_m is not None:
-        head += [f"announcement ({announce_before_exit_m:g} m before C)", "own σ then"]
+        head += [f"announcement ({announce_before_exit_m:g} m before C)", "own σ then", "uncertainty-aware"]
     rows = []
     for ev in evaluations:
         s = ev.summary
@@ -160,13 +160,18 @@ def summary_html(evaluations: list[TrackEvaluation], announce_before_exit_m: flo
             dt, dd = ev.announcement_time_error_s, ev.announcement_distance_error_m
             cells.append("missed" if not math.isfinite(dt) else f"{dt:+.1f} s ({dd:+.0f} m)")
             cells.append(_m(s.get("announce_std_m")))
+            aware = ev.aware_announcement_time_error_s
+            kind = {True: "precise", False: "hedged"}.get(ev.aware_announcement_precise, "")
+            cells.append(f"{aware:+.1f} s ({kind})" if math.isfinite(aware) else "n/a")
         rows.append("<tr>" + "".join(f"<td class='pr-3'>{c}</td>" for c in cells) + "</tr>")
     head_html = "".join(f"<th class='pr-3 text-left text-gray-500 font-normal'>{h}</th>" for h in head)
     return (
         f"<table class='text-sm'><tr>{head_html}</tr>{''.join(rows)}</table>"
         "<div class='text-xs text-gray-500 mt-1'>Announcement error: + = late (vehicle already past). "
         "Errors are against the true phone position: evaluation-only information. Own σ: the estimator's "
-        "1σ along-route uncertainty (Kalman filters only), at C and when it announced.</div>"
+        "1σ along-route uncertainty (Kalman filters only), at C and when it announced. Uncertainty-aware: "
+        "fires when the estimate + min(2σ, 300 m) reaches the point; precise if σ ≤ 30 m, else hedged "
+        "(step 6.2).</div>"
     )
 
 

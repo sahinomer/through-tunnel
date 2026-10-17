@@ -110,7 +110,10 @@ The dev seeds 0–19 were used throughout development, so the flag was checked o
    the levelling cannot separate pitch from bias, while yaw and ψ use the same information. The `hard` condition
    improves to 204 m (free) and 403 m (stop-and-go); its remaining error is not yaw (roll and tilted-mount
    effects, not examined here).
-2. **Realistic free flow: neutral; no gain under realistic conditions anywhere** (85 → 89 m dev, 142 → 139 m
+2. **Realistic free flow: neutral on the ladder; no gain under realistic conditions anywhere.** *Correction
+   (2026-10-17, step 6.2, [announcement_policy.md](announcement_policy.md)): on the Eisenhower preset, not in the dev
+   subsets, `route_kf_yaw` fails: ψ −7° to −14° learned on the approach, 250 m median and 12 of 20 gross errors in free
+   flow vs. `route_kf`'s 75 m and 2. Diagnosis pending.* (85 → 89 m dev, 142 → 139 m
    fresh seeds), as predicted: with realistic sensors ψ has no information the calibration's yaw fit did not
    already use.
 3. **Realistic stop-and-go leans worse, but the evidence is weak.** Dev: 188 → 402 m. Fresh seeds: 355 → 503

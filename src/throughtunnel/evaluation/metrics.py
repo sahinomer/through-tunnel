@@ -42,6 +42,9 @@ class TrackEvaluation:
     announcement_distance_error_m: float = math.nan  # + = late (vehicle already past the point)
     # The estimator's own 1σ along-route uncertainty at each time (NaN where it reports none; step 6.1)
     position_std_m: NDArray[np.float64] = field(default_factory=lambda: np.empty(0))
+    # Uncertainty-aware announcement (step 6.2): time error (+ = late; NaN = never fired) and its kind
+    aware_announcement_time_error_s: float = math.nan
+    aware_announcement_precise: bool | None = None
 
 
 def evaluate_track(
@@ -98,7 +101,9 @@ def evaluate_track(
         )
 
     # Announcement (D32): the estimator's announcement vs. the vehicle truly reaching the same point.
-    time_err = dist_err = math.nan
+    time_err = dist_err = aware_err = math.nan
+    if sec is not None and math.isfinite(track.aware_announcement_t):
+        aware_err = track.aware_announcement_t - sec.announcement_t
     if sec is not None and math.isfinite(track.announcement_t):
         time_err = track.announcement_t - sec.announcement_t
         dist_err = (
@@ -117,6 +122,8 @@ def evaluate_track(
         announcement_time_error_s=time_err,
         announcement_distance_error_m=dist_err,
         position_std_m=std,
+        aware_announcement_time_error_s=aware_err,
+        aware_announcement_precise=track.aware_announcement_precise,
     )
 
 

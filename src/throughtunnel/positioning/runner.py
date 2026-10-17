@@ -60,6 +60,36 @@ class Announcer:
         return d
 
 
+class UncertaintyAwareAnnouncer:
+    """Uncertainty-aware exit announcement (step 6.2, solution 3d), shared like ``Announcer`` (PD8).
+
+    Only for estimators that report their 1σ along-route uncertainty (the Kalman filters); for the others
+    it never fires. It fires once, the first time the estimated distance plus a safety lead reaches the
+    announcement point: d̂ + min(K·σ, MAX_LEAD_M) ≥ target. A late announcement is worse than an early one
+    (user, 2026-10-17), so the lead is ~2σ ("not late" in ~95 % if σ is honest), capped because σ is far
+    too large in long stop-and-go outages (uncertainty_study.md). It is **precise** ("exit in 300 m") if σ
+    is at most ``PRECISE_MAX_SIGMA_M`` when it fires, else **hedged** ("after the tunnel, keep right"): at
+    70 km/h, ±2·30 m is about ±3 s, the window of a good announcement. Nominal values, not tuned."""
+
+    K = 2.0
+    MAX_LEAD_M = 300.0
+    PRECISE_MAX_SIGMA_M = 30.0
+
+    def __init__(self, route: RouteMap) -> None:
+        self.target_m = route.announcement_m
+        self.fired_t = math.nan  # estimate time of the announcement; NaN = not (yet) announced
+        self.precise: bool | None = None  # the kind of announcement once fired
+
+    def update(self, est: StateEstimate, d: float) -> None:
+        """``d``: the estimate's route distance (as used by ``Announcer``)."""
+        std = est.position_std_m
+        if self.target_m is None or not math.isnan(self.fired_t) or std is None or not math.isfinite(std):
+            return
+        if d + min(self.K * std, self.MAX_LEAD_M) >= self.target_m:
+            self.fired_t = est.t
+            self.precise = std <= self.PRECISE_MAX_SIGMA_M
+
+
 @dataclass(frozen=True)
 class EstimateTrack:
     """An estimator's output over time, plus the time it announced the tunnel exit."""
@@ -75,6 +105,10 @@ class EstimateTrack:
     route_distance: NDArray[np.float64]  # estimator's own, or the announcer's map-matched value
     position_std_m: NDArray[np.float64]  # NaN where not provided
     announcement_t: float = math.nan  # NaN = never announced
+    # Uncertainty-aware announcement (step 6.2): NaN = never fired (or no uncertainty reported); precise
+    # (True) or hedged (False), None if it never fired
+    aware_announcement_t: float = math.nan
+    aware_announcement_precise: bool | None = None
 
     def __len__(self) -> int:
         return len(self.t)
@@ -146,6 +180,7 @@ def replay(
     imu_t = obs.imu.t.tolist()
     fixes = [obs.gnss.fix(i) for i in range(len(obs.gnss))]
     announcer = Announcer(obs.route)
+    aware = UncertaintyAwareAnnouncer(obs.route)
     speed_t: list[float] = []
     speed_v: list[float] = []
     if estimator.uses_vehicle_speed:
@@ -188,6 +223,7 @@ def replay(
             est = estimator.state()
             if est is not None:
                 d = announcer.update(est)
+                aware.update(est, d)
                 rows.append(
                     (
                         est.t,
@@ -213,4 +249,6 @@ def replay(
         route_distance=np.asarray(cols[6], dtype=float),
         position_std_m=np.asarray(cols[7], dtype=float),
         announcement_t=announcer.fired_t,
+        aware_announcement_t=aware.fired_t,
+        aware_announcement_precise=aware.precise,
     )

@@ -204,6 +204,11 @@ def run_case(case: Case, seeds: list[int], dev: bool = False) -> list[dict]:
                     "outage_s": outage, "exit_total_m": s["exit_total_m"], "exit_along_m": s["exit_along_m"],
                     "tunnel_max_m": s["tunnel_max_m"], "announcement_error_s": ann,
                     "announcement_missed": bool(math.isnan(ann)),
+                    # uncertainty-aware announcement (step 6.2; NaN without σ); kind: 1 precise,
+                    # 0 hedged, NaN never fired
+                    "aware_announcement_error_s": ev.aware_announcement_time_error_s,
+                    "aware_precise": (math.nan if ev.aware_announcement_precise is None
+                                      else float(ev.aware_announcement_precise)),
                     "route_end_reached": bool(len(rd) and rd.max() >= length - 1.0),
                 })  # fmt: skip
     print(f"{case.key}: {len(seeds)} runs", flush=True)
@@ -278,6 +283,42 @@ def family_table(records, column: str, values, label=str, **fixed) -> list[dict[
     return rows
 
 
+def _announcement_stats(errors) -> dict[str, str]:
+    """Late / early / good shares of announcement time errors (+ = late; NaN = never fired = late)."""
+    e = np.asarray(errors, dtype=float)
+    late = np.where(np.isnan(e), np.inf, e)
+    return {
+        f"late > {ANNOUNCE_OK_S:g} s": _pct(late > ANNOUNCE_OK_S),
+        f"late > {ANNOUNCE_OFF_S:g} s": _pct(late > ANNOUNCE_OFF_S),
+        f"good ±{ANNOUNCE_OK_S:g} s": _pct(np.abs(late) <= ANNOUNCE_OK_S),
+        f"early > {ANNOUNCE_OFF_S:g} s": _pct(late < -ANNOUNCE_OFF_S),
+        "median [s]": f"{np.median(late):+.1f}" if np.isfinite(np.median(late)) else "–",
+    }
+
+
+def announcement_policy_table(records) -> list[dict[str, str]]:
+    """Plain vs. uncertainty-aware announcement (step 6.2) for the estimators that report σ, per scenario
+    (sloped roads with map grade)."""
+    rows = []
+    names = [n for n in _estimators(records)
+             if any(math.isfinite(r.get("aware_announcement_error_s", math.nan))
+                    for r in _sel(records, estimator=n))]  # fmt: skip
+    for case in dict.fromkeys(r["case"] for r in records):
+        for name in names:
+            sel = [
+                r for r in _sel(records, case=case, estimator=name) if r["road"] == "flat" or r["map_grade"]
+            ]
+            if not sel:
+                continue
+            for kind, col in (("plain", "announcement_error_s"), ("aware", "aware_announcement_error_s")):
+                row = {"scenario": case, "estimator": name, "announcement": kind}
+                row |= _announcement_stats([r[col] for r in sel])
+                precise = [r["aware_precise"] for r in sel if math.isfinite(r["aware_precise"])]
+                row["precise"] = _pct(np.array(precise) == 1.0) if kind == "aware" and precise else "–"
+                rows.append(row)
+    return rows
+
+
 def tables_markdown(records, meta: dict) -> str:
     n_seeds = len({r["seed"] for r in records})
     out = [
@@ -333,6 +374,15 @@ def tables_markdown(records, meta: dict) -> str:
         out.append(f"## Presets (real / demo geometry), flat road, {t_label}\n")
         rows = family_table(records, "geometry", PRESETS, names.get, road="flat", traffic=traffic)
         out.append(markdown_table(rows) + "\n")
+    policy = announcement_policy_table(records) if "aware_announcement_error_s" in records[0] else []
+    if policy:
+        out.append("## Uncertainty-aware announcement (step 6.2)\n")
+        out.append(
+            "Plain = the shared announcement at the estimated announcement point. Aware = fires when the "
+            "estimate plus min(2σ, 300 m) reaches it; precise if σ ≤ 30 m then, else hedged. Time error + = "
+            "late; a never-fired announcement counts as late. Map grade on for sloped roads.\n"
+        )
+        out.append(markdown_table(policy) + "\n")
     return "\n".join(out)
 
 

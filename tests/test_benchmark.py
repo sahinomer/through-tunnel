@@ -1,5 +1,7 @@
 """Benchmark (D43): the scenario set is what it says, runs are reproducible, comparisons flag regressions."""
 
+import math
+
 import pytest
 
 from throughtunnel.evaluation.benchmark import (
@@ -39,14 +41,23 @@ def test_run_config_turns_the_realism_options_on_and_seeds_everything():
     assert cfg.traffic.scenario == "stop_and_go" and not cfg.road_profile.is_flat
 
 
+def _same(a: list[dict], b: list[dict]) -> bool:
+    """Records equal, NaN = NaN (e.g. the uncertainty-aware announcement of estimators without σ)."""
+
+    def norm(r: dict) -> dict:
+        return {k: "nan" if isinstance(v, float) and math.isnan(v) else v for k, v in r.items()}
+
+    return [norm(r) for r in a] == [norm(r) for r in b]
+
+
 def test_run_case_records_and_csv_round_trip(tmp_path):
     case = Case("ladder_0.5km", "climb3", "free")
     records = run_case(case, [0])
     assert len(records) == 2 * len(ESTIMATORS)  # map grade off and on
     write_runs(records, tmp_path / "runs.csv")
     again = read_runs(tmp_path / "runs.csv")
-    assert again == records  # full precision, so a baseline compares exactly
-    assert run_case(case, [0]) == records  # reproducible
+    assert _same(again, records)  # full precision, so a baseline compares exactly
+    assert _same(run_case(case, [0]), records)  # reproducible
 
 
 def test_comparison_flags_regressions_only():
