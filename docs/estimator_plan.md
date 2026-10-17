@@ -216,9 +216,18 @@ evening used letters for steps: "step 2b" = 2.1, "step 3a" = 3.1, "step 3b" = 3.
      test where it must equal `route_kf`.
 
    6a (predict the yaw leak from the map) is dropped from this step: `route_kf_yaw` (D52) covers the need.
-6. **Uncertainty-aware announcement (3d), next.** Applies to every tunnel and targets the product output.
-   Starts with a consistency check of `position_std_m`; then the announcement policy and the tunnel-length
-   ideas above. To be designed with the user.
+6. **Uncertainty-aware announcement (3d).** Applies to every tunnel and targets the product output. User
+   decisions (2026-10-17): a late announcement is worse than an early one; only the Kalman filters report σ,
+   so the policy applies to them; σ shown in the UI.
+   * **6.1. Done (2026-10-17): consistency check ([uncertainty_study.md](uncertainty_study.md)).** UI: ±2σ band
+     on the along-track error plot, σ at C and at the announcement in the summary table. Free flow: σ honest
+     on 5 km (70 % / 95 % within ±1σ / ±2σ), mildly overconfident on 2 km (65 % / 85 %). Stop-and-go: σ 5–10×
+     too large (1.7 km vs. 170–290 m real), from the unbounded offset random walk (t^2.5) and the unmodelled
+     clamp. Options for 6.2: a bounded offset drift in the filter, or use σ only to choose precise vs.
+     hedged and cap the hedged lead.
+   * **6.2. Next: the announcement policy** (precise vs. hedged; open product question: is a hedged
+     instruction acceptable?), then the tunnel-length prediction. "Hold at C" does not affect the
+     announcement and stays a separate small item.
 
 Each step is checked against both baselines with `--compare` before the next, on the development
 subsets (`--dev`, D47); the full benchmarks are rerun at milestones.

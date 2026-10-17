@@ -40,6 +40,8 @@ class TrackEvaluation:
     summary: dict[str, float] = field(default_factory=dict)
     announcement_time_error_s: float = math.nan  # + = late; NaN = no tunnel or never announced
     announcement_distance_error_m: float = math.nan  # + = late (vehicle already past the point)
+    # The estimator's own 1σ along-route uncertainty at each time (NaN where it reports none; step 6.1)
+    position_std_m: NDArray[np.float64] = field(default_factory=lambda: np.empty(0))
 
 
 def evaluate_track(
@@ -87,6 +89,13 @@ def evaluate_track(
             _recovery_time(t, total, ev.reacquire_t, recovery_threshold_m, recovery_hold_s) - sec.exit_t
         )
     summary["final_m"] = float(total[-1]) if len(total) else math.nan
+    # The estimator's own uncertainty (NaN if none reported): at C, and when it announced (what it knew then)
+    std = track.position_std_m
+    if sec is not None:
+        summary["exit_std_m"] = at(sec.exit_t, std)
+        summary["announce_std_m"] = (
+            at(track.announcement_t, std) if math.isfinite(track.announcement_t) else math.nan
+        )
 
     # Announcement (D32): the estimator's announcement vs. the vehicle truly reaching the same point.
     time_err = dist_err = math.nan
@@ -107,6 +116,7 @@ def evaluate_track(
         summary=summary,
         announcement_time_error_s=time_err,
         announcement_distance_error_m=dist_err,
+        position_std_m=std,
     )
 
 

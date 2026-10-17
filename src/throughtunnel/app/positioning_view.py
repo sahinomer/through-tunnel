@@ -31,6 +31,14 @@ def color_of(name: str) -> str:
     return ESTIMATOR_COLORS.get(name, "#616161")
 
 
+def _rgba(hex_color: str, alpha: float) -> str:
+    r, g, b = (int(hex_color[i : i + 2], 16) for i in (1, 3, 5))
+    return f"rgba({r},{g},{b},{alpha})"
+
+
+UNCERTAINTY_K = 2.0  # the band on the along-track plot: ±2σ of the estimator's own uncertainty
+
+
 def track_payload(track: EstimateTrack, result: SimulationResult) -> dict[str, list[float]]:
     """Decimated lat/lon over time of an estimated track (for the static polyline and the moving marker)."""
     step = max(1, round(1.0 / (MAP_TRACK_RATE_HZ * np.median(np.diff(track.t))))) if len(track) > 1 else 1
@@ -83,12 +91,25 @@ def error_figure(
         vertical_spacing=0.06,
         subplot_titles=(
             "Horizontal position error [m] (log scale)",
-            "Along-track error [m] (+ = estimate ahead)",
+            "Along-track error [m] (+ = estimate ahead; band: the filter's own ±2σ)",
             "Cross-track error [m] (+ = estimate left)",
         ),
     )
     for ev in evaluations:
         show = ev.name in visible
+        std = ev.position_std_m
+        if len(std) == len(ev.t) and np.isfinite(std).any():
+            # ±2σ band of the estimator's own uncertainty: an honest σ keeps its error line inside ~95 % of
+            # the time (step 6.1). Drawn first, so the error line lies on top.
+            band = UNCERTAINTY_K * std[::2]
+            common = {
+                "x": ev.t[::2], "legendgroup": ev.name, "showlegend": False, "hoverinfo": "skip",
+                "line": {"width": 0}, "visible": True if show else "legendonly",
+            }  # fmt: skip
+            fig.add_trace(go.Scatter(y=band, **common), 2, 1)
+            fig.add_trace(
+                go.Scatter(y=-band, fill="tonexty", fillcolor=_rgba(color_of(ev.name), 0.15), **common), 2, 1
+            )
         style = {"width": 1.6, "color": color_of(ev.name)}
         for row, y in ((1, np.maximum(ev.total, 0.01)), (2, ev.along), (3, ev.cross)):
             fig.add_trace(
@@ -121,15 +142,16 @@ def error_figure(
 def summary_html(evaluations: list[TrackEvaluation], announce_before_exit_m: float | None) -> str:
     if not evaluations:
         return ""
-    head = ["Estimator", "error at C", "max in tunnel", "RMS in tunnel", "recovered after C"]
+    head = ["Estimator", "error at C", "own σ at C", "max in tunnel", "RMS in tunnel", "recovered after C"]
     if announce_before_exit_m is not None:
-        head.append(f"announcement ({announce_before_exit_m:g} m before C)")
+        head += [f"announcement ({announce_before_exit_m:g} m before C)", "own σ then"]
     rows = []
     for ev in evaluations:
         s = ev.summary
         cells = [
             f"<span style='color:{color_of(ev.name)}'>■</span> {html.escape(ev.label)}",
             _m(s.get("exit_total_m")),
+            _m(s.get("exit_std_m")),
             _m(s.get("tunnel_max_m")),
             _m(s.get("tunnel_rms_m")),
             _s(s.get("recovery_time_s")),
@@ -137,12 +159,14 @@ def summary_html(evaluations: list[TrackEvaluation], announce_before_exit_m: flo
         if announce_before_exit_m is not None:
             dt, dd = ev.announcement_time_error_s, ev.announcement_distance_error_m
             cells.append("missed" if not math.isfinite(dt) else f"{dt:+.1f} s ({dd:+.0f} m)")
+            cells.append(_m(s.get("announce_std_m")))
         rows.append("<tr>" + "".join(f"<td class='pr-3'>{c}</td>" for c in cells) + "</tr>")
     head_html = "".join(f"<th class='pr-3 text-left text-gray-500 font-normal'>{h}</th>" for h in head)
     return (
         f"<table class='text-sm'><tr>{head_html}</tr>{''.join(rows)}</table>"
         "<div class='text-xs text-gray-500 mt-1'>Announcement error: + = late (vehicle already past). "
-        "Errors are against the true phone position: evaluation-only information.</div>"
+        "Errors are against the true phone position: evaluation-only information. Own σ: the estimator's "
+        "1σ along-route uncertainty (Kalman filters only), at C and when it announced.</div>"
     )
 
 

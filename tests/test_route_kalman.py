@@ -142,3 +142,15 @@ def test_uncertainty_grows_in_the_tunnel(realistic):
     at_b = std[np.searchsorted(track.t, sec.entrance_t + 5.0)]
     at_c = std[np.searchsorted(track.t, sec.exit_t - 1.0)]
     assert at_c > 10.0 * at_b
+
+
+def test_evaluation_carries_the_filters_own_uncertainty(realistic):
+    """Step 6.1: the evaluation keeps each estimator's σ (NaN for estimators without one) and reports it at C
+    and at the estimator's announcement."""
+    from throughtunnel.evaluation.experiment import compare_estimators
+
+    cmp = compare_estimators(realistic, ["route_imu", "route_kf"])
+    imu, kf = cmp.evaluations
+    assert np.isnan(imu.summary["exit_std_m"]) and np.all(np.isnan(imu.position_std_m))
+    assert len(kf.position_std_m) == len(kf.t)
+    assert 0.0 < kf.summary["announce_std_m"] < kf.summary["exit_std_m"]  # σ grows towards C
