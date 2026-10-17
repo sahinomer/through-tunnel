@@ -106,6 +106,7 @@ DEV_ESTIMATORS = (
     "route_imu",
     "route_kf",
     "route_kf_yaw",
+    "route_kf_map",
     "route_vspeed",
     "route_imu_stop",
     "route_imu_zupt",

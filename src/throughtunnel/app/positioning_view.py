@@ -21,6 +21,7 @@ ESTIMATOR_COLORS = {
     "route_imu": "#43a047",
     "route_kf": "#00897b",
     "route_kf_yaw": "#3949ab",
+    "route_kf_map": "#c0ca33",
     "route_hold": "#8e24aa",
     "route_vspeed": "#455a64",  # reference (car speed): neutral, not a phone-only solution
 }

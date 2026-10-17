@@ -59,6 +59,7 @@ methods.
 | Map geometry and length scale errors | not modelled (map = OSM polyline) | worse for route-constrained methods | R3. |
 | Map grade (road slope from the map provider) | optional (D39), assumed exact | — | Studied in [map_grade_study.md](map_grade_study.md). |
 | Map grade errors: noise, offset, smoothing, profile shifted along the route | not modelled (user decision: map assumed correct) | worse for the IMU estimators with map grade | Each 0.1 % of grade error leaks 0.1 % of g into the speed (~70–100 m at C in the presets); a shifted profile acts like a position error at every grade change. A sensitivity sweep would quantify it. |
+| Map curve geometry inside tunnels, lane changes | assumed exact; no lane changes | worse for `route_kf_map` | The curve fixes (step 5, D55) trust the map's heading profile; the only mismatch simulated is smoothing (0.1–0.4°). A curve drawn metres off shifts the fix by as much; a lane change turns the car a few degrees for seconds (gated, not tested). Straight tunnels give no fixes. |
 | Driver leaving the route (missed exit, detour) | not modelled | much worse for route-constrained methods | They assume the route is followed. |
 | Exit or junction inside the tunnel | not modelled | — | Interpreted as an announcement before C (D32). |
 

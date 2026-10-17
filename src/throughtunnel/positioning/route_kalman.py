@@ -43,6 +43,20 @@ Tuning (PD6: nominal values of the estimator, never read from the scenario confi
   (Eisenhower: up to 37 mg / 26° off; calibration_start_study.md). D51/D52 used 1 mg / 3°, which describe a
   converged calibration; ``offset_sigma0`` / ``yaw_sigma0`` reproduce them;
 * yaw random walk 0.01°/√s (a phone settling in its holder: ~0.1° over a 2 min tunnel).
+
+Map-feature fixes (``map_fixes``, step 5; estimator_plan.md): two more states, the heading error h of the
+gyro heading integrated since GPS loss and the residual β of the calibration's gyro bias (h' = β). Inside the
+tunnel, every ``HEADING_STEP_M`` of estimated travel, the integrated heading is compared with the smoothed map
+heading at d̂ (``map_heading``): z = ψ_gyro − ψ_map(d̂) = h + κ(d̂)·(d − d̂). On straights (κ = 0) it calibrates
+h and β; on curves it corrects d, and through the filter's correlations v and b. Tuning (nominal, PD6):
+* measurement σ 1° every 25 m: the smoothed map heading matches the driven heading to 0.1–0.4° rms with errors
+  correlated over 20–330 m (exact map; route_kalman_map.md), so 1° per 25 m adds up to ~0.3° per correlation
+  length instead of overcounting;
+* heading at GPS loss: σ 0.5° (map heading at d̂); gyro-bias residual σ 5 mdps (a GPS-based calibration of the
+  vertical gyro bias), random walk 0.3 mdps/√s, gyro angle random walk 10 mdps/√Hz (datasheet order);
+* innovation gate 4σ, at most 3 in a row (lane changes, a wrong curve);
+* position information only where the radius is below 2 km (``MIN_CURVATURE``): on a nearly straight road
+  small systematic map heading errors mapped into a steady position drift (found in validation).
 """
 
 from __future__ import annotations
@@ -53,6 +67,7 @@ from throughtunnel.geodesy import STANDARD_GRAVITY
 from throughtunnel.observations import GnssFix, RouteMap
 from throughtunnel.positioning.alignment import VehicleImu
 from throughtunnel.positioning.base import StateEstimate
+from throughtunnel.positioning.map_heading import MapHeading, wrap
 from throughtunnel.positioning.route_constrained import (
     GNSS_TIMEOUT_S,
     SEARCH_AHEAD_M,
@@ -70,6 +85,15 @@ GATE_SIGMA = 4.0  # position jumps beyond this many σ are rejected (multipath) 
 MAX_REJECTED_IN_ROW = 3  # ... but never more than this many fixes in a row (no lock-out)
 MIN_POSITION_SIGMA_M = 1.0
 MIN_SPEED_SIGMA_MPS = 0.05
+HEADING_STEP_M = 25.0  # map-feature fixes: one heading measurement per this much estimated travel
+HEADING_MEAS_SIGMA = math.radians(1.0)  # [rad]: map heading vs. driven heading, per measurement
+HEADING_SIGMA0 = math.radians(0.5)  # [rad]: integrated heading at GPS loss (map heading at d̂)
+GYRO_BIAS_SIGMA0 = math.radians(5e-3)  # [rad/s]: residual of the calibration's vertical gyro bias
+GYRO_BIAS_PSD = math.radians(0.3e-3) ** 2  # [(rad/s)^2/s]: its random walk
+GYRO_ARW_PSD = math.radians(10e-3) ** 2  # [rad^2/s]: gyro angle random walk (10 mdps/√Hz)
+# Heading informs the position only where the road curves: radius below 2 km. On straighter road a 0.5°
+# systematic map heading error would mean hundreds of metres; there the measurement calibrates h and β only.
+MIN_CURVATURE = 1.0 / 2000.0  # [1/m]
 
 
 class RouteKalman(RouteImuDeadReckoning):
@@ -82,17 +106,29 @@ class RouteKalman(RouteImuDeadReckoning):
     # Initial uncertainties of b and ψ (D54); 1 mg / 3° reproduce the first versions (D51, D52; comparison)
     offset_sigma0 = OFFSET_SIGMA0
     yaw_sigma0 = YAW_SIGMA0
+    # True: map-feature fixes inside the tunnel (step 5): states h, β and heading measurements
+    map_fixes = False
 
     def __init__(self, route: RouteMap) -> None:
         super().__init__(route)
         self._b = 0.0
         self._psi = 0.0
-        # covariance of (d, v, b, ψ), full 4 × 4, symmetric
-        self._p = [[0.0] * 4 for _ in range(4)]
+        # covariance of (d, v, b, ψ[, h, β]), full n × n, symmetric
+        self._n = 6 if self.map_fixes else 4
+        self._p = [[0.0] * self._n for _ in range(self._n)]
         self._p[2][2] = self.offset_sigma0**2
         self._p[3][3] = self.yaw_sigma0**2 if self.yaw_state else 0.0
         self.rejected = 0  # gated position fixes (diagnostics)
         self._rejected_in_row = 0
+        # map-feature fixes (only with map_fixes): integrated gyro heading since GPS loss (None = inactive)
+        self._map = MapHeading(route) if self.map_fixes else None
+        self._heading: float | None = None
+        self._h = 0.0
+        self._beta = 0.0
+        self._travel_m = 0.0  # distance driven (integrated speed) since the last heading measurement
+        self.heading_updates = 0  # diagnostics
+        self.heading_rejected = 0
+        self._heading_rejected_in_row = 0
 
     @property
     def offset(self) -> float:
@@ -118,8 +154,8 @@ class RouteKalman(RouteImuDeadReckoning):
                 self._d = self.route.project_enu(e, n, lo_m=lo, hi_m=self._d + SEARCH_AHEAD_M)[0]
             self._v = fix.speed_mps
             p = self._p
-            for i in range(4):  # d and v restart, uncorrelated; the (b, ψ) block is kept
-                for j in range(4):
+            for i in range(self._n):  # d and v restart, uncorrelated; the other states are kept
+                for j in range(self._n):
                     if i < 2 or j < 2:
                         p[i][j] = 0.0
             p[0][0], p[1][1] = sigma_d**2, sigma_v**2
@@ -129,6 +165,7 @@ class RouteKalman(RouteImuDeadReckoning):
             if not (self._freeze is not None and self._freeze.active(self._d)):
                 self._update(1, fix.speed_mps - self._v, sigma_v**2)
             self._v = max(self._v, 0.0)
+        self._heading = None  # GPS is back: the heading channel restarts at the next outage
         self._last_fix_t = fix.t
         self._t = fix.t
 
@@ -148,22 +185,73 @@ class RouteKalman(RouteImuDeadReckoning):
             return
         self._rejected_in_row = 0
         self._d = z_d
-        for j in range(1, 4):
+        for j in range(1, self._n):
             p[0][j] = p[j][0] = 0.0
         p[0][0] = sigma_d**2
 
     def _update(self, i: int, innovation: float, r: float) -> None:
         """Scalar measurement of state component i (0: d, 1: v)."""
-        p = self._p
-        col = [p[j][i] for j in range(4)]  # P[:, i]
+        p, n = self._p, self._n
+        col = [p[j][i] for j in range(n)]  # P[:, i]
         s = col[i] + r
         k = [c / s for c in col]
+        self._apply(k, innovation)
+        # P -= K · P[i, :]
+        self._p = [[p[a][c] - k[a] * col[c] for c in range(n)] for a in range(n)]
+
+    def _apply(self, k: list[float], innovation: float) -> None:
         self._d += k[0] * innovation
         self._v += k[1] * innovation
         self._b += k[2] * innovation
         self._psi += k[3] * innovation
-        # P -= K · P[i, :]
-        self._p = [[p[a][c] - k[a] * col[c] for c in range(4)] for a in range(4)]
+        if self._n == 6:
+            self._h += k[4] * innovation
+            self._beta += k[5] * innovation
+
+    # ------------------------------------------------------------------ map-feature fixes
+    def _heading_step(self, t: float, imu: VehicleImu, dt: float) -> None:
+        """Integrate the gyro heading during the outage; one heading measurement every HEADING_STEP_M driven.
+
+        The trigger counts distance driven (integrated speed), not the estimate d̂: an update moves d̂, and a
+        trigger on d̂ fired again at once and applied the same heading information many times (found in
+        validation: a run-away of several hundred metres)."""
+        if t - self._last_fix_t <= GNSS_TIMEOUT_S:
+            return
+        assert self._map is not None
+        if self._heading is None:  # GPS lost: start from the map heading here, h = 0, β restarts
+            self._heading = self._map.heading(self._d)
+            self._h = self._beta = 0.0
+            p = self._p
+            for j in range(6):
+                p[4][j] = p[j][4] = p[5][j] = p[j][5] = 0.0
+            p[4][4], p[5][5] = HEADING_SIGMA0**2, GYRO_BIAS_SIGMA0**2
+            self._travel_m = 0.0
+            self._heading_rejected_in_row = 0
+            return
+        self._heading += imu.gyro[2] * dt
+        self._h += self._beta * dt
+        self._travel_m += self._v * dt
+        if self._travel_m < HEADING_STEP_M:
+            return
+        self._travel_m = 0.0
+        kappa = self._map.curvature(self._d)
+        if abs(kappa) < MIN_CURVATURE:
+            kappa = 0.0  # straight: no position information, only the heading drift
+        innovation = wrap(self._heading - self._map.heading(self._d) - self._h)
+        # z = h + κ·(d − d̂): H = [κ, 0, 0, 0, 1, 0]
+        p = self._p
+        col = [kappa * p[a][0] + p[a][4] for a in range(6)]  # P Hᵀ
+        s = kappa * col[0] + col[4] + HEADING_MEAS_SIGMA**2
+        if innovation**2 > GATE_SIGMA**2 * s and self._heading_rejected_in_row < MAX_REJECTED_IN_ROW:
+            self.heading_rejected += 1
+            self._heading_rejected_in_row += 1
+            return
+        self._heading_rejected_in_row = 0
+        self.heading_updates += 1
+        k = [c / s for c in col]
+        self._apply(k, innovation)
+        self._v = max(self._v, 0.0)
+        self._p = [[p[a][c] - k[a] * col[c] for c in range(6)] for a in range(6)]
 
     # ------------------------------------------------------------------ IMU
     def on_imu(self, t: float, imu: VehicleImu | None) -> None:
@@ -189,6 +277,8 @@ class RouteKalman(RouteImuDeadReckoning):
         # yaw state the filter cannot separate it from b, so it widens the process noise instead of blaming b.
         leak = self.turn_noise * YAW_SIGMA * self._v * imu.gyro[2]
         self._predict_covariance(dt, f_lat, leak * leak * dt)
+        if self._map is not None:
+            self._heading_step(t, imu, dt)
 
     def _predict_covariance(self, dt: float, f_lat: float, extra_q: float = 0.0) -> None:
         """P = F P Fᵀ + Q, F = I + [[0, dt, −h, −h·f_lat], [0, 0, −dt, −dt·f_lat], [0]*4, [0]*4], h = dt²/2.
@@ -215,7 +305,33 @@ class RouteKalman(RouteImuDeadReckoning):
         out[2][2] += OFFSET_PSD * dt
         if self.yaw_state:
             out[3][3] += YAW_PSD * dt
+        if self._n == 6:
+            out = self._predict_heading_block(out, p, dt, f_lat, h)
         self._p = out
+
+    def _predict_heading_block(self, out, p, dt: float, f_lat: float, h: float):
+        """The 6-state prediction. ``out`` is the (d, v, b, ψ) block with its process noise, computed exactly
+        as for 4 states; here the full F P Fᵀ adds the cross terms with (h, β) and their block. F adds
+        h' = h + β·dt; Q adds the gyro angle random walk to h and the bias random walk to β."""
+        full = [[0.0] * 6 for _ in range(6)]
+        w = [p[2][j] + f_lat * p[3][j] for j in range(6)]
+        rows = (  # F P, all 6 rows
+            [p[0][j] + dt * p[1][j] - h * w[j] for j in range(6)],
+            [p[1][j] - dt * w[j] for j in range(6)],
+            p[2],
+            p[3],
+            [p[4][j] + dt * p[5][j] for j in range(6)],
+            p[5],
+        )
+        for a, r in enumerate(rows):  # (F P) Fᵀ
+            wr = r[2] + f_lat * r[3]
+            full[a] = [r[0] + dt * r[1] - h * wr, r[1] - dt * wr, r[2], r[3], r[4] + dt * r[5], r[5]]
+        for a in range(4):  # the (d, v, b, ψ) block with its process noise, as computed above
+            for c in range(4):
+                full[a][c] = out[a][c]
+        full[4][4] += GYRO_ARW_PSD * dt
+        full[5][5] += GYRO_BIAS_PSD * dt
+        return full
 
     def state(self) -> StateEstimate | None:
         est = super().state()
@@ -241,3 +357,21 @@ class RouteKalmanYaw(RouteKalman):
     label = "Route + IMU Kalman filter + yaw (distance, speed, offset, yaw)"
     turn_noise = 0.0
     yaw_state = True
+
+
+class RouteKalmanMap(RouteKalman):
+    """``route_kf`` + map-feature fixes: curves inside the tunnel as position information (step 5)."""
+
+    name = "route_kf_map"
+    label = "Route + IMU Kalman filter + map curves"
+    map_fixes = True
+
+
+class RouteKalmanYawMap(RouteKalmanYaw):
+    """``route_kf_yaw`` + map-feature fixes: evaluated against ``route_kf_map`` in step 5 and not registered
+    (tied on realistic conditions, worse on Eisenhower's short approach; better only with an injected
+    calibration yaw error; route_kalman_map.md). Kept so the comparison can be rerun."""
+
+    name = "route_kf_yaw_map"
+    label = "Route + IMU Kalman filter + yaw + map curves"
+    map_fixes = True
