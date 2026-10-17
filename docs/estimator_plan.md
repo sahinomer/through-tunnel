@@ -5,7 +5,7 @@ State point at the end of the session of 2026-10-15, to resume the estimator pha
 (calibration fixes, D48), 3.1 (standstill oracle, D49), 3.2 (oracle sensitivity, D50) and 4 (Kalman filter, first version,
 D51) are done,
 see "Order" below. **Update 2026-10-17:** order after step 4 agreed with the user: 4.1 (yaw) → 5 (map features) → 3d
-(announcements); step 4.1 is done ([yaw_study.md](yaw_study.md), [route_kalman_yaw.md](route_kalman_yaw.md), D52), pending review. User's working mode: discuss first, one step at a time, compare every change
+(announcements); step 4.1 is done ([yaw_study.md](yaw_study.md), [route_kalman_yaw.md](route_kalman_yaw.md), D52): `route_kf_yaw` next to `route_kf`. User's working mode: discuss first, one step at a time, compare every change
 against the benchmarks.
 
 ## Where we are
@@ -179,13 +179,14 @@ evening used letters for steps: "step 2b" = 2.1, "step 3a" = 3.1, "step 3b" = 3.
      tails at 2–3 km. Removing it is neutral (it partly compensates the GPS noise it was fitted to).
      Realistic free flow is limited by learning b from the approach (true offset 0.43 mg rms, filter
      error 0.35 mg); that is for step 5.
-   * *Filter done (2026-10-17, D52, [route_kalman_yaw.md](route_kalman_yaw.md)):* ψ as a 4th state of
-     `route_kf` (in place), learned on the approach curves, carried into the tunnel; the stage reports the
-     calibration's yaw jumps (`yaw_shift`, 0.45–0.68° rms per re-solve). Calibration yaw 2°: 65 → 0 m (free),
-     204 → 2 m (stop-and-go); `hard` 782 → 403 m (stop-and-go); realistic free neutral. **Flagged for
-     review:** realistic stop-and-go 188 → 402 m (dev); on 60 fresh seeds 355 → 503 m, paired 29 worse /
-     18 better (p = 0.14). A reshuffle of the clamp's sign lottery (P5), not a worse offset. Recommendation:
-     keep. The lateral-channel measurement is not built.
+   * *Filter done (2026-10-17, D52, [route_kalman_yaw.md](route_kalman_yaw.md)):* a separate estimator
+     `route_kf_yaw` (user decision: keep both filters, compare them in the UI). ψ as a 4th state, learned on
+     the approach curves, carried into the tunnel; the stage reports the calibration's yaw jumps
+     (`yaw_shift`, 0.45–0.68° rms per re-solve). Against `route_kf`: calibration yaw 2° 65 → 0 m (free),
+     204 → 2 m (stop-and-go); `hard` 782 → 403 m (stop-and-go); realistic free neutral; realistic
+     stop-and-go leans worse (fresh seeds 355 → 503 m, p = 0.14; a reshuffle under the clamp, P5).
+     `route_kf` stays the headline phone-only filter, `route_kf_yaw` the robustness variant. The
+     lateral-channel measurement is not built.
 5. **Map-feature fixes (3b) and the yaw-leak correction (6a).** The only way to bound long free-flow
    tunnels without stops, once the filter exists.
 

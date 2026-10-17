@@ -1,12 +1,15 @@
-# Yaw state in the route Kalman filter (step 4.1)
+# Route Kalman filter with a yaw state, `route_kf_yaw` (step 4.1)
 
-Step 4.1 of [estimator_plan.md](estimator_plan.md), decision D52 (2026-10-17). `route_kf` is changed in
-place (user decision): its state gains the calibration's yaw residual ψ. It follows the yaw diagnostic
+Step 4.1 of [estimator_plan.md](estimator_plan.md), decision D52 (2026-10-17). A new phone-only estimator
+`route_kf_yaw` next to `route_kf`: the same filter, with the calibration's yaw residual ψ as a 4th state.
+`route_kf` is unchanged (D51). First built as a change of `route_kf` in place; after the results the user
+decided to keep both as separate estimators, so that the trade-off stays visible and both can be compared
+in the UI. It follows the yaw diagnostic
 ([yaw_study.md](yaw_study.md)): with a calibration yaw error, the filter's offset b absorbed the leak of the
 approach curves (2°: 0.37 mg, stop-and-go 204 m vs. `route_imu`'s 96 m).
 
-Data: [route_kalman_yaw/](route_kalman_yaw/): development runs against `milestone_step4` (D47, 20 paired
-seeds) and a paired check on 60 fresh seeds. Modules: `positioning/route_kalman.py`,
+Data: [route_kalman_yaw/](route_kalman_yaw/): development runs of both filters against `milestone_step4`
+(D47, 20 paired seeds) and a paired check on 60 fresh seeds. Modules: `positioning/route_kalman.py`,
 `positioning/alignment.py` (`yaw_shift`), `evaluation/route_kf_check.py`.
 
 ## The change
@@ -16,16 +19,17 @@ seeds) and a paired check on 60 fresh seeds. Modules: `positioning/route_kalman.
   lateral acceleration while b stays constant, so the two separate. ψ is carried into the tunnel and
   corrects the leak there too. The filter stays linear: ψ enters with the known coefficient f_lat.
 * **Tuning (nominal, PD6):** ψ prior 3° (a GPS-based mount calibration over a short approach), random walk
-  0.01°/√s (a phone settling in its holder). The first version's turn noise (lateral acceleration × a
-  nominal 0.5°) is dropped: ψ's own uncertainty now carries it. `turn_noise = 1` keeps it as a comparison
-  switch.
+  0.01°/√s (a phone settling in its holder). `route_kf`'s turn noise (lateral acceleration × a nominal
+  0.5°) is not used: ψ's own uncertainty carries it.
 * **`VehicleImu.yaw_shift`** (alignment stage). Found in a first check: with realistic sensors the
   calibration's yaw jumps **0.45–0.68° rms from one re-solve to the next** (up to 4°). That is larger than
   the residual the state is meant to find (0.3°). As with `offset_shift` (D51), the stage now reports each
   re-solve's change of the leak factor, F_new · L_old. Verified against the true change: 0.0003° rms,
   max 0.003°. Other estimators ignore it and stay bit-identical.
-* **`yaw_state = False`** with `turn_noise = 1` reproduces the first version bit for bit (verified on three
-  runs to the micrometre; test). The fresh-seed check uses it.
+* **One implementation, two estimators.** `RouteKalman` (`route_kf`: `yaw_state = False`, `turn_noise = 1`)
+  and its subclass `RouteKalmanYaw` (`route_kf_yaw`: `yaw_state = True`, `turn_noise = 0`). With ψ off the
+  4-state code is the first version bit for bit (verified on three runs to the micrometre, a test, and
+  the dev reruns: `route_kf` unchanged against the milestone).
 
 ## Validation (before the benchmarks)
 
@@ -48,7 +52,7 @@ yaw fit already used. As the diagnostic predicted, it cannot improve on the natu
 Error 5 km in, median (p90) ✗ gross errors (> 200 m). `cal_pitch_0.1`, `cal_yaw_2` and `hard` are new in
 the dev subset (D52).
 
-| condition | traffic | route + IMU | route_kf, step 4 | **route_kf, step 4.1** |
+| condition | traffic | route + IMU | route_kf | **route_kf_yaw** |
 |---|---|---|---|---|
 | error-free (floor) | free | 0 (0) | 1 (1) | 0 (1) |
 | | stop-and-go | 0 (0) | 3 (7) | 3 (6) |
@@ -69,7 +73,7 @@ the dev subset (D52).
 
 ### Benchmark dev subset (map grade on for sloped roads)
 
-| scenario | route + IMU | route_kf, step 4 | **route_kf, step 4.1** |
+| scenario | route + IMU | route_kf | **route_kf_yaw** |
 |---|---|---|---|
 | 0.5 km flat, free | 6 (12) | 6 (19) | 6 (17) |
 | 0.5 km flat, stop-and-go | 18 (92) ✗1 | 11 (59) ✗1 | 12 (95) ✗1 |
@@ -80,7 +84,9 @@ the dev subset (D52).
 | 5 km underwater, free | 44 (95) | 40 (86) | 38 (93) |
 | 5 km underwater, stop-and-go | 613 (782) ✗14 | 312 (782) ✗15 | **531 (782) ✗13 ⚠** |
 
-`compare.md` flags the three stop-and-go medians (⚠). They are not three independent results: the three
+`route_kf` is unchanged against the milestone in every cell (dev reruns; `compare.md` lists only the
+estimators the milestone has, so `route_kf_yaw` is in `tables.md`). Compared with `route_kf`, its three
+stop-and-go medians would be flagged (⚠). They are not three independent results: the three
 roads share the approach, its GPS noise and the seeds.
 
 ### Fresh seeds (realistic 5 km, seeds 20–79, paired)
@@ -88,18 +94,25 @@ roads share the approach, its GPS noise and the seeds.
 The dev seeds 0–19 were used throughout development, so the flag was checked on 60 new seeds:
 [route_kalman_yaw/fresh_seeds/tables.md](route_kalman_yaw/fresh_seeds/tables.md).
 
-| traffic | route_kf, step 4 | route_kf, step 4.1 | paired: worse / better / same | sign test |
+| traffic | route_kf | route_kf_yaw | paired (route_kf_yaw): worse / better / same | sign test |
 |---|---|---|---|---|
 | free | 142 (285) ✗19 | 139 (302) ✗16 | 33 / 27 / 0 | p = 0.52 |
 | stop-and-go | 355 (782) ✗41 | 503 (782) ✗45 | 29 / 18 / 13 | p = 0.14 |
 
 ## Findings
 
-1. **A calibration yaw error is now handled, the second large calibration risk after pitch (step 4).** 2°
-   costs 0–2 m instead of 65 / 204 m: the diagnostic's ceiling is reached (1 / 11 m). The `hard` condition
+1. **`route_kf_yaw` handles a calibration yaw error.** 2° costs 0–2 m instead of 65 / 204 m: the
+   diagnostic's ceiling is reached (1 / 11 m). *Caveat:* the simulation injects the error after the
+   calibration, so the approach data contradicts it and the filter re-reads the truth from that data.
+   The gain is real only to the extent that real phones end up with a yaw error the approach data can
+   reveal: the phone shifting in its holder during the approach (R11, not simulated), or a weaker mount
+   calibration than ours. That is plausible but not shown here. For pitch (step 4) the case is stronger:
+   the levelling cannot separate pitch from bias, while yaw and ψ use the same information. The `hard` condition
    improves to 204 m (free) and 403 m (stop-and-go); its remaining error is not yaw (roll and tilted-mount
    effects, not examined here).
-2. **Realistic free flow: neutral** (85 → 89 m dev, 142 → 139 m fresh seeds), as predicted.
+2. **Realistic free flow: neutral; no gain under realistic conditions anywhere** (85 → 89 m dev, 142 → 139 m
+   fresh seeds), as predicted: with realistic sensors ψ has no information the calibration's yaw fit did not
+   already use.
 3. **Realistic stop-and-go leans worse, but the evidence is weak.** Dev: 188 → 402 m. Fresh seeds: 355 → 503
    m median, gross errors 41 → 45 of 60, paired 29 worse vs. 18 better (p = 0.14), median paired change 0 m.
    * Mechanism (checked on the dev seeds): ψ learns from the same noisy GPS speeds as the calibration and,
@@ -112,19 +125,25 @@ The dev seeds 0–19 were used throughout development, so the flag was checked o
    * So the yaw state reshuffles which runs land on the creeping side. Dropping only the turn noise (no ψ)
      moved the same dev median 188 → 284 m with the same b rms, which shows how fragile this statistic is.
      The milestone's 188 m was itself a favourable draw (355 m on the fresh seeds).
+   * This explanation is supported (equal b rms, the traced runs), not proven: a small systematic cost
+     cannot be excluded. Both filters are in a failing regime there anyway (41–45 of 60 runs with gross
+     errors); only stop handling (P5) changes that.
 4. **The ψ term inside the tunnel is negligible** (≈0.03 mg). The lateral channel carries a ~2 mg offset
    (levelling residual), which ψ multiplies to almost nothing.
 
-## Recommendation (for review)
+## Decision (user, 2026-10-17): two estimators
 
-Keep the yaw state:
-* it removes a failure mode that real calibrations have (a 2° yaw residual: 204 → 2 m), at no cost in free
-  flow;
-* the stop-and-go flag is a reshuffle of the clamp's sign lottery, not a worse offset. The fix for that
-  is the stop handling (P5), not the yaw.
+Both are kept, as separate phone-only estimators:
+* **`route_kf`**: the headline phone-only filter. As good as or better under realistic conditions.
+* **`route_kf_yaw`**: the robustness variant. Removes the calibration-yaw failure mode (204 → 2 m with 2°),
+  no gain with realistic sensors, possibly a small cost in stop-and-go.
 
-The alternative is to revert to the first version and accept the yaw failure mode. A middle way (apply ψ only
-when it is significant, e.g. |ψ| > 3σ) would avoid the reshuffle, but it is a heuristic switch and not built.
+In the case study this is robustness against a calibration yaw error, not an accuracy gain. In the UI
+both appear with their own colours. They differ visibly only with a calibration yaw error set (calibration
+panel, e.g. 2°), best in stop-and-go.
+
+Not built: applying ψ only when it is significant (e.g. |ψ| > 3σ) would avoid the reshuffle, but it is a
+heuristic switch.
 
 ## Limits
 
@@ -133,3 +152,5 @@ when it is significant, e.g. |ψ| > 3σ) would avoid the reshuffle, but it is a 
   prior and the leak in the tunnel's curves would go uncorrected (the lateral-channel measurement of
   [yaw_study.md](yaw_study.md) finding 4 would help there; not built).
 * 20 dev seeds (60 fresh seeds for the realistic check only).
+* The realism of the injected yaw error is the open question (finding 1); settling it needs the holder
+  shift (R11), which the frozen simulator does not have.

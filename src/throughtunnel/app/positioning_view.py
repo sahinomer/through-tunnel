@@ -19,6 +19,8 @@ ESTIMATOR_COLORS = {
     "dr_calibrated": "#1e88e5",
     "dr_filtered": "#fb8c00",
     "route_imu": "#43a047",
+    "route_kf": "#00897b",
+    "route_kf_yaw": "#3949ab",
     "route_hold": "#8e24aa",
     "route_vspeed": "#455a64",  # reference (car speed): neutral, not a phone-only solution
 }

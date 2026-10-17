@@ -1,7 +1,7 @@
 {
- "commit": "d6f657d+dirty",
- "date": "2026-10-17 11:09 UTC",
- "label": "",
+ "commit": "74d17ed+dirty",
+ "date": "2026-10-17 12:01 UTC",
+ "label": "step 4.1: route_kf_yaw as a separate estimator",
  "seeds": [
   0,
   1,
@@ -40,9 +40,10 @@
   "dr_filtered",
   "route_imu",
   "route_kf",
+  "route_kf_yaw",
   "route_vspeed",
   "route_imu_stop",
   "route_imu_zupt"
  ],
- "runtime_s": 485
+ "runtime_s": 506
 }

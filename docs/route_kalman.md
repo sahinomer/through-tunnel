@@ -1,6 +1,6 @@
 # Route-constrained Kalman filter (step 4, first version)
 
-*Superseded in part (2026-10-17): `route_kf` now also estimates the yaw residual (step 4.1, D52, [route_kalman_yaw.md](route_kalman_yaw.md)). The first version below is reproducible with `yaw_state = False`, `turn_noise = 1`.*
+*Update (2026-10-17): `route_kf` is unchanged. A variant with the yaw residual as a 4th state is the separate estimator `route_kf_yaw` (step 4.1, D52, [route_kalman_yaw.md](route_kalman_yaw.md)).*
 
 Step 4 of [estimator_plan.md](estimator_plan.md), decision D51 (2026-10-16). A new phone-only estimator
 `route_kf` next to `route_imu`, with the scope the user agreed:

@@ -1,6 +1,6 @@
 {
- "commit": "d6f657d+dirty",
- "date": "2026-10-17 11:20 UTC",
+ "commit": "74d17ed+dirty",
+ "date": "2026-10-17 12:15 UTC",
  "label": "",
  "seeds": [
   0,
@@ -45,10 +45,11 @@
   "dr_filtered",
   "route_imu",
   "route_kf",
+  "route_kf_yaw",
   "route_vspeed",
   "route_imu_stop",
   "route_imu_zupt"
  ],
  "dev": true,
- "runtime_s": 1145
+ "runtime_s": 782
 }

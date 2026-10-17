@@ -1,6 +1,6 @@
 # Benchmark configuration
 
-The settings behind `runs.csv` in this directory (commit `d6f657d+dirty`). 8 scenarios × 20 runs. Seed rule: run k: scenario seed 1000 + k; IMU, GPS and traffic seed k. The complete effective configuration of every scenario is in `config.json`.
+The settings behind `runs.csv` in this directory (commit `74d17ed+dirty`). 8 scenarios × 20 runs. Seed rule: run k: scenario seed 1000 + k; IMU, GPS and traffic seed k. The complete effective configuration of every scenario is in `config.json`.
 
 ## Phone IMU
 

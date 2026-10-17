@@ -1,19 +1,25 @@
-"""Route-constrained Kalman filter (D51, step 4; yaw state D52, step 4.1 of estimator_plan.md).
+"""Route-constrained Kalman filters (estimator_plan.md): ``route_kf`` (D51, step 4) and ``route_kf_yaw`` (D52,
+step 4.1), two estimators on one implementation.
 
 Phone-only. The same information as ``route_imu`` (GPS + IMU alignment stage, route map, map grade,
 portal freeze), but the fixed 5 s speed blend and the unquestioned calibration are replaced by a
 filter with the state
 
     x = [d, v, b, ψ]    d: distance along the route [m], v: speed [m/s], b: forward offset [m/s^2],
-                        ψ: yaw residual of the calibrated axes [rad]
+                        ψ: yaw residual of the calibrated axes [rad] (``route_kf_yaw`` only)
 
 * Prediction, every IMU sample: the grade-compensated forward specific force a, minus b and minus the
   yaw leak ψ·f_lat (f_lat: the measured lateral channel), is integrated (d += v·dt + ½·â·dt²,
   v += â·dt, â = a − b − ψ·f_lat). The offset b is what the calibration left in the forward channel
-  (pitch residual, bias, drift): a random walk. ψ is the calibration's yaw error: in turns it leaks
-  lateral acceleration into the forward channel (P6). It is observable where f_lat varies, i.e. on curves
-  with GPS speed; without it, b absorbed the leak of the approach curves (yaw_study.md). A slow random
-  walk (the phone may shift in its holder).
+  (pitch residual, bias, drift): a random walk.
+* ``route_kf`` keeps ψ at 0. A yaw residual leaks lateral acceleration into the forward channel in turns
+  (P6); this filter cannot separate it from b and widens the process noise in turns instead (nominal
+  0.5° yaw residual). With a calibration yaw error, b absorbs the leak of the approach curves
+  (yaw_study.md).
+* ``route_kf_yaw`` estimates ψ: observable where f_lat varies, i.e. on curves with GPS speed; a slow
+  random walk (the phone may shift in its holder), carried into the tunnel. Robust to a calibration yaw
+  error, but no better with realistic sensors (it learns from the same GPS data as the calibration's yaw
+  fit; route_kalman_yaw.md).
 * Updates, every GPS fix: the fix projected onto the route (d) and the GPS speed (v), each weighted by the
   accuracy the phone reports (solution 1c). Position jumps beyond 4σ are rejected (multipath), at most 3
   fixes in a row. The speed is not gated: a gate there rejected exactly the updates that should correct a
@@ -57,7 +63,7 @@ OFFSET_PSD = (0.05e-3 * STANDARD_GRAVITY) ** 2  # [(m/s^2)^2/s]: random walk of 
 OFFSET_SIGMA0 = 1e-3 * STANDARD_GRAVITY  # [m/s^2]: initial offset uncertainty
 YAW_SIGMA0 = math.radians(3.0)  # [rad]: initial yaw uncertainty
 YAW_PSD = math.radians(0.01) ** 2  # [rad^2/s]: random walk of the yaw residual
-YAW_SIGMA = math.radians(0.5)  # turn noise of the first version (``turn_noise``; comparison only)
+YAW_SIGMA = math.radians(0.5)  # nominal yaw residual behind ``route_kf``'s turn noise
 GATE_SIGMA = 4.0  # position jumps beyond this many σ are rejected (multipath) ...
 MAX_REJECTED_IN_ROW = 3  # ... but never more than this many fixes in a row (no lock-out)
 MIN_POSITION_SIGMA_M = 1.0
@@ -66,13 +72,11 @@ MIN_SPEED_SIGMA_MPS = 0.05
 
 class RouteKalman(RouteImuDeadReckoning):
     name = "route_kf"
-    label = "Route + IMU Kalman filter (distance, speed, offset, yaw)"
-    # 1: the first version's turn noise (lateral acceleration × a nominal 0.5° yaw residual) on top of the
-    # yaw state; 0 (default): the yaw state alone carries the turn uncertainty (comparison)
-    turn_noise = 0.0
-    # False: ψ fixed at 0 (no prior, no random walk, re-solve yaw shifts ignored). With turn_noise = 1 this is
-    # exactly the first version (D51), bit for bit (comparison)
-    yaw_state = True
+    label = "Route + IMU Kalman filter (distance, speed, offset)"
+    # Turn noise: process noise from lateral acceleration × a nominal 0.5° yaw residual (1), or none (0)
+    turn_noise = 1.0
+    # False: ψ fixed at 0 (no prior, no random walk, re-solve yaw shifts ignored)
+    yaw_state = False
 
     def __init__(self, route: RouteMap) -> None:
         super().__init__(route)
@@ -176,7 +180,9 @@ class RouteKalman(RouteImuDeadReckoning):
         v_new = self._v + a * dt
         self._d = min(self._d + 0.5 * (self._v + max(v_new, 0.0)) * dt, self.route.length_m)
         self._v = max(v_new, 0.0)
-        leak = self.turn_noise * YAW_SIGMA * self._v * imu.gyro[2]  # first version's turn noise (comparison)
+        # While turning, a yaw residual leaks lateral acceleration (v·ω) into the forward channel. Without a
+        # yaw state the filter cannot separate it from b, so it widens the process noise instead of blaming b.
+        leak = self.turn_noise * YAW_SIGMA * self._v * imu.gyro[2]
         self._predict_covariance(dt, f_lat, leak * leak * dt)
 
     def _predict_covariance(self, dt: float, f_lat: float, extra_q: float = 0.0) -> None:
@@ -220,3 +226,13 @@ class RouteKalman(RouteImuDeadReckoning):
             route_distance=est.route_distance,
             position_std_m=math.sqrt(max(self._p[0][0], 0.0)),
         )
+
+
+class RouteKalmanYaw(RouteKalman):
+    """``route_kf`` + the yaw residual ψ as a 4th state (D52, step 4.1). The yaw state carries the turn
+    uncertainty, so there is no separate turn noise."""
+
+    name = "route_kf_yaw"
+    label = "Route + IMU Kalman filter + yaw (distance, speed, offset, yaw)"
+    turn_noise = 0.0
+    yaw_state = True

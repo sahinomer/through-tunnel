@@ -18,7 +18,7 @@ from throughtunnel.positioning.route_constrained import (
     RouteSpeedHold,
     RouteVehicleSpeed,
 )
-from throughtunnel.positioning.route_kalman import RouteKalman
+from throughtunnel.positioning.route_kalman import RouteKalman, RouteKalmanYaw
 from throughtunnel.positioning.runner import EstimateTrack, align_imu, run_estimator, run_estimators
 
 # Registry used by the UI and experiments: name -> estimator class (constructed with the route map).
@@ -31,6 +31,7 @@ ESTIMATORS: dict[str, type[Estimator]] = {
         FilteredDeadReckoning,
         RouteImuDeadReckoning,
         RouteKalman,
+        RouteKalmanYaw,
         RouteSpeedHold,
         RouteVehicleSpeed,
         RouteImuStandstill,

@@ -1,5 +1,6 @@
-"""Route-constrained Kalman filter (D51): phone-only, tracks the forward offset across re-solves of the
-calibration, estimates a constant offset from the GPS speed, and reports a growing uncertainty."""
+"""Route-constrained Kalman filters: ``route_kf`` (D51) and ``route_kf_yaw`` (D52). Phone-only; they track
+the forward offset (and the yaw) across re-solves of the calibration, estimate a constant offset (a
+calibration yaw error) from the GPS speed, and report a growing uncertainty."""
 
 import numpy as np
 import pytest
@@ -8,7 +9,7 @@ from throughtunnel.evaluation.error_sources import BY_KEY, run_config
 from throughtunnel.geodesy import normal_gravity
 from throughtunnel.positioning import MAIN_ESTIMATORS, align_imu, run_estimator
 from throughtunnel.positioning.alignment import GpsImuAlignment
-from throughtunnel.positioning.route_kalman import RouteKalman
+from throughtunnel.positioning.route_kalman import RouteKalman, RouteKalmanYaw
 from throughtunnel.positioning.runner import replay
 from throughtunnel.scenario import run_scenario, with_calibration
 from throughtunnel.sensors.errors import MG
@@ -21,8 +22,9 @@ def realistic():
 
 
 def test_registered_as_phone_only():
-    assert "route_kf" in MAIN_ESTIMATORS
-    assert not RouteKalman.uses_standstill and not RouteKalman.uses_vehicle_speed
+    for cls in (RouteKalman, RouteKalmanYaw):
+        assert MAIN_ESTIMATORS[cls.name] is cls
+        assert not cls.uses_standstill and not cls.uses_vehicle_speed
 
 
 def test_offset_shift_reports_how_a_re_solve_moves_the_forward_offset(realistic):
@@ -70,15 +72,15 @@ def test_yaw_shift_reports_how_a_re_solve_turns_the_forward_axis(realistic):
 
 
 def test_a_calibration_yaw_error_is_estimated(realistic):
-    """A 2° yaw residual leaks lateral acceleration into the forward channel on the approach curves; the
-    yaw state must find it from the GPS speed (step 4.1), here on top of the calibration's natural
+    """A 2° yaw residual leaks lateral acceleration into the forward channel on the approach curves;
+    route_kf_yaw must find it from the GPS speed (step 4.1), here on top of the calibration's natural
     residual (realistic sensors)."""
     yaw_only = CalibrationErrorConfig(enabled=True, pitch_deg=0.0, yaw_deg=2.0, roll_deg=0.0)
     res = with_calibration(realistic, yaw_only)
     obs = res.observations()
     stage = GpsImuAlignment(obs.route, res.config.calibration.rotation_error())
     stream = align_imu(stage, obs)
-    kf = RouteKalman(obs.route)
+    kf = RouteKalmanYaw(obs.route)
     seen = {}
     orig = kf.on_imu
 
@@ -120,15 +122,14 @@ def test_a_constant_calibration_offset_is_estimated(realistic):
     assert abs(seen["b"] / MG - actual) < 0.5 * abs(actual)  # most of it found (here ~2/3: yaw leak, noise)
 
 
-def test_without_the_yaw_state_the_first_version_is_reproduced():
-    """yaw_state = False with the first version's turn noise is D51 bit for bit (error at C of the
-    milestone_step4 error-source run: realistic, free flow, seed 0)."""
+def test_route_kf_is_still_the_first_version():
+    """The 4-state implementation with ψ off is D51 bit for bit (error at C of the milestone_step4
+    error-source run: realistic, free flow, seed 0)."""
     from throughtunnel.evaluation.metrics import evaluate_track
-    from throughtunnel.evaluation.route_kf_check import FirstVersion
 
     res = run_scenario(run_config(BY_KEY["realistic"], 0, "free"))
     obs = res.observations()
-    ev = evaluate_track(run_estimator(FirstVersion(obs.route), obs), res)
+    ev = evaluate_track(run_estimator(RouteKalman(obs.route), obs), res)
     assert ev.summary["exit_total_m"] == pytest.approx(45.100051, abs=1e-5)
 
 

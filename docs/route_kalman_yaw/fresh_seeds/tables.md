@@ -1,4 +1,4 @@
-# route_kf on fresh seeds: first version vs. yaw state
+# Route Kalman filters on fresh seeds: route_kf (first) vs. route_kf_yaw (yaw)
 
 Commit `d6f657d+dirty`, 2026-10-17 11:26 UTC; seeds 20–79. Error at C, median (p90) [m], ✗ = gross errors (> 200 m). Paired: runs where the yaw state is worse / better / within 1 m (capped runs end at the same point).
 

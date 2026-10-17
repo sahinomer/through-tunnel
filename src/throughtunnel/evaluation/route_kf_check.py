@@ -1,10 +1,10 @@
-"""Paired check of a ``route_kf`` change on fresh seeds (step 4.1): first version vs. current filter.
+"""Paired check of the two route Kalman filters on fresh seeds (step 4.1): ``route_kf`` vs. ``route_kf_yaw``.
 
 The development subsets (D47) use seeds 0–19, and a stop-and-go median over 20 runs is fragile: the v ≥ 0
-clamp (P5) makes the outcome depend on the sign of a small offset error. This reruns one error-source
-condition on another seed range with two variants of ``route_kf`` on identical observations:
-* ``first``: ``yaw_state = False``, ``turn_noise = 1``: the first version (D51), bit for bit;
-* ``yaw``: the current filter (yaw state, D52).
+clamp (P5) makes the outcome depend on the sign of a small offset error. This reruns error-source
+conditions on another seed range with both filters on identical observations:
+* ``first``: ``route_kf`` (D51);
+* ``yaw``: ``route_kf_yaw`` (yaw state, D52).
 
     uv run python -m throughtunnel.evaluation.route_kf_check --out docs/route_kalman_yaw/fresh_seeds \
         --conditions realistic --first-seed 20 --seeds 60
@@ -27,19 +27,13 @@ from throughtunnel.evaluation.benchmark import _med_p90, git_commit, gross_error
 from throughtunnel.evaluation.experiment import markdown_table
 from throughtunnel.evaluation.metrics import evaluate_track
 from throughtunnel.positioning.alignment import GpsImuAlignment
-from throughtunnel.positioning.route_kalman import RouteKalman
+from throughtunnel.positioning.route_kalman import RouteKalman, RouteKalmanYaw
 from throughtunnel.positioning.runner import align_imu, replay
 from throughtunnel.scenario import run_scenario
 
 TEXT = ("case", "condition", "traffic", "variant")
 
-
-class FirstVersion(RouteKalman):
-    yaw_state = False
-    turn_noise = 1.0
-
-
-VARIANTS = {"first": FirstVersion, "yaw": RouteKalman}
+VARIANTS = {"first": RouteKalman, "yaw": RouteKalmanYaw}
 
 
 def _job(args: tuple[str, str, list[int]]) -> list[dict]:
@@ -63,7 +57,7 @@ def _job(args: tuple[str, str, list[int]]) -> list[dict]:
 
 def tables_markdown(records: list[dict], meta: dict) -> str:
     out = [
-        "# route_kf on fresh seeds: first version vs. yaw state\n",
+        "# Route Kalman filters on fresh seeds: route_kf (first) vs. route_kf_yaw (yaw)\n",
         f"Commit `{meta['commit']}`, {meta['date']}; seeds {meta['seeds'][0]}–{meta['seeds'][-1]}. "
         "Error at C, median (p90) [m], ✗ = gross errors (> 200 m). Paired: runs where the yaw state is "
         "worse / better / within 1 m (capped runs end at the same point).\n",
