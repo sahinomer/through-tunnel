@@ -33,7 +33,7 @@ from throughtunnel.evaluation.benchmark import run_config as benchmark_run_confi
 from throughtunnel.evaluation.experiment import compare_estimators, markdown_table
 from throughtunnel.scenario import MapDataConfig, run_scenario, with_map_data
 
-ESTIMATORS = ("route_kf", "route_kf_yaw")
+ESTIMATORS = ("route_kf", "route_kf_yaw", "route_kf_map")  # default; --estimators to choose
 ES_CONDITIONS = ("floor", "realistic", "gps_speed", "acc_drift", "cal_pitch_0.1", "cal_yaw_2")
 BENCH_CASES = (("ladder_2km", "flat"), ("ladder_5km", "climb3"), ("ladder_5km", "underwater"))
 TRAFFIC = ("free", "stop_and_go")
@@ -41,7 +41,7 @@ CHECKPOINTS_KM = (0.5, 1.0, 2.0, 3.0, 4.0)
 TEXT = ("case", "source", "scenario", "traffic", "estimator")
 
 
-def _records(res, source: str, scenario: str, traffic: str, seed: int) -> list[dict]:
+def _records(res, source: str, scenario: str, traffic: str, seed: int, names: list[str]) -> list[dict]:
     sec, ev_gnss, motion = res.sections, res.gnss_events, res.motion
     points = {"announce": sec.announcement_t, "exit": sec.exit_t}
     for km in CHECKPOINTS_KM:
@@ -49,7 +49,7 @@ def _records(res, source: str, scenario: str, traffic: str, seed: int) -> list[d
         if s < sec.exit_s:
             points[f"{km:g}km"] = float(np.interp(s, motion.s, motion.t))
     out = []
-    cmp = compare_estimators(res, list(ESTIMATORS))
+    cmp = compare_estimators(res, names)
     for ev in cmp.evaluations:
         std = ev.position_std_m
         rec = {
@@ -69,8 +69,8 @@ def _records(res, source: str, scenario: str, traffic: str, seed: int) -> list[d
     return out
 
 
-def _job(args: tuple[str, str, str, str, list[int]]) -> list[dict]:
-    source, scenario, road, traffic, seeds = args
+def _job(args: tuple[str, str, str, str, list[int], list[str]]) -> list[dict]:
+    source, scenario, road, traffic, seeds, names = args
     out = []
     for seed in seeds:
         if source == "error_sources":
@@ -79,7 +79,8 @@ def _job(args: tuple[str, str, str, str, list[int]]) -> list[dict]:
             res = run_scenario(benchmark_run_config(Case(scenario, road, traffic), seed))
             res = with_map_data(res, MapDataConfig(road_grade=road != "flat"))
             scenario_key = f"{scenario}/{road}"
-        out += _records(res, source, scenario if source == "error_sources" else scenario_key, traffic, seed)
+        key = scenario if source == "error_sources" else scenario_key
+        out += _records(res, source, key, traffic, seed, names)
     print(f"{source}: {scenario}/{road}/{traffic}: {len(seeds)} runs", flush=True)
     return out
 
@@ -111,7 +112,7 @@ def tables_markdown(records: list[dict], meta: dict) -> str:
         "|err| / σ: medians [m].\n",
     ]
     cases = list(dict.fromkeys(r["case"] for r in records))
-    for name in ESTIMATORS:
+    for name in dict.fromkeys(r["estimator"] for r in records):
         out.append(f"## {name}\n")
         out.append("### At the announcement point (true time) and at C\n")
         rows = []
@@ -146,6 +147,7 @@ def main() -> None:
     parser.add_argument("--workers", type=int, default=3)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--from-csv", action="store_true")
+    parser.add_argument("--estimators", default=",".join(ESTIMATORS), help="comma-separated")
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     t0 = time.perf_counter()
@@ -154,8 +156,9 @@ def main() -> None:
         meta = json.loads((args.out / "meta.json").read_text(encoding="utf-8"))
     else:
         seeds = list(range(args.seeds))
-        jobs = [("error_sources", c, "flat", t, seeds) for c in ES_CONDITIONS for t in TRAFFIC]
-        jobs += [("benchmark", g, road, t, seeds) for g, road in BENCH_CASES for t in TRAFFIC]
+        names = args.estimators.split(",")
+        jobs = [("error_sources", c, "flat", t, seeds, names) for c in ES_CONDITIONS for t in TRAFFIC]
+        jobs += [("benchmark", g, road, t, seeds, names) for g, road in BENCH_CASES for t in TRAFFIC]
         with ProcessPoolExecutor(max_workers=args.workers) as pool:
             records = [r for recs in pool.map(_job, jobs) for r in recs]
         meta = {
@@ -164,7 +167,7 @@ def main() -> None:
             "seeds": seeds,
             "error_sources": list(ES_CONDITIONS),
             "benchmark": [f"{g}/{road}" for g, road in BENCH_CASES],
-            "estimators": list(ESTIMATORS),
+            "estimators": names,
             "runtime_s": round(time.perf_counter() - t0),
         }
         write_runs(records, args.out / "runs.csv")
