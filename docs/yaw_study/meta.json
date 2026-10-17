@@ -1,0 +1,44 @@
+{
+ "commit": "c9eb9ec",
+ "date": "2026-10-17 10:44 UTC",
+ "seeds": [
+  0,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19
+ ],
+ "error_sources": [
+  "floor",
+  "cal_pitch_0.1",
+  "cal_yaw_2",
+  "hard",
+  "gps_speed",
+  "realistic"
+ ],
+ "benchmark": [
+  "ladder_2km/flat",
+  "ladder_3km/flat",
+  "ladder_5km/flat"
+ ],
+ "runtime_s": 913,
+ "check": [
+  "error_sources: 480 runs, max difference 0.0e+00 m",
+  "benchmark: 240 runs, max difference 0.0e+00 m"
+ ]
+}

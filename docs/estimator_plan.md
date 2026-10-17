@@ -4,7 +4,8 @@ State point at the end of the session of 2026-10-15, to resume the estimator pha
 2026-10-16:** the order is agreed; steps 0 (handover diagnostic), 1 (portal freeze, D46), 2 (residual diagnostic), 2.1
 (calibration fixes, D48), 3.1 (standstill oracle, D49), 3.2 (oracle sensitivity, D50) and 4 (Kalman filter, first version,
 D51) are done,
-see "Order" below. User's working mode: discuss first, one step at a time, compare every change
+see "Order" below. **Update 2026-10-17:** order after step 4 agreed with the user: 4.1 (yaw) → 5 (map features) → 3d
+(announcements); the 4.1 diagnostic is done ([yaw_study.md](yaw_study.md)). User's working mode: discuss first, one step at a time, compare every change
 against the benchmarks.
 
 ## Where we are
@@ -96,8 +97,8 @@ calibration removes them).
 
 | Solution | How | Expected gain | Effort | Catch |
 |---|---|---|---|---|
-| 6a. Predict the leak from the map | Lateral acceleration = v²·curvature is known from the map: subtract its leak into the forward channel | most of the 57–80 m on curves | small | Route estimators only |
-| 6b. Estimate yaw online | Measured lateral channel vs. predicted v²·curvature shows the yaw error, also inside the tunnel | same, adaptive | medium | Needs curves |
+| 6a. Predict the leak from the map | Lateral acceleration = v²·curvature is known from the map: subtract its leak into the forward channel | most of the 57–80 m on curves | small | Route estimators only; needs the yaw error itself (the leak is ψ·v²κ), so it comes with 6b |
+| 6b. Estimate yaw online | Two routes (corrected 2026-10-17, [yaw_study.md](yaw_study.md)): (1) the forward channel against GPS speed separates ψ·f_lat from b on approach curves; (2) the lateral channel against v²·curvature reads −ψ·f_x whenever the car accelerates or brakes, also on straights inside the tunnel | same, adaptive | medium | (1) needs approach curves; (2) needs a lateral bias state, road bank unmodelled |
 
 ### Beyond the sensor errors (first benchmark)
 
@@ -106,6 +107,16 @@ calibration removes them).
 * **The announcement:** uncertainty-aware timing becomes possible once a filter gives a covariance
   (3d/4c). 85–89 % of the bad announcements come from gross position errors, so better positions fix
   most of them.
+* **Using the tunnel length (discussed 2026-10-16, for 3d).** The map knows B and C.
+  * *Predicting the uncertainty before B (most valuable):* tunnel length and current speed give the
+    outage time; with the filter's model, the uncertainty at the announcement point can be predicted
+    before entering. A long tunnel in slow traffic then gets an earlier, hedged instruction instead of a
+    precise but possibly wrong one. Needs a consistency check of `position_std_m` first.
+  * *Hold at C while GPS is absent:* no fix yet means the car is very likely still inside, so the estimate
+    could be held at C (plus a reacquisition margin) instead of running toward D. Prevents the capped
+    runs, but flatters "error at C" for free; judge it by announcement timing and the maximum error
+    inside the tunnel. Does not fix an early announcement.
+  * The length says nothing about the position *inside* the tunnel; that is step 5.
 
 ## Order (agreed with the user on 2026-10-16)
 
@@ -160,6 +171,18 @@ evening used letters for steps: "step 2b" = 2.1, "step 3a" = 3.1, "step 3b" = 3.
    all scenarios with map grade: Route + IMU 39 → 31 m median, filter 30 m; gross errors 21 % → 15 %. Flagged:
    calibration yaw 2° in stop-and-go, filter 204 m vs. Route + IMU 96 m (yaw leak). The home for 2b, 3d,
    4c and the 3a/3b updates; honest uncertainty for the announcement.
+   **4.1. Yaw in the filter (6b).** *Diagnostic done (2026-10-17, [yaw_study.md](yaw_study.md)), with a
+   counterfactual that removes the true yaw leak:*
+   * Confirmed: with a 2° calibration yaw error, b absorbs the approach curves' leak (0.37 mg). Without
+     the leak, stop-and-go 204 → 11 m and free flow 65 → 1 m; `hard` roughly halves. All 20 runs improve.
+   * Refuted: the natural yaw residual (0.3° median) does not cause the realistic results or the free-flow
+     tails at 2–3 km. Removing it is neutral (it partly compensates the GPS noise it was fitted to).
+     Realistic free flow is limited by learning b from the approach (true offset 0.43 mg rms, filter
+     error 0.35 mg); that is for step 5.
+   * Next (proposed, to agree): ψ as a 4th filter state, observed through the forward channel on the
+     approach and carried into the tunnel; the lateral-channel measurement later only if needed. Expected:
+     large gain with a calibration yaw error, neutral on the benchmark. Add `cal_yaw_2`, `hard` and
+     `cal_pitch_0.1` to the error-source dev subset (D47), or the dev run cannot show the target.
 5. **Map-feature fixes (3b) and the yaw-leak correction (6a).** The only way to bound long free-flow
    tunnels without stops, once the filter exists.
 
