@@ -234,6 +234,13 @@ evening used letters for steps: "step 2b" = 2.1, "step 3a" = 3.1, "step 3b" = 3.
    * **Flag from 6.2: the Eisenhower approach.** `route_kf_yaw` learns ψ −7° to −14° there (truth ~0°) and
      fails (250 m median, 12/20 gross, free flow); `route_kf`'s offset is 0.7–3 mg off (ladder ~0.3 mg).
      Grade and sideslip ruled out. Proposed next: a diagnostic of that approach (both filters).
+   * **Diagnosed (2026-10-17, [calibration_start_study.md](calibration_start_study.md)):** the filters start
+     learning when the calibration is first solved, with priors for a *converged* calibration (1 mg, 3°).
+     Eisenhower's approach is short and weakly excited: the calibration is ready only 42 s before loss and its
+     first solutions are off by up to 37 mg / 26°. Wide priors (10 mg / 10°, counterfactual): Eisenhower
+     `route_kf` 75 → 43 m (free), 276 → 133 m (stop-and-go); `route_kf_yaw` 250 → 86 m; elsewhere b unchanged,
+     stop-and-go medians reshuffled (clamp). Fix options to agree: wider priors (simplest), start after the
+     calibration settles, or a calibration covariance. Proposed: Eisenhower in the dev scenarios.
 
 Each step is checked against both baselines with `--compare` before the next, on the development
 subsets (`--dev`, D47); the full benchmarks are rerun at milestones.
