@@ -24,6 +24,7 @@ baseline on exactly the same runs:
 | `baseline/` | `36904cb` (2026-10-15) | the 5 phone-only estimators before any estimator work, + the reference | [tables](baseline/tables.md) · [configuration](baseline/config.md) |
 | `error_sources/` (D45) | `e69543f` (2026-10-15) | the same estimators; one error source at a time on the 5 km flat tunnel | [tables](error_sources/tables.md) · [configuration](error_sources/config.md) |
 | `milestone_step4/` | `00ab89b` (2026-10-16) | both benchmarks in full after steps 1–4 (portal freeze, calibration fixes, standstill oracle ‡, Kalman filter `route_kf`) | benchmark: [tables](milestone_step4/benchmark/tables.md) · [vs. baseline](milestone_step4/benchmark/compare.md) · [configuration](milestone_step4/benchmark/config.md); error sources: [tables](milestone_step4/error_sources/tables.md) · [vs. baseline](milestone_step4/error_sources/compare.md) |
+| `milestone_step5/` | `0b4ee46` (2026-10-17) | both benchmarks in full after steps 4.1–6.2 and D54 (yaw state `route_kf_yaw`, uncertainty-aware announcement, wider filter priors, map curve fixes `route_kf_map`) + the σ consistency check | benchmark: [tables](milestone_step5/benchmark/tables.md) · [vs. milestone_step4](milestone_step5/benchmark/compare.md) · [configuration](milestone_step5/benchmark/config.md); error sources: [tables](milestone_step5/error_sources/tables.md) · [vs. milestone_step4](milestone_step5/error_sources/compare.md); [σ consistency](milestone_step5/uncertainty/tables.md) |
 
 Each baseline directory holds, next to its results, the configuration it ran with: `config.md` (readable,
 including where the setup is optimistic) and `config.json` (the complete effective configuration of every
@@ -185,3 +186,61 @@ What the milestone shows:
 * Still optimistic in this setup: an exact map, the reported speed accuracy equal to the injected noise
   (flatters the filter's weighting), and no vibration.
 
+
+## Milestone after step 5 (2026-10-17, `milestone_step5/`)
+
+**Reference for later work** (iterative comparison policy). Both benchmarks in full (48 scenarios / 18
+conditions, 20 seeds, every estimator) at `0b4ee46`, compared with `milestone_step4`, plus the σ consistency
+check (step 6.1) for all three Kalman filters. New since step 4: `route_kf_yaw` (D52), the uncertainty-aware
+announcement (D53), wider filter priors (D54) and `route_kf_map` with map curve fixes (D55). `compare.md`
+flags one regression: `route_kf`, flat stop-and-go, 61 → 70 m median (D54's prior; the clamp's sign lottery,
+not significant on paired runs).
+
+**All 48 scenarios, map grade on**, error at C median (p90), share of runs:
+
+| estimator | error at C [m] | gross error | announcement off (> 15 s) | announcement good (±3 s) |
+|---|---|---|---|---|
+| Route + filtered IMU speed (step 4: 31 (413), 16 %) | 31 (413) | 16 % | 16 % | 65 % |
+| Route + IMU Kalman filter `route_kf` (step 4: 30 (325), 15 %) | 29 (312) | 14 % | 15 % | 67 % |
+| Kalman filter + yaw `route_kf_yaw` | 33 (387) | 17 % | 15 % | 63 % |
+| **Kalman filter + map curves `route_kf_map`** | **8 (51)** | **3 %** | **3 %** | **89 %** |
+| standstill oracle: speed reset + offset ‡ | 17 (87) | 3 % | 4 % | 78 % |
+| Route + vehicle speed † | 5 (14) | 0 % | 0 % | 99 % |
+
+**Selected scenarios** (error at C, median ✗ gross errors), `route_kf` / `route_kf_map`:
+
+| scenario | free flow | stop-and-go |
+|---|---|---|
+| 5 km ladder, flat | 80 ✗4 / **12** | 241 ✗13 / **30 ✗1** |
+| 5 km ladder, underwater | 40 / **11** | 322 ✗15 / **78 ✗5** |
+| Seattle SR99, flat | 37 / **10** | 132 ✗8 / **21** |
+| Eisenhower, flat (nearly straight) | 43 / **22** | 133 ✗7 / **20 ✗8** |
+| Eisenhower, +3 % climb | 42 / **16** | 145 ✗8 / **77 ✗8** |
+
+**Error sources** (5 km in, median ✗ gross), `route_kf` / `route_kf_yaw` / `route_kf_map`:
+
+| condition | free flow | stop-and-go |
+|---|---|---|
+| realistic | 80 ✗4 / 84 ✗4 / **12** | 241 ✗13 / 299 ✗12 / **30 ✗1** |
+| accelerometer bias drift | 92 ✗2 / 92 ✗2 / **9** | 306 ✗14 / 308 ✗13 / **27** |
+| calibration pitch 0.5° | 0 / 0 / 2 | 2 / 3 / 8 |
+| calibration yaw 2° | 64 / **0** / 49 | 203 ✗10 / **2** / 20 |
+| hard | 361 ✗17 / 157 ✗7 / **45** | 782 ✗20 / 399 ✗16 / **42 ✗11** |
+
+**σ consistency of `route_kf_map`** ([uncertainty/tables.md](milestone_step5/uncertainty/tables.md)): honest in free flow
+(realistic 5 km: 75 % / 95 % within ±1σ / ±2σ), conservative in stop-and-go but far less than `route_kf` (σ 54 m
+vs. 1.7 km at the announcement point). Overconfident with a calibration yaw error (no yaw state: error 35 m vs.
+σ 13 m) and in a few underwater stop-and-go runs.
+
+What the milestone shows:
+* **Curves inside the tunnel are worth more than anything else phone-only.** `route_kf_map` brings all
+  scenarios to 8 m median and 3 % gross errors, the level of the standstill oracle without the oracle, and
+  89 % good announcements. Stop-and-go is solved in curved tunnels.
+* **This result is flattered by the benchmark** (D55, limitations.md): the map is exact, every ladder tunnel has
+  two S-arcs, and the car never changes lanes. Eisenhower, the one nearly straight tunnel, keeps its
+  stop-and-go gross errors (✗8): there the curve fixes have little to work with.
+* **What remains:** nearly straight tunnels in stop-and-go (only standstill information would help; oracle:
+  24 m), the underwater V in stop-and-go (map-grade feedback), and a calibration yaw error for `route_kf_map`
+  (no yaw state; `route_kf_yaw` handles it, but combining both was tied under realistic conditions and is
+  not registered).
+* The reference († car speed) stays far ahead: 5 m median, 0 % gross errors.

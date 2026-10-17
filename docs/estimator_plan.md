@@ -6,7 +6,11 @@ State point at the end of the session of 2026-10-15, to resume the estimator pha
 D51) are done,
 see "Order" below. **Update 2026-10-17:** order after step 4 agreed with the user: 4.1 (yaw) → 5 (map features) → 3d
 (announcements). Step 4.1 is done ([yaw_study.md](yaw_study.md), [route_kalman_yaw.md](route_kalman_yaw.md), D52):
-`route_kf_yaw` next to `route_kf`. Step 5 is deprioritised but kept as a viable solution, so step 6 (3d) is next. User's working mode: discuss first, one step at a time, compare every change
+`route_kf_yaw` next to `route_kf`. Step 5 is deprioritised but kept as a viable solution, so step 6 (3d) is next.
+**Update 2026-10-17 (evening):** steps 6.1, 6.2, the Eisenhower fix (D54) and step 5 (`route_kf_map`, D55) are
+done; **milestone after step 5 rerun** (`0b4ee46`, [benchmark/README.md](benchmark/README.md#milestone-after-step-5-2026-10-17-milestone_step5)):
+all scenarios with map grade, `route_kf_map` 8 m median, 3 % gross errors, 89 % good announcements (flattered:
+exact map, curved ladder tunnels). Next: the write-up. User's working mode: discuss first, one step at a time, compare every change
 against the benchmarks.
 
 ## Where we are
@@ -280,13 +284,13 @@ subsets (`--dev`, D47); the full benchmarks are rerun at milestones.
 
 1. Read this file and [benchmark/README.md](benchmark/README.md) (section "Milestone after step 4").
 2. **Comparisons are iterative (user, 2026-10-16):** each step is compared with the *previous* reference,
-   not with the first baseline. The current reference is `docs/benchmark/milestone_step4/` (benchmark and
-   error sources, commit `00ab89b`). Raw per-run results (`runs.csv` + `meta.json` + configuration) are
+   not with the first baseline. The current reference is `docs/benchmark/milestone_step5/` (benchmark, error
+   sources and σ consistency, commit `0b4ee46`, 2026-10-17); before it `milestone_step4/` (`00ab89b`). Raw per-run results (`runs.csv` + `meta.json` + configuration) are
    kept for every saved run, so any other comparison can be produced later with `--compare` / `--from-csv`.
 3. For each agreed step, discuss first, then:
    * implement;
    * run `uv run python -m throughtunnel.evaluation.benchmark --dev --out out/dev/<step> --compare
-     docs/benchmark/milestone_step4/benchmark`;
+     docs/benchmark/milestone_step5/benchmark`;
    * run `uv run python -m throughtunnel.evaluation.error_sources --dev --out out/dev/<step>_es --compare
-     docs/benchmark/milestone_step4/error_sources` (D47);
+     docs/benchmark/milestone_step5/error_sources` (D47);
    * write up, commit, and stop for review.
