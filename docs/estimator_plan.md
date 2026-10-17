@@ -241,11 +241,23 @@ evening used letters for steps: "step 2b" = 2.1, "step 3a" = 3.1, "step 3b" = 3.
      `route_kf` 75 → 43 m (free), 276 → 133 m (stop-and-go); `route_kf_yaw` 250 → 86 m; elsewhere b unchanged,
      stop-and-go medians reshuffled (clamp). Fix options to agree: wider priors (simplest), start after the
      calibration settles, or a calibration covariance. Proposed: Eisenhower in the dev scenarios.
+   * **Fixed (2026-10-17, D54): wider priors (10 mg, 10°) in both filters; Eisenhower in the dev scenarios.**
+     `route_kf_yaw` better or neutral everywhere (Eisenhower 250 → 86 m, hard 204 → 157 m). `route_kf`:
+     Eisenhower 75 → 43 m (gross 2 → 0), but slightly worse in free flow on longer approaches (2–3 km:
+     +2–4 m, p 0.01–0.02) and clearly worse with a 2° yaw error (hard 255 → 361 m): the narrow prior had
+     shielded b from the yaw leak. Kept; refinement noted (b uncertainty growing with re-solve size).
 
 Each step is checked against both baselines with `--compare` before the next, on the development
 subsets (`--dev`, D47); the full benchmarks are rerun at milestones.
 
 ## Open items carried over
+
+* **Calibration duration: longer is better (user, 2026-10-17).** The calibration start diagnostic showed the
+  shortest approach (Eisenhower, calibration ready 42 s before GPS loss) gives the worst offset; the longer
+  ones (63–86 s) are fine. Design consequences: calibrate continuously over the whole drive, not only the
+  approach (solution 1d), and treat a just-solved calibration as uncertain (D54). For the write-up: our
+  drives start only ~1–2 min before the tunnel, so the approach calibration is pessimistic compared with
+  real drives (limitations.md), as long as the phone stays put in its holder.
 
 * The unexplained 42 m residual with ideal sensors in long outages ([map_grade_study.md](map_grade_study.md),
   open items): now step 2, together with the 12–13 m stop-and-go floor.

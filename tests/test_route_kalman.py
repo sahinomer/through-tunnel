@@ -122,14 +122,18 @@ def test_a_constant_calibration_offset_is_estimated(realistic):
     assert abs(seen["b"] / MG - actual) < 0.5 * abs(actual)  # most of it found (here ~2/3: yaw leak, noise)
 
 
-def test_route_kf_is_still_the_first_version():
-    """The 4-state implementation with ψ off is D51 bit for bit (error at C of the milestone_step4
+def test_the_first_version_is_reproducible():
+    """route_kf with its first prior (1 mg, before D54) is D51 bit for bit (error at C of the milestone_step4
     error-source run: realistic, free flow, seed 0)."""
     from throughtunnel.evaluation.metrics import evaluate_track
+    from throughtunnel.geodesy import STANDARD_GRAVITY
+
+    class FirstVersion(RouteKalman):
+        offset_sigma0 = 1e-3 * STANDARD_GRAVITY
 
     res = run_scenario(run_config(BY_KEY["realistic"], 0, "free"))
     obs = res.observations()
-    ev = evaluate_track(run_estimator(RouteKalman(obs.route), obs), res)
+    ev = evaluate_track(run_estimator(FirstVersion(obs.route), obs), res)
     assert ev.summary["exit_total_m"] == pytest.approx(45.100051, abs=1e-5)
 
 

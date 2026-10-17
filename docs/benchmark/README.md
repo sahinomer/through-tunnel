@@ -11,8 +11,8 @@ baseline on exactly the same runs:
     uv run python -m throughtunnel.evaluation.benchmark --dev --out out/dev/<step> --compare docs/benchmark/baseline
     uv run python -m throughtunnel.evaluation.error_sources --dev --out out/dev/<step>_es --compare docs/benchmark/error_sources
 
-* `--dev` (benchmark): the 0.5 and 5 km flat tunnels, the 5 km climb and underwater tunnels, both traffic
-  cases; map grade on only; the calibrated estimators, the reference and (since D49) the two standstill
+* `--dev` (benchmark): the 0.5 and 5 km flat tunnels, the 5 km climb and underwater tunnels, and (since D54)
+  the Eisenhower tunnel on a flat road, both traffic cases; map grade on only; the calibrated estimators, the reference and (since D49) the two standstill
   oracle variants; 20 seeds.
 * `--dev` (error sources): floor, GPS speed noise, degradation (normal, harsh), realistic; since D52 also
   calibration pitch 0.1°, calibration yaw 2° and hard.

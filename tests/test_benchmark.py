@@ -106,6 +106,6 @@ def test_development_subset_is_part_of_the_full_set():
     from throughtunnel.evaluation.error_sources import BY_KEY, DEV_CONDITIONS
 
     keys = {c.key for c in cases()}
-    assert set(DEV_CASES) <= keys and len(DEV_CASES) == 8
+    assert set(DEV_CASES) <= keys and len(DEV_CASES) == 10  # 4 ladder roads + Eisenhower (D54), both traffic
     assert set(DEV_ESTIMATORS) <= set(ESTIMATORS)
     assert set(DEV_CONDITIONS) <= set(BY_KEY)

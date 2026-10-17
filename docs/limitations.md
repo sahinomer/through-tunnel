@@ -78,3 +78,10 @@ methods.
   predictions), not against field recordings.
 * **One drive per preset in most studies.** 10–20 sensor seeds; the percentiles are indicative.
 * **Estimator tuning matches the simulated defaults** (PD6 tuning-mismatch experiments not run).
+* **Calibration time is short, and longer is better (user note, 2026-10-17).** Every simulated drive starts
+  only 67–106 s of GPS before the tunnel (Eisenhower 67 s, the ladder 83 s, Seattle 106 s), and the GPS + IMU
+  calibration is first solved 42–86 s before GPS loss. The shortest approach (Eisenhower) gave the worst start
+  and the worst offsets ([calibration_start_study.md](calibration_start_study.md)). A real drive usually has
+  minutes of GPS before a tunnel, so for the calibrated estimators the results are **pessimistic** here.
+  Caveat: a longer calibration only helps while the phone stays put in its holder (holder shift, R11, not
+  simulated) and while the bias does not drift away from it.

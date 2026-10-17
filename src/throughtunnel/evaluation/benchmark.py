@@ -99,7 +99,7 @@ DEV_CASES = tuple(
     f"ladder_{km}/{road}/{traffic}"
     for km, road in (("0.5km", "flat"), ("5km", "flat"), ("5km", "climb3"), ("5km", "underwater"))
     for traffic in ("free", "stop_and_go")
-)
+) + tuple(f"eisenhower_tunnel/flat/{traffic}" for traffic in ("free", "stop_and_go"))  # real geometry (D54)
 DEV_ESTIMATORS = (
     "dr_calibrated",
     "dr_filtered",

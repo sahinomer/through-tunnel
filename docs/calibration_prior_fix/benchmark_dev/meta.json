@@ -1,0 +1,51 @@
+{
+ "commit": "1b280f4+dirty",
+ "date": "2026-10-17 14:07 UTC",
+ "label": "D54: wider filter priors",
+ "seeds": [
+  0,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19
+ ],
+ "cases": [
+  "ladder_0.5km/flat/free",
+  "ladder_0.5km/flat/stop_and_go",
+  "ladder_5km/flat/free",
+  "ladder_5km/flat/stop_and_go",
+  "ladder_5km/climb3/free",
+  "ladder_5km/climb3/stop_and_go",
+  "ladder_5km/underwater/free",
+  "ladder_5km/underwater/stop_and_go",
+  "eisenhower_tunnel/flat/free",
+  "eisenhower_tunnel/flat/stop_and_go"
+ ],
+ "dev": true,
+ "estimators": [
+  "dr_calibrated",
+  "dr_filtered",
+  "route_imu",
+  "route_kf",
+  "route_kf_yaw",
+  "route_vspeed",
+  "route_imu_stop",
+  "route_imu_zupt"
+ ],
+ "runtime_s": 530
+}

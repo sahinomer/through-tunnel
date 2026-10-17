@@ -38,9 +38,11 @@ Tuning (PD6: nominal values of the estimator, never read from the scenario confi
   use the same order) plus a model-error term for what the forward channel gets wrong while driving (map
   grade errors and the like): together 0.005 m/s²/√Hz;
 * offset random walk 0.05 mg/√s (bias instability of ~0.5 mg over minutes);
-* initial offset uncertainty 1 mg (what a GPS-levelled calibration typically leaves);
-* initial yaw uncertainty 3° (a GPS-based mount calibration over a short approach), random walk
-  0.01°/√s (a phone settling in its holder: ~0.1° over a 2 min tunnel).
+* initial offset uncertainty 10 mg and yaw uncertainty 10° (D54): the filter starts when the calibration is
+  *first* solved, and a first solution from a short, weakly excited approach is far from converged
+  (Eisenhower: up to 37 mg / 26° off; calibration_start_study.md). D51/D52 used 1 mg / 3°, which describe a
+  converged calibration; ``offset_sigma0`` / ``yaw_sigma0`` reproduce them;
+* yaw random walk 0.01°/√s (a phone settling in its holder: ~0.1° over a 2 min tunnel).
 """
 
 from __future__ import annotations
@@ -60,8 +62,8 @@ from throughtunnel.positioning.route_constrained import (
 
 ACCEL_PSD = 0.005**2  # [(m/s^2)^2/Hz]: sensor noise (180 µg/√Hz) + model error while driving
 OFFSET_PSD = (0.05e-3 * STANDARD_GRAVITY) ** 2  # [(m/s^2)^2/s]: random walk of the forward offset
-OFFSET_SIGMA0 = 1e-3 * STANDARD_GRAVITY  # [m/s^2]: initial offset uncertainty
-YAW_SIGMA0 = math.radians(3.0)  # [rad]: initial yaw uncertainty
+OFFSET_SIGMA0 = 10e-3 * STANDARD_GRAVITY  # [m/s^2]: initial offset uncertainty (fresh calibration, D54)
+YAW_SIGMA0 = math.radians(10.0)  # [rad]: initial yaw uncertainty (fresh calibration, D54)
 YAW_PSD = math.radians(0.01) ** 2  # [rad^2/s]: random walk of the yaw residual
 YAW_SIGMA = math.radians(0.5)  # nominal yaw residual behind ``route_kf``'s turn noise
 GATE_SIGMA = 4.0  # position jumps beyond this many σ are rejected (multipath) ...
@@ -77,6 +79,9 @@ class RouteKalman(RouteImuDeadReckoning):
     turn_noise = 1.0
     # False: ψ fixed at 0 (no prior, no random walk, re-solve yaw shifts ignored)
     yaw_state = False
+    # Initial uncertainties of b and ψ (D54); 1 mg / 3° reproduce the first versions (D51, D52; comparison)
+    offset_sigma0 = OFFSET_SIGMA0
+    yaw_sigma0 = YAW_SIGMA0
 
     def __init__(self, route: RouteMap) -> None:
         super().__init__(route)
@@ -84,8 +89,8 @@ class RouteKalman(RouteImuDeadReckoning):
         self._psi = 0.0
         # covariance of (d, v, b, ψ), full 4 × 4, symmetric
         self._p = [[0.0] * 4 for _ in range(4)]
-        self._p[2][2] = OFFSET_SIGMA0**2
-        self._p[3][3] = YAW_SIGMA0**2 if self.yaw_state else 0.0
+        self._p[2][2] = self.offset_sigma0**2
+        self._p[3][3] = self.yaw_sigma0**2 if self.yaw_state else 0.0
         self.rejected = 0  # gated position fixes (diagnostics)
         self._rejected_in_row = 0
 

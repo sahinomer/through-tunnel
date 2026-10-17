@@ -39,14 +39,21 @@ from throughtunnel.sensors.errors import MG
 
 GEOMETRIES = ("eisenhower_tunnel", "seattle_sr99_tunnel", "synthetic_demo_track", "ladder_5km")
 TRAFFIC = ("free", "stop_and_go")
-PRIORS = {"now": (rk.OFFSET_SIGMA0, rk.YAW_SIGMA0), "wide": (10e-3 * STANDARD_GRAVITY, math.radians(10.0))}
+# "now": the priors before D54 (1 mg, 3°); "wide": 10 mg / 10°, the values D54 then adopted
+PRIORS = {
+    "now": (1e-3 * STANDARD_GRAVITY, math.radians(3.0)),
+    "wide": (10e-3 * STANDARD_GRAVITY, math.radians(10.0)),
+}
 TEXT = ("case", "geometry", "traffic")
 
 
-def _logged(cls: type[rk.RouteKalman]) -> type[rk.RouteKalman]:
-    """The filter class, recording (t, b, ψ) after every GPS fix."""
+def _logged(cls: type[rk.RouteKalman], b0: float, y0: float) -> type[rk.RouteKalman]:
+    """The filter class with the priors b0 / y0, recording (t, b, ψ) after every GPS fix."""
 
     class Logged(cls):  # type: ignore[valid-type, misc]
+        offset_sigma0 = b0
+        yaw_sigma0 = y0
+
         def __init__(self, route) -> None:
             super().__init__(route)
             self.log: list[tuple[float, float, float]] = []
@@ -61,18 +68,14 @@ def _logged(cls: type[rk.RouteKalman]) -> type[rk.RouteKalman]:
 def _filters(obs, stream, res, t_loss: float) -> dict[str, float]:
     out = {}
     for prior, (b0, y0) in PRIORS.items():
-        rk.OFFSET_SIGMA0, rk.YAW_SIGMA0 = b0, y0  # module constants read in __init__ (diagnostic override)
-        try:
-            for cls in (rk.RouteKalman, rk.RouteKalmanYaw):
-                kf = _logged(cls)(obs.route)
-                ev = evaluate_track(replay(kf, obs, stream), res)
-                _, b, psi = [x for x in kf.log if x[0] < t_loss][-1]
-                out[f"{cls.name}_{prior}_exit_m"] = ev.summary["exit_total_m"]
-                out[f"{cls.name}_{prior}_tunnel_max_m"] = ev.summary["tunnel_max_m"]
-                out[f"{cls.name}_{prior}_b_mg"] = b / MG
-                out[f"{cls.name}_{prior}_psi_deg"] = math.degrees(psi)
-        finally:
-            rk.OFFSET_SIGMA0, rk.YAW_SIGMA0 = PRIORS["now"]
+        for cls in (rk.RouteKalman, rk.RouteKalmanYaw):
+            kf = _logged(cls, b0, y0)(obs.route)
+            ev = evaluate_track(replay(kf, obs, stream), res)
+            _, b, psi = [x for x in kf.log if x[0] < t_loss][-1]
+            out[f"{cls.name}_{prior}_exit_m"] = ev.summary["exit_total_m"]
+            out[f"{cls.name}_{prior}_tunnel_max_m"] = ev.summary["tunnel_max_m"]
+            out[f"{cls.name}_{prior}_b_mg"] = b / MG
+            out[f"{cls.name}_{prior}_psi_deg"] = math.degrees(psi)
     return out
 
 
