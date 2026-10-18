@@ -175,12 +175,11 @@ Six of the eleven estimators built carry the results:
 
 ### What is measured
 
-Every estimate is compared with the true position of the phone at the same moment, split into the
-error along the route and across it. Per run, the evaluation records:
+Every estimate is compared with the true position of the phone at the same moment, along and across
+the route. Per run, the evaluation records:
 * the **error at the tunnel exit C**, at the end of the outage;
 * the **largest error inside the tunnel**;
-* the **announcement timing**: how many seconds early or late the call-out came compared with the
-  moment the car truly passed the announcement point.
+* the **announcement timing** against the moment the car truly passed the announcement point.
 
 Two outcomes count as failures, because the driver would notice them:
 * a **gross error:** the estimate was more than 200 m off at some moment in the tunnel, ahead or
@@ -196,28 +195,26 @@ checked against the actual errors.
   (each with two S-shaped curves) and the three bundled scenarios, each on a flat road, a +3 % climb
   and an underwater tunnel (−4 % down, +4 % up), in free flow and in stop-and-go traffic (three stops of
   10–60 s, 30 km/h between them). That makes 48 scenarios, each run 20 times with the "Realistic"
-  sensor errors; the sloped ones are evaluated both with and without map grade. Each run is a new drive
-  with new sensor errors, and all estimators see the same data
-  ([benchmark overview](benchmark/README.md)).
+  sensor errors; the sloped ones are evaluated with and without map grade. Each run is a new drive with
+  new sensor errors, and all estimators see the same data ([benchmark overview](benchmark/README.md)).
 * **The error-source benchmark** takes the 5 km flat tunnel, in free flow and in stop-and-go, and adds
-  one error source at a time to an error-free setup: each IMU error, a tilted mount, orientation errors
-  in pitch, yaw and roll, GPS position and speed errors, and GPS degradation before the entrance.
-  Together with "Realistic" and "Hard" that makes 18 conditions, each run 20 times on the same drives.
-  Besides the error inside the tunnel, it records the state handed over at GPS loss, which made it the
-  main diagnostic tool of the project.
+  one error source at a time to an error-free setup: each IMU error, a tilted mount, orientation errors,
+  GPS errors and GPS degradation before the entrance. With "Realistic" and "Hard" that makes 18
+  conditions, each run 20 times on the same drives. It also records the state handed over at GPS loss,
+  which made it the main diagnostic tool of the project.
 
 ### How changes were judged
 
-Each change was first tested on a development subset of both benchmarks (the shortest and longest flat
-tunnels, the sloped 5 km tunnels and the nearly straight Eisenhower tunnel; about 6 minutes each instead of more than half an hour).
-The same runs were compared before and after the change, and any scenario that got worse by more than
-10 % and 5 m was flagged. Both benchmarks were rerun in full at milestones, and each new change was
-compared with the latest milestone rather than the original baseline, so that every step shows only its
-own effect. Every run is stored with its raw per-run results and its full configuration, so any number
-in this report can be regenerated.
-
-With 20 runs per scenario the medians are solid, but a 90th percentile is roughly the second-worst run
-and is read as an indication only.
+* **Development subset first:** each change was tested on a subset of both benchmarks, including the
+  nearly straight Eisenhower tunnel (about 6 minutes instead of more than half an hour).
+* **Paired comparison:** the same runs before and after the change; any scenario worse by more than
+  10 % and 5 m was flagged.
+* **Milestones:** both benchmarks were rerun in full at milestones, and each change was compared with
+  the latest milestone, so that every step shows only its own effect.
+* **Reproducible:** every run is stored with its raw results and full configuration, so any number in
+  this report can be regenerated.
+* **Statistics:** with 20 runs per scenario the medians are solid; a 90th percentile is roughly the
+  second-worst run and is read as an indication only.
 
 ## 5. Results
 
