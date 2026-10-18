@@ -262,7 +262,7 @@ larger.
 
 Flat road, synthetic tunnels with two S-curves each:
 
-<!-- Figure to add: error at the exit vs. tunnel length, free flow and stop-and-go, from runs.csv. -->
+![Median error at the tunnel exit vs. tunnel length, free flow and stop-and-go](img/report_tunnel_length.png)
 
 | Free flow | 0.5 km | 1 km | 2 km | 3 km | 5 km |
 |---|---|---|---|---|---|
