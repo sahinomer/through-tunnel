@@ -447,3 +447,18 @@ show how far those models hold: the sensor noise and drift, the location fixes t
 actually delivers near a portal, and how accurately maps describe roads inside tunnels. The estimators
 read only sensor streams and the map, in the form a phone log would provide, so they can run on such
 recordings unchanged.
+
+## 8. Use of AI tools
+
+An AI coding assistant (Claude Code) wrote most of the code, tests and study scripts, ran the
+experiments and drafted the documentation. The work moved from a broad start to controlled iterations.
+At first the assistant was given room to build the main structure (the simulator, the scenario model and
+the first estimators) within the scope the author had set. From then on the author steered smaller
+steps: each was discussed before any code was written, checked against the benchmarks, and recorded in a
+[decision log](decisions.md). The error-source benchmark, the development test strategy, refactors such
+as a separate calibration stage, and the UI polish came from the author's proposals and reviews.
+
+Corrections came from the same discipline: plausible but wrong AI results were caught by tests, by
+varying the drive, or by questioning a definition ([correction log](roadmap.md#5-ai-assistance-correction-log-input-for-f3)).
+Some proposals were overruled to keep the results honest; for example, standstill is a labelled oracle
+rather than a detector built on an unvalidated vibration model.
