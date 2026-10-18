@@ -384,25 +384,23 @@ numbers.
 
 ## 7. Future work
 
-The results point to one conclusion: inside the tunnel, only new information stops the error from
-growing. Most of the future work is therefore about other sources of that information, plus making the
-current approach more robust and checking it against reality.
+Inside the tunnel, only new information stops the error from growing. Most of the future work is
+therefore about other sources of that information; the rest makes the current approach more robust and
+checks it against reality.
 
 ### Other sources of information
 
-* **Vibration and engine sound.** A standing car with the engine idling sounds and vibrates differently
-  from a rolling one, and road and drivetrain frequencies change with speed and gear. A phone could use
-  its accelerometer and microphone to detect stops, and possibly to estimate speed. Published work in
-  this direction exists but needs a proper literature review first; a model would have to be built and
-  validated on recordings from many cars, phones and holders. The standstill oracle sets the target:
-  detected stops are worth a lot, but only if the restart is caught in well under half a second.
-  Microphone permission, privacy and battery use are practical questions of their own.
-* **The car's speed.** Connected-car platforms and OBD adapters can provide it where the phone is
-  connected to the car. The reference estimator shows it is worth about an order of magnitude, which
-  makes it the strongest single option wherever it is available.
-* **Grade changes as position fixes.** Curves on the map already fix the position; changes in road grade
-  could do the same, by comparing the pitch rate measured by the gyroscope with the map's grade profile.
-  This would help in straight tunnels that dip or climb, such as underwater crossings.
+* **Vibration and engine sound.** An idling car sounds and vibrates differently from a rolling one, and
+  road and drivetrain frequencies change with speed. The phone's accelerometer and microphone could
+  detect stops, and possibly estimate speed. Published work in this direction exists but needs a proper
+  literature review, and a model would have to be validated on recordings from many cars, phones and
+  holders. The standstill oracle sets the target: the restart must be caught in well under half a
+  second. Microphone permission, privacy and battery use are practical questions of their own.
+* **The car's speed.** Connected-car platforms and OBD adapters can provide it. Worth about an order of
+  magnitude in the reference results, it is the strongest single option wherever it is available.
+* **Grade changes as position fixes.** Like curves, changes in road grade could fix the position, by
+  comparing the gyroscope's pitch rate with the map's grade profile. This would help in straight tunnels
+  that dip or climb, such as underwater crossings.
 * **The barometer.** Air pressure tracks altitude and could replace the map grade, but ventilation and
   the pressure waves pushed by traffic disturb it inside tunnels; this needs research.
 * **Infrastructure.** Some tunnels have GNSS repeaters or Bluetooth beacons that give position fixes
@@ -422,11 +420,10 @@ current approach more robust and checking it against reality.
 
 ### Checking against reality
 
-The study rests on simulated sensors, GPS and maps. Recordings from real phones in real tunnels would
-show how far those models hold: the sensor noise and drift, the location fixes the operating system
-actually delivers near a portal, and how accurately maps describe roads inside tunnels. The estimators
-read only sensor streams and the map, in the form a phone log would provide, so they can run on such
-recordings unchanged.
+Recordings from real phones in real tunnels would show how far the simulated models hold: the sensor
+noise and drift, the location fixes the operating system actually delivers near a portal, and how
+accurately maps describe roads inside tunnels. The estimators read only sensor streams and the map, in
+the form a phone log would provide, so they can run on such recordings unchanged.
 
 ## 8. Use of AI tools
 
