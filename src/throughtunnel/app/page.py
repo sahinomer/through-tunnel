@@ -14,6 +14,7 @@ from __future__ import annotations
 import html
 import re
 import time
+from collections.abc import Callable
 from typing import Any
 
 import plotly.graph_objects as go
@@ -47,6 +48,7 @@ from throughtunnel.app.profile_editor import ProfileEditor
 from throughtunnel.app.profile_overlay import ProfileOverlay
 from throughtunnel.app.readouts import estimate_readout_html, route_info_html, state_readout_html
 from throughtunnel.app.route_picker import RoutePicker
+from throughtunnel.evaluation.benchmark import ladder_config, straight_tunnel_config
 from throughtunnel.evaluation.experiment import Comparison, compare_estimators
 from throughtunnel.positioning import ESTIMATORS, ORACLE_ESTIMATORS
 from throughtunnel.road import RoadConfig
@@ -77,6 +79,15 @@ from throughtunnel.sensors.vehicle_speed import VehicleSpeedConfig
 from throughtunnel.vehicle.config import DRIVER_PRESETS
 
 DEFAULT_PRESET = "seattle_sr99_tunnel"
+# Synthetic tunnels built in code, next to the bundled scenario files (not as files: the benchmark and the
+# studies use every bundled file). The 5 km one is exactly the benchmark's ladder geometry.
+GENERATED_SCENARIOS: dict[str, tuple[str, Callable[[], ScenarioConfig]]] = {
+    "ladder_5km": ("Synthetic 5 km tunnel (benchmark geometry)", lambda: ladder_config(5.0)),
+    "straight_10km": (
+        "Synthetic 10 km tunnel, nearly straight (beyond the case-study range, not benchmarked)",
+        lambda: straight_tunnel_config(10.0),
+    ),
+}
 TICK_S = 0.05  # server UI refresh (readouts, plot cursor, slider); map motion is client-side
 PLOT_CURSOR_EVERY = 2  # ticks
 SLIDER_EVERY = 5  # ticks
@@ -187,7 +198,9 @@ class SimulatorPage:
         with ui.card().classes("w-full"):
             with ui.row().classes("w-full items-center no-wrap"):
                 self.preset_select = ui.select(
-                    list_presets(), label="Preset scenario", on_change=self._on_preset
+                    list_presets() | {k: label for k, (label, _) in GENERATED_SCENARIOS.items()},
+                    label="Preset scenario",
+                    on_change=self._on_preset,
                 ).classes("flex-grow")
             self.route_info = ui.html().classes("text-sm w-full")
             with ui.row().classes("items-center gap-2"):
@@ -240,7 +253,8 @@ class SimulatorPage:
 
     async def _on_preset(self, e: events.ValueChangeEventArguments) -> None:
         if e.value:
-            cfg = load_preset(e.value)
+            generated = GENERATED_SCENARIOS.get(e.value)
+            cfg = generated[1]() if generated is not None else load_preset(e.value)
             key = self.error_preset_panel.key  # bundled scenarios load with the chosen level (D56)
             if key is not None:
                 imu, gnss, calibration = apply_error_preset(key, cfg.imu, cfg.gnss)

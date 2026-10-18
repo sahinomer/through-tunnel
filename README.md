@@ -38,7 +38,8 @@ Options: `uv run throughtunnel --port 8090 --host 0.0.0.0 --no-browser`.
 ## Using the simulator
 
 1. **Pick a scenario.** Either choose a preset (*Seattle SR 99 Tunnel*, *Eisenhower Tunnel*, *Synthetic demo
-   route*), or turn on *Select A–B–C–D by clicking the map* (off by default, so panning the map
+   route*, *Synthetic 5 km tunnel* = the benchmark's 5 km geometry, *Synthetic 10 km tunnel, nearly straight*:
+   beyond the case-study range and not benchmarked, it shows the cumulative drift without curves), or turn on *Select A–B–C–D by clicking the map* (off by default, so panning the map
    never moves points) and click four points on the map:
    * **A** start;
    * **B** tunnel entrance;

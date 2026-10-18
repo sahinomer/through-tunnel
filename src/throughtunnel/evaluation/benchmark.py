@@ -143,16 +143,37 @@ def ladder_config(tunnel_km: float) -> ScenarioConfig:
     arc_deg = math.degrees(0.15 * length / radius)  # two opposite arcs of 15 % each; straights 70 %
     tunnel = (Straight(0.3 * length), Arc(radius, arc_deg), Straight(0.2 * length), Arc(radius, -arc_deg),
               Straight(0.2 * length))  # fmt: skip
+    return _synthetic_tunnel_config(
+        tunnel, f"ladder-{tunnel_km:g}km", f"Benchmark ladder, {tunnel_km:g} km tunnel"
+    )
+
+
+def straight_tunnel_config(tunnel_km: float) -> ScenarioConfig:
+    """The synthetic approach and recovery around a nearly straight tunnel (UI only, not benchmarked).
+
+    Long road tunnels are mostly nearly straight mountain tunnels. Two gentle opposite bends (radius 5 km, 3°
+    each; Eisenhower turns 18.5° over 2.7 km) keep the road realistic but give ``route_kf_map`` no position
+    fixes: its curve fixes need a radius below 2 km. So the tunnel shows the cumulative drift without curves.
+    The ladder's S-arcs grow with length instead (two 107° arcs at 10 km), which would hide that drift."""
+    length = 1000.0 * tunnel_km
+    radius, arc_deg = 5000.0, 3.0
+    arc = radius * math.radians(arc_deg)
+    tunnel = (Straight(0.3 * length), Arc(radius, arc_deg), Straight(0.4 * length - 2.0 * arc),
+              Arc(radius, -arc_deg), Straight(0.3 * length))  # fmt: skip
+    return _synthetic_tunnel_config(
+        tunnel, f"straight-{tunnel_km:g}km", f"Synthetic nearly straight {tunnel_km:g} km tunnel"
+    )
+
+
+def _synthetic_tunnel_config(tunnel, route_name: str, name: str) -> ScenarioConfig:
     entrance = _polyline_length(DEMO_APPROACH)
     exit_ = _polyline_length((*DEMO_APPROACH, *tunnel))
     route = synthetic_route(
-        [*DEMO_APPROACH, *tunnel, *DEMO_RECOVERY],
-        f"ladder-{tunnel_km:g}km",
-        vertex_spacing_m=VERTEX_SPACING_M,
+        [*DEMO_APPROACH, *tunnel, *DEMO_RECOVERY], route_name, vertex_spacing_m=VERTEX_SPACING_M
     )
     base = load_preset("synthetic_demo_track")
     return base.model_copy(update={
-        "name": f"Benchmark ladder, {tunnel_km:g} km tunnel", "route": route,
+        "name": name, "route": route,
         "tunnel": TunnelConfig(entrance_m=entrance, exit_m=exit_, announce_before_exit_m=300.0),
     })  # fmt: skip
 

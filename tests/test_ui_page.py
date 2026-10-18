@@ -313,3 +313,25 @@ async def test_sensor_error_presets():
             assert page.result.config.gnss.speed_sigma_mps == 0.5
             await page._on_preset(SimpleNamespace(value="eisenhower_tunnel"))  # custom: the file's settings
             assert presets.key == "good"
+
+
+@pytest.mark.anyio
+async def test_generated_synthetic_tunnels():
+    """The 5 km entry is exactly the benchmark's ladder scenario (at the selected error level); the 10 km
+    one is nearly straight; neither is a bundled file (the benchmark uses every bundled file)."""
+    from types import SimpleNamespace
+
+    from throughtunnel.app.page import GENERATED_SCENARIOS
+    from throughtunnel.evaluation.benchmark import ladder_config
+    from throughtunnel.scenario import list_presets
+
+    assert not set(GENERATED_SCENARIOS) & set(list_presets())
+    async with user_simulation(root=SimulatorPage) as user:
+        await user.open("/")
+        page = current_page(user)
+        assert set(GENERATED_SCENARIOS) <= set(page.preset_select.options)
+        with user.client:
+            await page._on_preset(SimpleNamespace(value="ladder_5km"))
+        cfg = page.result.config
+        assert cfg.route == ladder_config(5.0).route and cfg.tunnel == ladder_config(5.0).tunnel
+        assert cfg.imu.errors.accel.drift_enabled  # loaded at the selected level (Realistic)

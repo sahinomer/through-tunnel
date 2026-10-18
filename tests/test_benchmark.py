@@ -109,3 +109,21 @@ def test_development_subset_is_part_of_the_full_set():
     assert set(DEV_CASES) <= keys and len(DEV_CASES) == 10  # 4 ladder roads + Eisenhower (D54), both traffic
     assert set(DEV_ESTIMATORS) <= set(ESTIMATORS)
     assert set(DEV_CONDITIONS) <= set(BY_KEY)
+
+
+def test_nearly_straight_tunnel_has_no_curve_fixes():
+    """The UI's long tunnel: the requested length; every bend gentler than route_kf_map's curve threshold."""
+    import numpy as np
+
+    from throughtunnel.evaluation.benchmark import straight_tunnel_config
+    from throughtunnel.positioning.route_kalman import MIN_CURVATURE
+    from throughtunnel.scenario import build_route_map
+
+    cfg = straight_tunnel_config(10.0)
+    assert cfg.tunnel.exit_m - cfg.tunnel.entrance_m == pytest.approx(10_000.0, abs=1.0)
+    rm = build_route_map(cfg)
+    d = np.arange(rm.tunnel_entrance_m + 100.0, rm.tunnel_exit_m - 100.0, 25.0)
+    heading = np.unwrap([rm.heading_at(x) for x in d])
+    turned = np.degrees(np.abs(np.diff(heading)).sum())
+    assert turned < 8.0  # two 3° bends (plus polyline discretisation)
+    assert (np.abs(np.diff(heading)) / 25.0).max() < MIN_CURVATURE  # radius above 2 km everywhere
