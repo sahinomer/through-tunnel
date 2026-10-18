@@ -55,6 +55,9 @@ def estimator_tooltip_html(cls: type[Estimator]) -> str:
     )
 
 
+PLOTS_HEIGHT_PX = 760  # the three error plots without the legend
+LEGEND_ROW_PX = 22
+AXIS_TITLE_PX = 60  # time ticks and axis title below the bottom plot
 UNCERTAINTY_K = 2.0  # the band on the along-track plot: ±2σ of the estimator's own uncertainty
 
 
@@ -140,11 +143,21 @@ def error_figure(
                 1,
             )  # fmt: skip
     fig.update_yaxes(type="log", row=1, col=1)
+    # The legend sits below the time axis, in space of its own, so it never covers a plot. Labels are long:
+    # about two entries per row.
+    legend_px = LEGEND_ROW_PX * math.ceil(len(evaluations) / 2)
     fig.update_layout(
-        height=760,
-        margin={"l": 60, "r": 20, "t": 50, "b": 40},
+        height=PLOTS_HEIGHT_PX + legend_px,
+        margin={"l": 60, "r": 20, "t": 50, "b": AXIS_TITLE_PX + legend_px},
         hovermode="x unified",
-        legend={"orientation": "h", "y": 1.06, "x": 0.0},
+        legend={
+            "orientation": "h",
+            "x": 0.0,
+            "xanchor": "left",
+            "yref": "container",
+            "y": 0.0,
+            "yanchor": "bottom",
+        },
         template="plotly_white",
         shapes=[cursor_shape(0.0), *phase_shapes(result)],  # the cursor must stay shape 0
         uirevision="keep-zoom",
