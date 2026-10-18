@@ -110,6 +110,11 @@ class RouteConstrained(Estimator):
 class RouteImuDeadReckoning(RouteConstrained):
     name = "route_imu"
     label = "Route + filtered IMU speed"
+    description = (
+        "Assumes the car stays on the route. Its speed comes from the calibrated forward accelerometer, "
+        "averaged with GPS speed before the tunnel."
+    )
+    pipeline = "GPS fixes + IMU → calibration → forward speed → distance on the route → position"
     use_imu_speed = True
 
 
@@ -130,6 +135,11 @@ class RouteImuStandstill(RouteImuDeadReckoning):
 
     name = "route_imu_stop"
     label = "Route + IMU + standstill oracle: speed reset ‡"
+    description = (
+        "The route + IMU estimator with speed set to 0 at each true stop. It shows what knowing when the "
+        "car stands still would be worth."
+    )
+    pipeline = "GPS fixes + IMU + true standstill → speed reset at stops → distance on the route → position"
     uses_standstill = True
     measure_offset = False
 
@@ -168,12 +178,25 @@ class RouteImuStandstill(RouteImuDeadReckoning):
 class RouteImuZeroVelocity(RouteImuStandstill):
     name = "route_imu_zupt"
     label = "Route + IMU + standstill oracle: speed reset + offset ‡"
+    description = (
+        "Like the speed reset, plus the accelerometer offset is measured at each stop and removed until the "
+        "next."
+    )
+    pipeline = (
+        "GPS fixes + IMU + true standstill → speed and offset reset at stops → "
+        "distance on the route → position"
+    )
     measure_offset = True
 
 
 class RouteSpeedHold(RouteConstrained):
     name = "route_hold"
     label = "Route + last GPS speed (naive)"
+    description = (
+        "Keeps the last GPS speed through the tunnel and uses no IMU. It's the baseline every inertial "
+        "method must beat."
+    )
+    pipeline = "last GPS speed → distance on the route → position"
     use_imu_speed = False
     alignment = None
 
@@ -196,6 +219,11 @@ class RouteVehicleSpeed(RouteConstrained):
 
     name = "route_vspeed"
     label = "Route + vehicle speed (reference)"
+    description = (
+        "Uses the car's own speed reading, with its scale calibrated against GPS on the approach. It's the "
+        "ceiling."
+    )
+    pipeline = "GPS fixes + car speed → distance on the route → position"
     alignment = None
     use_imu_speed = False
     uses_vehicle_speed = True

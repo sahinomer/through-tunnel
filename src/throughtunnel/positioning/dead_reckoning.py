@@ -157,6 +157,11 @@ class VehicleDeadReckoning(Estimator):
 class RawDeadReckoning(VehicleDeadReckoning):
     name = "dr_raw"
     label = "DR raw IMU (assumed aligned mount)"
+    description = (
+        "Integrates the raw IMU as if the phone were mounted aligned with the car, with no calibration. It "
+        "shows why calibration is needed."
+    )
+    pipeline = "GPS fixes + raw IMU → speed and heading → 2-D position"
     alignment = "declared"
 
     def __init__(self, route: RouteMap) -> None:
@@ -166,6 +171,11 @@ class RawDeadReckoning(VehicleDeadReckoning):
 class CalibratedDeadReckoning(VehicleDeadReckoning):
     name = "dr_calibrated"
     label = "DR GPS-calibrated IMU"
+    description = (
+        "Learns the phone's orientation and gyro bias from GPS on the approach, then integrates speed and "
+        "heading from the last GPS fix."
+    )
+    pipeline = "GPS fixes + IMU → calibration → speed and heading → 2-D position"
 
     def __init__(self, route: RouteMap) -> None:
         super().__init__(route, DeadReckoningConfig())
@@ -174,6 +184,11 @@ class CalibratedDeadReckoning(VehicleDeadReckoning):
 class FilteredDeadReckoning(VehicleDeadReckoning):
     name = "dr_filtered"
     label = "DR calibrated + GPS-blended speed/heading"
+    description = (
+        "Like the calibrated version, but averages speed and heading over several GPS fixes, so it enters "
+        "the tunnel with less GPS noise."
+    )
+    pipeline = "GPS fixes + IMU → calibration → blended speed and heading → 2-D position"
 
     def __init__(self, route: RouteMap) -> None:
         super().__init__(route, DeadReckoningConfig(blend_speed_tau_s=5.0, blend_heading_tau_s=10.0))

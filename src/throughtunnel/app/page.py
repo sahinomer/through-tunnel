@@ -42,7 +42,7 @@ from throughtunnel.app.plots import (
     ground_truth_figure,
     imu_figure,
 )
-from throughtunnel.app.positioning_view import color_of, error_figure, summary_html
+from throughtunnel.app.positioning_view import color_of, error_figure, estimator_tooltip_html, summary_html
 from throughtunnel.app.profile_editor import ProfileEditor
 from throughtunnel.app.profile_overlay import ProfileOverlay
 from throughtunnel.app.readouts import estimate_readout_html, route_info_html, state_readout_html
@@ -81,6 +81,7 @@ TICK_S = 0.05  # server UI refresh (readouts, plot cursor, slider); map motion i
 PLOT_CURSOR_EVERY = 2  # ticks
 SLIDER_EVERY = 5  # ticks
 COLUMNS_HEIGHT = "calc(100vh - 84px)"  # viewport minus the header and the page padding
+TOOLTIP_PROPS = 'max-width="420px" anchor="bottom left" self="top left" :offset="[0, 4]"'  # estimator notes
 RESYNC_EVERY = 100  # ticks: periodic re-anchoring of the browser clock while playing (safety net)
 
 
@@ -228,6 +229,9 @@ class SimulatorPage:
                         ui.html(
                             f"<span style='color:{color_of(name)}'>■</span> {html.escape(cls.label)}"
                         ).classes("text-sm")
+                        # in the label slot: the custom slot replaces the checkbox's default slot
+                        with ui.tooltip().classes("text-sm").props(TOOLTIP_PROPS):
+                            ui.html(estimator_tooltip_html(cls))
                     self.est_toggles[name] = box
             self.positioning_summary = ui.html().classes("w-full overflow-x-auto")
 

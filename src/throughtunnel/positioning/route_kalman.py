@@ -99,6 +99,13 @@ MIN_CURVATURE = 1.0 / 2000.0  # [1/m]
 class RouteKalman(RouteImuDeadReckoning):
     name = "route_kf"
     label = "Route + IMU Kalman filter (distance, speed, offset)"
+    description = (
+        "Learns the accelerometer's forward offset from GPS speed on the approach and keeps removing it in "
+        "the tunnel. It also reports its own uncertainty (σ)."
+    )
+    pipeline = (
+        "GPS fixes + IMU → calibration → Kalman filter (distance, speed, offset) → position on the route ± σ"
+    )
     # Turn noise: process noise from lateral acceleration × a nominal 0.5° yaw residual (1), or none (0)
     turn_noise = 1.0
     # False: ψ fixed at 0 (no prior, no random walk, re-solve yaw shifts ignored)
@@ -355,6 +362,14 @@ class RouteKalmanYaw(RouteKalman):
 
     name = "route_kf_yaw"
     label = "Route + IMU Kalman filter + yaw (distance, speed, offset, yaw)"
+    description = (
+        "The Kalman filter plus the calibration's heading (yaw) error, learned on the approach curves. It "
+        "is robust to a wrong calibration yaw, but otherwise no better than the plain filter."
+    )
+    pipeline = (
+        "GPS fixes + IMU → calibration → Kalman filter (distance, speed, offset, yaw) → "
+        "position on the route ± σ"
+    )
     turn_noise = 0.0
     yaw_state = True
 
@@ -364,6 +379,12 @@ class RouteKalmanMap(RouteKalman):
 
     name = "route_kf_map"
     label = "Route + IMU Kalman filter + map curves"
+    description = (
+        "The Kalman filter plus the map's curves. In the tunnel it compares the gyro heading with the map "
+        "heading every 25 m, so each curve corrects the position. It is the best phone-only estimator, but "
+        "the exact map in this simulation flatters it."
+    )
+    pipeline = "GPS fixes + IMU + map curves → calibration → Kalman filter → position on the route ± σ"
     map_fixes = True
 
 

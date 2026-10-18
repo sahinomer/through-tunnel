@@ -91,6 +91,9 @@ Options: `uv run throughtunnel --port 8090 --host 0.0.0.0 --no-browser`.
 6. **Compare position estimators.** After every generation, all estimators run on the same phone
    observations:
    * **Map:** each has a coloured track and a moving marker (toggle them in the *Positioning* card).
+     Hover over an estimator's name there for a short note: whether it is phone-only, † reference or
+     ‡ oracle, what it does, and its pipeline, e.g. *GPS fixes + IMU → calibration → Kalman filter → position
+     on the route ± σ*.
    * **Summary table:** error at the tunnel exit, max/RMS in the tunnel, recovery time after C, and
      exit-announcement timing.
    * **Positioning errors tab:** total, along-track and cross-track error over time.

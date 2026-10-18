@@ -11,7 +11,7 @@ from plotly.subplots import make_subplots
 
 from throughtunnel.app.plots import cursor_shape
 from throughtunnel.evaluation.metrics import TrackEvaluation
-from throughtunnel.positioning import EstimateTrack
+from throughtunnel.positioning import EstimateTrack, Estimator
 from throughtunnel.scenario import SimulationResult
 
 ESTIMATOR_COLORS = {
@@ -35,6 +35,24 @@ def color_of(name: str) -> str:
 def _rgba(hex_color: str, alpha: float) -> str:
     r, g, b = (int(hex_color[i : i + 2], 16) for i in (1, 3, 5))
     return f"rgba({r},{g},{b},{alpha})"
+
+
+def estimator_category(cls: type[Estimator]) -> str:
+    """Which information an estimator uses, from its declared inputs (D41, D49)."""
+    if cls.uses_vehicle_speed:
+        return "† reference: uses the car's speed reading, which a phone app doesn't have"
+    if cls.uses_standstill:
+        return "‡ oracle: told the true standstill moments, not a real detector"
+    return "phone-only"
+
+
+def estimator_tooltip_html(cls: type[Estimator]) -> str:
+    """Hover text of an estimator's checkbox (D57): category, what it does, the flow of information."""
+    return (
+        f"<div class='font-bold'>{html.escape(estimator_category(cls))}</div>"
+        f"<div class='mt-1'>{html.escape(cls.description)}</div>"
+        f"<div class='mt-1 font-mono'>{html.escape(cls.pipeline)}</div>"
+    )
 
 
 UNCERTAINTY_K = 2.0  # the band on the along-track plot: ±2σ of the estimator's own uncertainty

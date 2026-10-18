@@ -99,3 +99,23 @@ def test_readouts_render_for_a_preset():
     state = state_readout_html(res.truth.sample(t), res.imu.at(t), res.imu_ideal.at(t))
     assert "speed" in state and "phone IMU" in state
     assert estimate_readout_html([], set(), t) == ""
+
+
+def test_every_estimator_has_a_tooltip():
+    """D57: each registered estimator says what it does and how information flows; the category comes from
+    its declared inputs."""
+    from throughtunnel.app.positioning_view import estimator_category, estimator_tooltip_html
+    from throughtunnel.positioning import ESTIMATORS, ORACLE_ESTIMATORS, REFERENCE_ESTIMATORS
+
+    for name, cls in ESTIMATORS.items():
+        assert cls.description and "→" in cls.pipeline, name
+        assert cls.pipeline in estimator_tooltip_html(cls).replace("&#x27;", "'")
+        category = estimator_category(cls)
+        if name in REFERENCE_ESTIMATORS:
+            assert category.startswith("†")
+        elif name in ORACLE_ESTIMATORS:
+            assert category.startswith("‡")
+        else:
+            assert category == "phone-only"
+    descriptions = [cls.description for cls in ESTIMATORS.values()]
+    assert len(set(descriptions)) == len(descriptions)  # no text inherited by accident

@@ -44,10 +44,15 @@ class Estimator(ABC):
     ``uses_standstill`` (D49): standstill taken from the true motion is **oracle** information, for
     measuring what knowing standstill is worth. The runner calls ``on_standstill`` only for a class that
     sets it to True; such estimators are kept out of the phone-only set (``ORACLE_ESTIMATORS``).
+
+    ``description`` and ``pipeline`` (D57): what the estimator does in one or two sentences, and the flow of
+    information as a short arrow line. The UI shows both as a tooltip on the estimator's checkbox.
     """
 
     name: str = "estimator"
     label: str = "Estimator"
+    description: str = ""
+    pipeline: str = ""
     alignment: str | None = "gps_imu"
     uses_vehicle_speed: bool = False
     uses_standstill: bool = False

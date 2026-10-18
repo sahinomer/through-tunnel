@@ -10,7 +10,7 @@ see "Order" below. **Update 2026-10-17:** order after step 4 agreed with the use
 **Update 2026-10-17 (evening):** steps 6.1, 6.2, the Eisenhower fix (D54) and step 5 (`route_kf_map`, D55) are
 done; **milestone after step 5 rerun** (`0b4ee46`, [benchmark/README.md](benchmark/README.md#milestone-after-step-5-2026-10-17-milestone_step5)):
 all scenarios with map grade, `route_kf_map` 8 m median, 3 % gross errors, 89 % good announcements (flattered:
-exact map, curved ladder tunnels). **Update 2026-10-18:** UI polish before the write-up (user): 7.1 sensor-error presets done (D56: Error-free · Good · Realistic · Hard, Realistic at startup); 7.2 estimator tooltips on the checkboxes next (short "pipeline" notes, alternatives to choose from); then 8, the write-up (structure first). User's working mode: discuss first, one step at a time, compare every change
+exact map, curved ladder tunnels). **Update 2026-10-18:** UI polish before the write-up (user): 7.1 sensor-error presets done (D56: Error-free · Good · Realistic · Hard, Realistic at startup); 7.2 estimator tooltips on the checkboxes done (D57: category, sentence, pipeline); next 8, the write-up (structure first). User's working mode: discuss first, one step at a time, compare every change
 against the benchmarks.
 
 ## Where we are
