@@ -46,6 +46,14 @@ This case study asks how far the phone's own sensors can carry the position thro
 where that stops being enough. To answer it, a simulator was built and the estimators were developed
 step by step against a fixed benchmark.
 
+Every drive follows the same structure along the route, and the letters are used throughout:
+
+```
+A ───── GPS ───── B ═══════ tunnel, no GPS ═══════╪═══════ C ───── GPS ───── D
+start             entrance                  announcement   exit              end
+                                          (300 m before C)
+```
+
 ### What the app is assumed to know
 
 | Topic | Assumption | Why |
