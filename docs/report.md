@@ -199,7 +199,7 @@ Six of the eleven estimators built carry the results:
 | Estimator | What it uses | Role |
 |---|---|---|
 | Route + last GPS speed | GPS speed held constant along the route | naive baseline |
-| Route + IMU | calibrated IMU speed along the route | the starting point of the improvements |
+| Route + IMU | calibrated IMU speed along the route | the simplest inertial method, shown before and after the calibration improvements |
 | Kalman filter | the filter with distance, speed and forward offset | phone-only, independent of the tunnel's shape |
 | Kalman filter + map curves | the same, plus heading fixes against the map | best phone-only, in curved tunnels |
 | Route + car speed (reference) | the car's speed reading instead of the IMU | what car data would give |
