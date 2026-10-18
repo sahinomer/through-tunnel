@@ -91,6 +91,8 @@ Options: `uv run throughtunnel --port 8090 --host 0.0.0.0 --no-browser`.
 6. **Compare position estimators.** After every generation, all estimators run on the same phone
    observations:
    * **Map:** each has a coloured track and a moving marker (toggle them in the *Positioning* card).
+     Solid lines are the four main phone-only estimators, dashed or dotted lines the baselines, greys the
+     † reference and ‡ oracles (D58).
      Hover over an estimator's name there for a short note: whether it is phone-only, † reference or
      ‡ oracle, what it does, and its pipeline, e.g. *GPS fixes + IMU → calibration → Kalman filter → position
      on the route ± σ*.

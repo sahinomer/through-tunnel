@@ -119,3 +119,16 @@ def test_every_estimator_has_a_tooltip():
             assert category == "phone-only"
     descriptions = [cls.description for cls in ESTIMATORS.values()]
     assert len(set(descriptions)) == len(descriptions)  # no text inherited by accident
+
+
+def test_every_estimator_has_its_own_style():
+    """D58: a colour and line style per registered estimator, no two alike; the four main phone-only
+    estimators are solid, the greys are kept for the reference and the oracles."""
+    from throughtunnel.app.positioning_view import ESTIMATOR_STYLES, color_of, dash_of
+    from throughtunnel.positioning import ESTIMATORS, MAIN_ESTIMATORS
+
+    assert set(ESTIMATOR_STYLES) == set(ESTIMATORS)
+    assert len(set(ESTIMATOR_STYLES.values())) == len(ESTIMATOR_STYLES)
+    assert {dash_of(n) for n in ("route_kf", "route_kf_yaw", "route_kf_map", "route_imu")} == {"solid"}
+    greys = {"#52514e", "#898781"}
+    assert all((color_of(n) in greys) == (n not in MAIN_ESTIMATORS) for n in ESTIMATORS)

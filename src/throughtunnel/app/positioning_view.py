@@ -14,22 +14,45 @@ from throughtunnel.evaluation.metrics import TrackEvaluation
 from throughtunnel.positioning import EstimateTrack, Estimator
 from throughtunnel.scenario import SimulationResult
 
-ESTIMATOR_COLORS = {
-    "dr_raw": "#d81b60",
-    "dr_calibrated": "#1e88e5",
-    "dr_filtered": "#fb8c00",
-    "route_imu": "#43a047",
-    "route_kf": "#00897b",
-    "route_kf_yaw": "#3949ab",
-    "route_kf_map": "#c0ca33",
-    "route_hold": "#8e24aa",
-    "route_vspeed": "#455a64",  # reference (car speed): neutral, not a phone-only solution
+# Colour and line style per estimator (D58). Eleven lines can all overlap, and only four hues of a validated
+# categorical palette stay distinguishable in every pair (also with colour-vision deficiency): blue, orange,
+# aqua and violet. They go to the four main phone-only estimators (solid). The baselines are dashed or dotted
+# in the remaining hues; greys mean "not phone-only" (dark: † reference, light: ‡ oracles).
+ESTIMATOR_STYLES: dict[str, tuple[str, str]] = {
+    "route_kf": ("#2a78d6", "solid"),
+    "route_kf_yaw": ("#1baf7a", "solid"),
+    "route_kf_map": ("#eb6834", "solid"),
+    "route_imu": ("#4a3aa7", "solid"),
+    "route_hold": ("#eda100", "dash"),
+    "dr_calibrated": ("#e87ba4", "dash"),
+    "dr_filtered": ("#008300", "dash"),
+    "dr_raw": ("#e34948", "dot"),
+    "route_vspeed": ("#52514e", "solid"),
+    "route_imu_stop": ("#898781", "dash"),
+    "route_imu_zupt": ("#898781", "dot"),
 }
+DEFAULT_STYLE = ("#616161", "solid")
+LEAFLET_DASH = {"solid": None, "dash": "9 6", "dot": "2 6"}  # map tracks (weight 3)
+SVG_DASH = {"solid": "none", "dash": "5 3", "dot": "2 2"}  # legend swatches (16 px)
 MAP_TRACK_RATE_HZ = 5.0  # decimation of estimated tracks for the map
 
 
 def color_of(name: str) -> str:
-    return ESTIMATOR_COLORS.get(name, "#616161")
+    return ESTIMATOR_STYLES.get(name, DEFAULT_STYLE)[0]
+
+
+def dash_of(name: str) -> str:
+    """Plotly dash name ("solid", "dash", "dot")."""
+    return ESTIMATOR_STYLES.get(name, DEFAULT_STYLE)[1]
+
+
+def swatch_html(name: str) -> str:
+    """A short line sample in the estimator's colour and line style (checkboxes, tables, readouts)."""
+    return (
+        f"<svg width='18' height='8' style='display:inline-block;vertical-align:middle'>"
+        f"<line x1='1' y1='4' x2='17' y2='4' stroke='{color_of(name)}' stroke-width='3' "
+        f"stroke-dasharray='{SVG_DASH[dash_of(name)]}'/></svg>"
+    )
 
 
 def _rgba(hex_color: str, alpha: float) -> str:
@@ -132,7 +155,7 @@ def error_figure(
             fig.add_trace(
                 go.Scatter(y=-band, fill="tonexty", fillcolor=_rgba(color_of(ev.name), 0.15), **common), 2, 1
             )
-        style = {"width": 1.6, "color": color_of(ev.name)}
+        style = {"width": 1.6, "color": color_of(ev.name), "dash": dash_of(ev.name)}
         for row, y in ((1, np.maximum(ev.total, 0.01)), (2, ev.along), (3, ev.cross)):
             fig.add_trace(
                 go.Scatter(
@@ -181,7 +204,7 @@ def summary_html(evaluations: list[TrackEvaluation], announce_before_exit_m: flo
     for ev in evaluations:
         s = ev.summary
         cells = [
-            f"<span style='color:{color_of(ev.name)}'>■</span> {html.escape(ev.label)}",
+            f"{swatch_html(ev.name)} {html.escape(ev.label)}",
             _m(s.get("exit_total_m")),
             _m(s.get("exit_std_m")),
             _m(s.get("tunnel_max_m")),

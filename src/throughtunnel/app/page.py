@@ -42,7 +42,7 @@ from throughtunnel.app.plots import (
     ground_truth_figure,
     imu_figure,
 )
-from throughtunnel.app.positioning_view import color_of, error_figure, estimator_tooltip_html, summary_html
+from throughtunnel.app.positioning_view import error_figure, estimator_tooltip_html, summary_html, swatch_html
 from throughtunnel.app.profile_editor import ProfileEditor
 from throughtunnel.app.profile_overlay import ProfileOverlay
 from throughtunnel.app.readouts import estimate_readout_html, route_info_html, state_readout_html
@@ -226,9 +226,7 @@ class SimulatorPage:
                         value=name in self.visible_estimators, on_change=self._on_estimator_toggle
                     )
                     with box.add_slot("default"):
-                        ui.html(
-                            f"<span style='color:{color_of(name)}'>■</span> {html.escape(cls.label)}"
-                        ).classes("text-sm")
+                        ui.html(f"{swatch_html(name)} {html.escape(cls.label)}").classes("text-sm")
                         # in the label slot: the custom slot replaces the checkbox's default slot
                         with ui.tooltip().classes("text-sm").props(TOOLTIP_PROPS):
                             ui.html(estimator_tooltip_html(cls))

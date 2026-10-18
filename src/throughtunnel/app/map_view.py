@@ -15,7 +15,7 @@ from typing import Any
 import numpy as np
 from nicegui import context, ui
 
-from throughtunnel.app.positioning_view import color_of, track_payload
+from throughtunnel.app.positioning_view import LEAFLET_DASH, color_of, dash_of, track_payload
 from throughtunnel.app.track import playback_track
 from throughtunnel.observations import RouteMap
 from throughtunnel.positioning.runner import EstimateTrack
@@ -128,6 +128,8 @@ class MapView:
             shown = track.name in visible
             color = color_of(track.name)
             line = {"color": color, "weight": 3, "opacity": 0.85 if shown else 0.0}
+            if LEAFLET_DASH[dash_of(track.name)]:
+                line["dashArray"] = LEAFLET_DASH[dash_of(track.name)]
             pts = np.column_stack([payload["lat"], payload["lon"]]).tolist()
             self._polyline(f"est_line_{track.name}", pts, line)
             marker = {"radius": 6, "color": "#ffffff", "weight": 1.5, "fillColor": color,

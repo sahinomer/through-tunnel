@@ -8,7 +8,7 @@ from collections.abc import Iterable
 
 import numpy as np
 
-from throughtunnel.app.positioning_view import color_of
+from throughtunnel.app.positioning_view import swatch_html
 from throughtunnel.evaluation.metrics import TrackEvaluation
 from throughtunnel.routing import RawRoute
 from throughtunnel.scenario import (
@@ -127,7 +127,7 @@ def estimate_readout_html(evaluations: Iterable[TrackEvaluation], visible: set[s
     for ev in evaluations:
         if ev.name in visible and len(ev.t) and ev.t[0] <= t:
             err = float(np.interp(t, ev.t, ev.total))
-            parts.append(f"<span style='color:{color_of(ev.name)}'>■</span> {err:,.1f} m")
+            parts.append(f"{swatch_html(ev.name)} {err:,.1f} m")
     if not parts:
         return ""
     return (
