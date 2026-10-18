@@ -1,4 +1,4 @@
-# Handover diagnostic: where the state handed over at GPS loss comes from
+# The state at GPS loss: where it comes from
 
 Diagnostic of 2026-10-16, step 0 of [estimator_plan.md](estimator_plan.md). **No estimator was changed.**
 The error-source benchmark ([benchmark/README.md](benchmark/README.md)) showed that the state handed

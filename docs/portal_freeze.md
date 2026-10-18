@@ -1,7 +1,7 @@
 # Portal freeze (step 1): no GPS learning right before the tunnel
 
 Step 1 of [estimator_plan.md](estimator_plan.md), solutions 1a + 2a, decision D46 (2026-10-16).
-The handover diagnostic ([handover_study.md](handover_study.md)) showed that the state handed over at
+The handover diagnostic ([gps_loss_state.md](gps_loss_state.md)) showed that the state handed over at
 GPS loss is set by the GPS speed errors of the **last** approach fixes: the levelling's forward offset
 is (δv_last − δv_first)/T, and the 5 s blend hands over the last few speed errors. Degraded fixes right
 before the portal therefore do the most damage.

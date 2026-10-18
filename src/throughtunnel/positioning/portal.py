@@ -1,7 +1,7 @@
 """Portal freeze (D46, solutions 1a + 2a of docs/estimator_plan.md): no GPS learning right before a tunnel.
 
 GPS degrades in the last few hundred metres before a tunnel portal (walls, slopes, multipath), but the
-phone's reported accuracy does not always show it. The handover diagnostic (docs/handover_study.md)
+phone's reported accuracy does not always show it. The handover diagnostic (docs/gps_loss_state.md)
 showed why that matters: the levelling's forward offset is set by the GPS speed error of the *last*
 approach fix, and the 5 s speed blend hands over the last few fixes' speed errors. Both then grow
 with the outage (½·b·t² + δv·t).

@@ -34,8 +34,8 @@ against the benchmarks.
   * error-free sensors: 0 m (free flow), 12–13 m (stop-and-go).
 * **Central finding:** the state handed over at GPS loss decides the error. In free flow the along-track
   error 5 km in is ½ · forward offset · t² + speed error · t (correlation 0.99–1.00 per run; bias drift
-  excepted). In stop-and-go the v ≥ 0 clamp breaks this formula ([handover_study.md](handover_study.md)).
-* **Step 0 (diagnostic, 2026-10-16, [handover_study.md](handover_study.md)):** the forward offset is
+  excepted). In stop-and-go the v ≥ 0 clamp breaks this formula ([gps_loss_state.md](gps_loss_state.md)).
+* **Step 0 (diagnostic, 2026-10-16, [gps_loss_state.md](gps_loss_state.md)):** the forward offset is
   exactly (δv_last − δv_first)/T. The levelling's Δv_GPS terms telescope, so only the GPS speed errors of
   the first and last approach fix count (T = 82–84 s here). The handover speed is the 5 s blend of the
   last GPS speed errors. P1 and P2 are therefore one mechanism, and the offset term dominates in free
@@ -129,7 +129,7 @@ calibration removes them).
 IDs of the tables above. Commit messages, decisions D48–D50 and run labels written before 2026-10-16
 evening used letters for steps: "step 2b" = 2.1, "step 3a" = 3.1, "step 3b" = 3.2.
 
-0. **Done (2026-10-16): handover diagnostic** ([handover_study.md](handover_study.md)). Agreed order
+0. **Done (2026-10-16): handover diagnostic** ([gps_loss_state.md](gps_loss_state.md)). Agreed order
    with the user: 0 → 1 → 42 m residual → standstill → filter → map features.
 1. **Done (2026-10-16): portal freeze (1a + 2a, D46, [portal_freeze.md](portal_freeze.md)).** Realistic
    5 km free flow 231 → 103 m (predicted ~110), gross errors 11 → 4 of 20; degradation inside the

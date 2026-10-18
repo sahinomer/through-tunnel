@@ -103,7 +103,7 @@ median [m]. Each condition adds one error source to an error-free setup:
   along-track error 5 km in is ½ · forward offset · t² + speed error · t from the state at GPS loss
   (correlation 0.99–1.00 per run). Only bias drift, which changes inside the tunnel, is not predicted
   this way (0.48). The tunnel phase adds almost nothing: the error is set before the tunnel.
-  *Correction (2026-10-16, [handover_study.md](../handover_study.md)):* this was checked in free flow
+  *Correction (2026-10-16, [gps_loss_state.md](../gps_loss_state.md)):* this was checked in free flow
   only. In stop-and-go the v ≥ 0 clamp resets negative speed errors at stops, and the formula
   overshoots 3–5×. The same diagnostic shows where the handover state comes from: the forward offset is
   (δv_last − δv_first)/T, set by the GPS speed errors of the first and last approach fix.
