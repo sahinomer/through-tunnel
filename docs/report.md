@@ -5,17 +5,13 @@
 ## 1. The problem and its interpretation
 
 A driver is following turn-by-turn directions on a phone when the road enters a long tunnel. GPS fades
-within seconds and stays gone for anything from half a minute to several minutes. The navigation app
-is still expected to show the car in the right place, call out the exit at the right moment, and pick
-up GPS again cleanly when the car comes out. This case study asks how far a phone can get on its own
-sensors in that situation: what it can learn from GPS before the tunnel, how long its accelerometer and
-gyroscope can carry the position through the outage, and where that stops being enough. To answer it,
-a simulator was built and the estimators were developed step by step against a fixed benchmark. This
-report summarises that work and what the experiments showed.
+within seconds and stays gone for up to several minutes, yet the navigation app must still show the car
+in the right place, call out the exit at the right moment, and recover cleanly when the car comes out.
+This case study asks how far the phone's own sensors can carry the position through the outage, and
+where that stops being enough. To answer it, a simulator was built and the estimators were developed
+step by step against a fixed benchmark.
 
 ### What the app is assumed to know
-
-The brief leaves most of the setting open; it was fixed as follows.
 
 | Topic | Assumption | Why |
 |---|---|---|
@@ -43,9 +39,9 @@ forward accelerometer, so any constant error in it grows with the square of time
 * in **stop-and-go traffic** the same 5 km takes 738 s instead of 258 s, so the same offset acts
   almost three times as long, and its effect grows with the square of time.
 
-The gyroscope's heading matters far less. Once the estimate is held on the route, the map bounds the
-cross-track error, and what remains is the error along the route. That is the number the rest of this
-report is about: **how far along the route the car is**, and therefore how well its speed is known.
+The gyroscope's heading matters far less: once the estimate is held on the route, the map bounds the
+cross-track error. What remains, and what the rest of this report is about, is **how far along the
+route the car is**, and therefore how well its speed is known.
 
 ## 2. The simulator
 
