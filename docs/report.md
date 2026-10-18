@@ -357,3 +357,47 @@ here.
   ([calibration start study](calibration_start_study.md)).
 * **The map:** every result above assumes an exact map, and the curve fixes trust the map's heading
   inside the tunnel metre by metre (section 6).
+
+## 6. Limitations
+
+All results come from simulation. No real drive was recorded, and the sensor and traffic parameters are
+plausible assumptions, not values measured on a phone in a real tunnel. The simulator was checked for
+internal consistency, not against field data. The comparisons between methods, made on identical data,
+are therefore more reliable than the absolute numbers.
+
+### What probably makes the results optimistic
+
+* **An exact map.** The route, its grade and its curves inside the tunnel are taken as correct. The only
+  mismatch simulated is the smoothing of the road (0.1–0.4° of heading). A curve drawn a few metres off
+  shifts the curve fixes by as much, and 0.1 % of error in the map grade leaks into the speed (about
+  70–100 m at the exit of the preset tunnels). How accurately maps draw roads inside tunnels is unknown
+  here.
+* **Curved benchmark tunnels.** Every synthetic tunnel has two S-curves, which favours the map curves.
+  Long road tunnels are often nearly straight, like Eisenhower, where the benefit is much smaller.
+* **No vibration.** Engine and road vibration are not simulated, so the IMU cannot tell a stopped car
+  from one at constant speed. This is why standstill appears only as an oracle and not as a detector.
+* **GPS that reports its own accuracy honestly.** The simulated phone reports exactly the speed noise it
+  adds, which flatters the Kalman filter's weighting of the fixes.
+* **A phone that never moves.** Picking up the phone or a holder shifting breaks the calibration for any
+  method that uses the IMU.
+* **A simplified car and sensor.** No body pitch on the suspension when braking or accelerating, no
+  sensor scale-factor or cross-axis errors, no timestamp jitter, and estimator settings that match the
+  simulated sensor class. Each is small next to the main effects, but all point the same way.
+* **A driver who follows the route.** A missed exit or a detour would break every route-constrained
+  method.
+
+### What probably makes them pessimistic
+
+* **Short approaches.** Every simulated drive starts only 67–106 s before the tunnel, so the calibration
+  has 42–86 s of GPS to learn from. Real drives usually have minutes, and the shortest approach
+  (Eisenhower) gave the worst start. This holds as long as the phone stays in its holder and the sensor
+  bias does not drift away from the calibration.
+* **No help from the tunnel itself.** Some tunnels have GNSS repeaters or Bluetooth beacons that give
+  position fixes inside; none are assumed here.
+
+### Experiments
+
+* 20 runs per scenario: medians are solid, tails (90th percentiles) indicative only.
+* Traffic is imposed on a single car as speed zones and stops, not emerging from other vehicles.
+* The full list of what is and is not simulated, with the expected effect of each, is in
+  [limitations](limitations.md).
