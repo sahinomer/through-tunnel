@@ -26,6 +26,7 @@ from throughtunnel.scenario import (
     SimulationResult,
     TunnelConfig,
 )
+from throughtunnel.sensors.error_presets import ERROR_PRESETS
 from throughtunnel.sensors.errors import DEG, MDPS, MG, UG, ImuErrorConfig, SensorErrorConfig
 from throughtunnel.sensors.gnss import GnssConfig
 from throughtunnel.sensors.imu import ImuConfig
@@ -312,6 +313,46 @@ class TrafficPanel(Panel):
             self.s_queue_len.value, self.s_queue_speed.value = t.queue_length_m, t.queue_speed_kmh
             self.s_queue_stops.value = t.queue_stops
             self.s_cong_speed.value, self.s_cong_var.value = t.congested_speed_kmh, t.congested_variation_kmh
+
+
+class ErrorPresetPanel:
+    """One-click sensor-error levels (D56). Shows the level the current settings equal, or "custom".
+
+    A click calls ``on_select(key)``; the page fills the IMU, GPS and calibration panels from the preset."""
+
+    CUSTOM_NOTE = "Custom: the sensor settings below differ from every preset."
+
+    def __init__(self, on_select: Callable[[str], Awaitable[None]], key: str | None) -> None:
+        self._on_select = on_select
+        self._loading = False
+        with ui.row().classes("w-full items-center no-wrap gap-2"):
+            ui.label("Sensor errors").classes("text-sm font-bold shrink-0")
+            self.toggle = ui.toggle(
+                {k: p.label for k, p in ERROR_PRESETS.items()}, value=key, on_change=self._on_toggle
+            ).props("dense no-caps")
+            self.custom_label = ui.label("custom").classes("text-sm text-gray-500 italic")
+        self.note = ui.label().classes("text-xs text-gray-500")
+        self.show(key)
+
+    @property
+    def key(self) -> str | None:
+        return self.toggle.value
+
+    def show(self, key: str | None) -> None:
+        """Display ``key`` (None = custom) without calling back."""
+        self._loading = True
+        try:
+            self.toggle.value = key
+        finally:
+            self._loading = False
+        self.custom_label.set_visibility(key is None)
+        self.note.text = ERROR_PRESETS[key].description if key is not None else self.CUSTOM_NOTE
+
+    def _on_toggle(self, e: events.ValueChangeEventArguments) -> Awaitable[None] | None:
+        if self._loading or e.value is None:
+            return None
+        self.show(e.value)
+        return self._on_select(e.value)
 
 
 class MountPanel(Panel):

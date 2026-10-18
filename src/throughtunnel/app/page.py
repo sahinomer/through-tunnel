@@ -22,6 +22,7 @@ from nicegui import events, run, ui
 from throughtunnel.app.controls import (
     CalibrationPanel,
     DrivePanel,
+    ErrorPresetPanel,
     GpsPanel,
     ImuErrorPanel,
     MapDataPanel,
@@ -63,6 +64,11 @@ from throughtunnel.scenario import (
     with_calibration,
     with_map_data,
     with_sensor_config,
+)
+from throughtunnel.sensors.error_presets import (
+    DEFAULT_ERROR_PRESET,
+    apply_error_preset,
+    matching_error_preset,
 )
 from throughtunnel.sensors.gnss import GnssConfig
 from throughtunnel.sensors.imu import ImuConfig
@@ -146,6 +152,8 @@ class SimulatorPage:
 
     def _build_settings(self) -> None:
         """Settings groups, most used first; within a group the least used settings come last."""
+        with ui.column().classes("w-full border rounded px-3 py-2 gap-1"):
+            self.error_preset_panel = ErrorPresetPanel(self._apply_error_preset, DEFAULT_ERROR_PRESET)
         with group("Tunnel: exit announcement and traffic", "traffic"):
             section("Exit announcement")
             self.tunnel_panel = TunnelPanel(self._on_tunnel_change)
@@ -230,7 +238,12 @@ class SimulatorPage:
 
     async def _on_preset(self, e: events.ValueChangeEventArguments) -> None:
         if e.value:
-            await self._load_scenario(load_preset(e.value))
+            cfg = load_preset(e.value)
+            key = self.error_preset_panel.key  # bundled scenarios load with the chosen level (D56)
+            if key is not None:
+                imu, gnss, calibration = apply_error_preset(key, cfg.imu, cfg.gnss)
+                cfg = cfg.model_copy(update={"imu": imu, "gnss": gnss, "calibration": calibration})
+            await self._load_scenario(cfg)
 
     async def _on_upload(self, e: events.UploadEventArguments) -> None:
         try:
@@ -254,6 +267,7 @@ class SimulatorPage:
         self.gps_panel.set_gnss(cfg.gnss)
         self.tunnel_panel.set(cfg.tunnel)
         self.traffic_panel.set(cfg.traffic)
+        self.error_preset_panel.show(matching_error_preset(cfg.imu, cfg.gnss, cfg.calibration))
         rm = build_route_map(cfg)
         b, c = (rm.tunnel_entrance_m, rm.tunnel_exit_m) if cfg.tunnel is not None else (None, None)
         self.profile_editor.set(cfg.road_profile, rm.length_m, b, c)
@@ -343,22 +357,52 @@ class SimulatorPage:
         """Re-run only the sensor models (IMU and GPS) and positioning; the vehicle motion is unchanged."""
         self.base_imu = self._imu_from_controls()
         self.base_gnss = self.gps_panel.gnss(self.base_gnss)
+        self._show_error_preset()
         if self.result is None:
             return
-        self.result = with_sensor_config(self.result, imu=self.base_imu, gnss=self.base_gnss)
-        self.imu_plot.update_figure(imu_figure(self.result))
-        self.imu_panel.show_applied_errors(self.result)
-        self.map_view.show_gps(self.result)
+        self._resimulate_sensors()
         self._update_route_info()
         await self._run_positioning()
 
     async def _apply_calibration(self) -> None:
         """Re-run only positioning: the calibration error changes no simulated data (D34)."""
+        self._show_error_preset()
         if self.result is None:
             return
         self.result = with_calibration(self.result, self.calibration_panel.config())
         self._update_route_info()
         await self._run_positioning()
+
+    async def _apply_error_preset(self, key: str) -> None:
+        """Set all sensor errors to a preset (D56): re-run the sensors only if they changed, then positioning
+        once. The vehicle motion, the mount and the seeds are unchanged."""
+        imu, gnss, calibration = apply_error_preset(
+            key, self._imu_from_controls(), self.gps_panel.gnss(self.base_gnss)
+        )
+        self.imu_panel.set_imu(imu)
+        self.gps_panel.set_gnss(gnss)
+        self.calibration_panel.set(calibration)
+        self.base_imu, self.base_gnss = imu, gnss
+        if self.result is None:
+            return
+        if (imu, gnss) != (self.result.config.imu, self.result.config.gnss):
+            self._resimulate_sensors()
+        self.result = with_calibration(self.result, calibration)
+        self._update_route_info()
+        await self._run_positioning()
+
+    def _resimulate_sensors(self) -> None:
+        self.result = with_sensor_config(self.result, imu=self.base_imu, gnss=self.base_gnss)
+        self.imu_plot.update_figure(imu_figure(self.result))
+        self.imu_panel.show_applied_errors(self.result)
+        self.map_view.show_gps(self.result)
+
+    def _show_error_preset(self) -> None:
+        """Show which preset the current controls equal (or custom)."""
+        key = matching_error_preset(
+            self._imu_from_controls(), self.gps_panel.gnss(self.base_gnss), self.calibration_panel.config()
+        )
+        self.error_preset_panel.show(key)
 
     async def _apply_map_data(self) -> None:
         """Re-run only positioning: the map data is information for the estimators (D39)."""

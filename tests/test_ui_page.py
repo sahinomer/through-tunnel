@@ -277,3 +277,39 @@ async def test_vehicle_speed_slider_reaches_the_simulation():
             await page._generate()
         assert page.result.config.vehicle_speed.scale_error_pct == -3.0
         assert "scale error -3 %" in page.route_info.content
+
+
+@pytest.mark.anyio
+async def test_sensor_error_presets():
+    """D56: bundled scenarios load with the chosen level (Realistic at start); a click sets all sensor
+    errors; a changed setting shows "custom"."""
+    from types import SimpleNamespace
+
+    async with user_simulation(root=SimulatorPage) as user:
+        await user.open("/")
+        page = current_page(user)
+        presets = page.error_preset_panel
+        assert presets.key == "realistic"
+        with user.client:
+            await page._on_preset(SimpleNamespace(value="synthetic_demo_track"))
+            cfg = page.result.config
+            assert cfg.imu.errors.accel.drift_enabled and cfg.gnss.portal_degradation
+            assert presets.key == "realistic" and not page.calibration_panel.enabled.value
+            before = page.result
+            await presets._on_toggle(SimpleNamespace(value="hard"))  # only the calibration differs
+            assert page.result.config.calibration.enabled and page.calibration_panel.enabled.value
+            assert page.result.imu is before.imu and page.result.gnss is before.gnss  # nothing re-simulated
+            await presets._on_toggle(SimpleNamespace(value="error_free"))
+            cfg = page.result.config
+            assert not page.imu_panel.errors_on.value and not cfg.imu.errors.accel.noise_enabled
+            assert cfg.gnss.speed_sigma_mps == 0 and not cfg.calibration.enabled
+            assert page.result.imu.accel.tolist() == page.result.imu_ideal.accel.tolist()
+            assert presets.key == "error_free"
+            await presets._on_toggle(SimpleNamespace(value="good"))
+            assert presets.key == "good" and page.imu_panel.errors_on.value
+            page.gps_panel.s_gps_speed.value = 0.5
+            await page.gps_panel._changed()
+            assert presets.key is None and presets.custom_label.visible
+            assert page.result.config.gnss.speed_sigma_mps == 0.5
+            await page._on_preset(SimpleNamespace(value="eisenhower_tunnel"))  # custom: the file's settings
+            assert presets.key == "good"

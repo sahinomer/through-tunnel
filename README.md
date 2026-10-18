@@ -70,8 +70,19 @@ Options: `uv run throughtunnel --port 8090 --host 0.0.0.0 --no-browser`.
    landscape) or set yaw, pitch and roll yourself. The lever arm (where the phone sits relative to the
    rear axle) and optional Earth rotation are under *More* at the end of the group. The panel says where each phone axis points in the car. Only the sensor model is
    re-run; the vehicle motion stays identical.
-5. **Make the sensors imperfect.** In the same group, *Sensor errors* has one master switch for all
-   IMU errors (off = error-free IMU; the individual settings are kept). Below it, switch accelerometer
+5. **Make the sensors imperfect.** The quickest way is the *Sensor errors* row above the settings
+   groups: one click sets all IMU errors, GPS errors and the calibration error together (D56).
+   * **Error-free**: no IMU, GPS or calibration error (the algorithm floor).
+   * **Good**: smartphone IMU noise and bias, no bias drift, clean GPS up to the portal, no calibration
+     error (what the bundled scenario files contain).
+   * **Realistic** (default): the benchmark setting, Good + IMU bias drift + GPS degradation before the
+     portal.
+   * **Hard**: Realistic + a calibration error (yaw 2°, pitch 0.5°, roll 0.5°).
+
+   The mount, the outage geometry, rates and seeds stay as they are, so switching levels compares on
+   the same drive. Bundled scenarios load with the selected level; uploaded files keep their own
+   settings. Any other setting shows *custom*. For finer control, in the IMU group *Sensor errors* has
+   one master switch for all IMU errors (off = error-free IMU; the individual settings are kept). Below it, switch accelerometer
    and gyroscope white noise, constant bias and bias drift on or off. Magnitudes are in datasheet units
    (µg/√Hz, mg, mdps/√Hz, °/s). The IMU rate (default 200 Hz) and a *sensor seed* (a new noise and bias
    realisation on the same drive) are under *More*. The panel shows the resulting per-sample σ and the bias actually
@@ -92,8 +103,8 @@ Options: `uv run throughtunnel --port 8090 --host 0.0.0.0 --no-browser`.
    *Road profile (elevation)* sets the road's height: drag the points
    up or down, or start from a template (steady climb, climb inside the tunnel, underwater tunnel).
    The grade never exceeds the limit (default 6%), and the drive re-simulates.
-   *Phone GPS* holds the GPS error model, loss and reacquisition. Two optional realism effects (off by
-   default): *Bias drift (in-run)* per IMU sensor, and *Degradation before the tunnel* for GPS
+   *Phone GPS* holds the GPS error model, loss and reacquisition. Two optional realism effects (on in the
+   Realistic and Hard presets): *Bias drift (in-run)* per IMU sensor, and *Degradation before the tunnel* for GPS
    (multipath, jumps). Switched-off options hide their sliders. *Calibration error* (in the IMU group)
    rotates the phone-to-vehicle
    orientation of the alignment step that feeds the estimators (yaw, pitch, roll) without changing the
