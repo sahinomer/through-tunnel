@@ -40,8 +40,8 @@ forward accelerometer, so any constant error in it grows with the square of time
   [error-source benchmark](benchmark/README.md#what-the-error-source-benchmark-says) shows;
 * a **1 % change in road grade** that the estimator does not know about leaks 10 mg, and costs
   0.4–1 km at the exit of the 2–3 km preset tunnels ([slope study](slope_study.md));
-* in **stop-and-go traffic** the same 5 km takes 738 s instead of 258 s, so the same offset costs
-  roughly eight times as much.
+* in **stop-and-go traffic** the same 5 km takes 738 s instead of 258 s, so the same offset acts
+  almost three times as long, and its effect grows with the square of time.
 
 The gyroscope's heading matters far less. Once the estimate is held on the route, the map bounds the
 cross-track error, and what remains is the error along the route. That is the number the rest of this
@@ -85,6 +85,10 @@ harder:
 | Route map | The polyline with B, C and the announcement point; optionally the road grade. | grade exact when enabled |
 | Car speed reading (reference estimator only) | The car's own speed with a fixed scale error. | 10 Hz, +2 % |
 | Standstill signal (oracle estimators only) | The exact moments the car stops and starts again. | perfect |
+
+The noise densities are the typical values of a common smartphone IMU (Bosch BMI160). The bias and
+drift values are assumptions; a constant bias is removed almost completely by the calibration, so its
+size hardly affects the results.
 
 One control in the app sets all sensor errors together, at four levels:
 * **Error-free:** no errors at all; shows the limit of the algorithms themselves;
@@ -373,7 +377,7 @@ are therefore more reliable than the absolute numbers.
   70–100 m at the exit of the preset tunnels). How accurately maps draw roads inside tunnels is unknown
   here.
 * **Curved benchmark tunnels.** Every synthetic tunnel has two S-curves, which favours the map curves.
-  Long road tunnels are often nearly straight, like Eisenhower, where the benefit is much smaller.
+  Some long tunnels are nearly straight, like Eisenhower, where the benefit is much smaller.
 * **No vibration.** Engine and road vibration are not simulated, so the IMU cannot tell a stopped car
   from one at constant speed. This is why standstill appears only as an oracle and not as a detector.
 * **GPS that reports its own accuracy honestly.** The simulated phone reports exactly the speed noise it
