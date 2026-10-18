@@ -46,3 +46,77 @@ forward accelerometer, so any constant error in it grows with the square of time
 The gyroscope's heading matters far less. Once the estimate is held on the route, the map bounds the
 cross-track error, and what remains is the error along the route. That is the number the rest of this
 report is about: **how far along the route the car is**, and therefore how well its speed is known.
+
+## 2. The simulator
+
+The simulator produces what a phone in a car would record on a drive through a tunnel, together with
+the true motion of the car. The true motion is kept hidden from the estimators and used only to score
+them. The simulator is written in Python; the same core runs behind an interactive browser app and
+behind the batch benchmarks.
+
+### A drive through a tunnel
+
+A scenario is a route through four points: the start A, the tunnel entrance B, the tunnel exit C and
+the end D. The approach A–B has GPS, the tunnel B–C has none, and C–D shows the recovery. The route can
+be a real road from OpenStreetMap or a synthetic one. The tunnel itself is simulated: GPS is switched
+off between B and C, so any stretch of road can serve as one. Three scenarios are bundled: the Seattle
+SR 99 tunnel (3.0 km) and the Eisenhower tunnel (2.7 km) on their real road geometry, and a synthetic
+demo route (2.0 km). The benchmark adds synthetic tunnels of 0.5–5 km.
+
+The map's polyline is smoothed into a drivable path whose curvature changes continuously, at most
+about 1 m from the map. The car drives the smoothed path, while the estimators receive the original
+polyline, so the map is close to the truth but not identical to it.
+
+A driver model moves the car along the route: a speed that varies smoothly around a cruise speed,
+braking for curves, and limits on acceleration and jerk. The motion is integrated exactly, so position,
+speed and acceleration agree with each other at every sample. Two optional features make the drive
+harder:
+* **Road grade:** an editable elevation profile, with templates for a steady climb, a climb inside
+  the tunnel and an underwater tunnel; the car then moves in 3-D;
+* **Traffic:** a slowdown at the portal, a speed limit in the tunnel, stop-and-go with real stops, a
+  queue at the exit, or congested flow.
+
+### What the phone records
+
+| Source | Model | Default ("Realistic" level) |
+|---|---|---|
+| Accelerometer and gyroscope | Specific force (including gravity and the lever arm) and turn rate in the phone's own axes, with the phone mounted at any angle. White noise, constant bias and an optional slowly drifting bias. | 200 Hz; noise 180 µg/√Hz and 7 mdps/√Hz; bias 10 mg and 0.1 °/s; drift 0.5 mg and 5 mdps with a 5 min correlation time |
+| GPS | Location fixes of the phone: position, speed, bearing and reported accuracy. Time-correlated position error and speed noise. Lost up to 30 m before B, back 3–5 s after C. Optionally degraded just before the entrance, with larger errors and multipath jumps. | 1 Hz; 2.5 m correlated + 0.5 m white; 0.2 m/s; degradation over the last 150 m, up to 8 m extra error and 5 % jumps |
+| Route map | The polyline with B, C and the announcement point; optionally the road grade. | grade exact when enabled |
+| Car speed reading (reference estimator only) | The car's own speed with a fixed scale error. | 10 Hz, +2 % |
+| Standstill signal (oracle estimators only) | The exact moments the car stops and starts again. | perfect |
+
+One control in the app sets all sensor errors together, at four levels:
+* **Error-free:** no errors at all; shows the limit of the algorithms themselves;
+* **Good:** sensor noise and bias, clean GPS up to the entrance;
+* **Realistic:** Good plus bias drift and GPS degradation before the entrance; the benchmark setting;
+* **Hard:** Realistic plus an error in the phone orientation the estimators work with (yaw 2°,
+  pitch 0.5°, roll 0.5°). It is applied after the estimators' own orientation estimate, because a
+  fixed rotation in the sensor data would simply be estimated and removed.
+
+### Keeping the comparison fair
+
+* **The truth stays hidden.** Estimators receive only the sensor streams and the map. A test checks
+  that loading the positioning code loads no part of the simulator.
+* **No look-ahead.** Observations are fed in time order, and a test checks that changing future data
+  never changes earlier estimates.
+* **Paired runs.** Every random error has its own seeded stream. Switching one error source on or off
+  leaves all others unchanged, and every estimator sees exactly the same data. A saved scenario file
+  replays a run bit for bit, offline.
+* **Checked physics.** 348 automated tests cover the simulator and the estimators. For example, the
+  simulated IMU agrees with the numerically differentiated motion of a tilted phone on a lever arm to
+  0.0005 m/s².
+
+### The app
+
+<!-- Screenshot to be refreshed: docs/img/ui.jpg predates the current estimators and controls. -->
+
+In the browser app a scenario is picked from the bundled ones or by clicking four points on a map. The
+drive is played back with the true car and every estimator moving along the route, and settings can be
+changed live: phone mounting, sensor errors, road grade, traffic, announcement distance. Error plots
+and a summary table (error at the exit, announcement timing) follow every change. The
+[README](../README.md) describes how to run it.
+
+Some effects are deliberately left out, notably engine and road vibration, map errors, and a phone
+moved during the drive. Section 6 discusses what they mean for the results; the
+[full list](limitations.md) gives the expected effect of each.
