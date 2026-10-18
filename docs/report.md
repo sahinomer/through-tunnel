@@ -1,6 +1,40 @@
 # Through the Tunnel: keeping a phone's position through a GPS outage
 
-<!-- Summary: written last, once the results sections are agreed. -->
+## Summary
+
+A phone in a car loses GPS in a 0.5–5 km tunnel and still has to show the car's position, call out the
+exit on time and recover afterwards. A simulator was built that produces the phone's sensor data on
+real and synthetic tunnel drives, and position estimators were developed on it step by step, each
+change checked against fixed benchmarks.
+
+* **The route turns the problem into one number:** how far along the route the car is. That depends
+  on the speed, which inside the tunnel can only come from integrating the accelerometer, so small
+  errors grow with the square of time (a 0.1° tilt error costs about 550 m after 5 km).
+* **The error is decided before the tunnel.** In free flow, the speed and forward offset handed over
+  at GPS loss predict the error at the exit almost exactly. Freezing the calibration before the portal,
+  fixing small calibration biases and a Kalman filter that learns the offset cut the error at 5 km by
+  half or more and made tilt errors harmless.
+* **Inside the tunnel, only new information stops the error from growing.** Curves on the map, matched
+  against the gyroscope's heading, keep the error at 12–30 m after 5 km in curved tunnels, even in
+  stop-and-go. In nearly straight tunnels with stop-and-go traffic, phone-only estimation still fails
+  in a large share of runs.
+* **Information outside the phone is worth a lot:** the car's speed gives 4–7 m everywhere, and stop
+  detection would help in jams, but only if the restart is caught in well under half a second.
+* **On slopes, the road grade from the map is essential**; without it, inertial methods fail.
+* **The exit announcement follows the position.** Using the filter's uncertainty removes late
+  announcements, at the price of early, hedged ones in slow traffic.
+
+Error at the tunnel exit on the 5 km benchmark tunnel (median of 20 runs):
+
+| Estimator | Free flow | Stop-and-go |
+|---|---|---|
+| Route + IMU, before the improvements | 231 m | 482 m |
+| Kalman filter | 80 m | 241 m |
+| **Kalman filter + map curves** (best phone-only) | **12 m** | **30 m** |
+| Route + car speed (reference) | 6 m | 7 m |
+
+All results come from simulation with an exact map, and the synthetic tunnels are curved by
+construction, which favours the map curves; section 6 discusses what that means.
 
 ## 1. The problem and its interpretation
 
