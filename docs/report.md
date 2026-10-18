@@ -120,3 +120,63 @@ and a summary table (error at the exit, announcement timing) follow every change
 Some effects are deliberately left out, notably engine and road vibration, map errors, and a phone
 moved during the drive. Section 6 discusses what they mean for the results; the
 [full list](limitations.md) gives the expected effect of each.
+
+## 3. Approach
+
+The method was built up in layers. Each layer was added only after the benchmark (section 4) had shown
+the problem it addresses, and was kept only if it measurably helped.
+
+### The pipeline
+
+```
+GPS fixes ─┐
+IMU ───────┼─► calibration ──────────► estimator ─────────► position on the route ± σ
+route map ─┘   phone orientation,      distance along           → map display
+               sensor biases           the route, speed, …      → exit announcement
+```
+
+**Calibration.** On the approach, the phone's orientation in the car is learned from GPS: the up
+direction from gravity, the forward direction by matching the phone's horizontal acceleration to the
+speed changes and turns seen by GPS, and the gyroscope bias from the GPS bearing. It is re-solved with
+every fix while GPS lasts. A tilted mount and constant sensor biases are removed almost completely this
+way. The main thing left is a small residual tilt, which looks exactly like a forward acceleration: the
+error of section 1.
+
+**Estimator.** All main estimators work along the route. Holding the estimate on the route removes the
+heading drift and the cross-track error, so only the distance along the route has to be estimated. The
+simplest version advances that distance with the last GPS speed; the next integrates the calibrated
+forward acceleration. Two-dimensional dead reckoning without the route was also built as a first step,
+and was dropped once the route-constrained versions proved better.
+
+**Road grade.** On a slope, gravity leaks into the forward axis. When the map provides the grade, every
+estimator that uses the IMU subtracts the leak of the grade change since the calibration. Without it, a
+sloped tunnel costs 0.8–25 km at the exit; with it, sloped tunnels in free flow are about as accurate as flat ones
+([map grade study](map_grade_study.md)).
+
+### From problems to solutions
+
+The benchmarks pointed to one problem at a time. The table lists each, the change it led to, and the
+clearest evidence for the change. The overall effect is in section 5.
+
+| Problem found | Change | Evidence |
+|---|---|---|
+| **The error is decided before the tunnel.** In free flow, the speed and forward offset handed over at GPS loss predict the error 5 km later almost exactly, and the last fixes before the entrance, the ones most disturbed by multipath, set both ([analysis of the state at GPS loss](gps_loss_state.md)). | **Portal freeze:** GPS stops feeding the calibration and the speed 200 m before the entrance; the IMU carries the last trusted state into the tunnel. | GPS degradation before the entrance alone: 184 → 4 m after 5 km ([portal freeze](portal_freeze.md)). |
+| **Small biases in the calibration itself:** a slightly wrong gravity constant, a half-sample timing lag in the averages, and road grade on the approach disturbing the forward direction ([residual study](residual_study.md)). | **Calibration fixes:** gravity for the route's latitude, exact interval timing, map grade in the fit. | With error-free sensors, the largest residual dropped from 42 m to 1.4 m, and every case ends within 7 m ([calibration fixes](calibration_fixes.md)). |
+| **The residual tilt cannot be seen after the calibration**, and learning it from the last few fixes is noisy. | **Kalman filter** with distance, speed and forward offset as states. The offset is learned from all approach fixes, weighted by the speed accuracy the phone reports, and follows each re-solve of the calibration. The filter also reports its uncertainty σ. | A 0.1° tilt error: about 600 m → 3 m after 5 km ([Kalman filter](route_kalman.md)). |
+| **A wrong forward direction** leaks the car's sideways acceleration in curves into the forward axis. | **Kalman filter with a yaw state**, learned on approach curves. | A 2° yaw error in stop-and-go: 204 → 2 m. Under realistic conditions no gain, so it stays a robustness variant and is not carried further ([yaw filter](route_kalman_yaw.md)). |
+| **No information inside the tunnel:** after GPS loss, every error can only grow. | **Curves on the map as position fixes:** every 25 m driven, the heading integrated by the gyroscope is compared with the map's heading. On straights this calibrates the gyro drift; in curves (radius below 2 km) it fixes the position along the curve. | Realistic 5 km tunnel: 80 → 12 m in free flow, 241 → 30 m in stop-and-go ([map curves](route_kalman_map.md)). Works only where the tunnel curves and the map is accurate. |
+| **Stops are handled one-sidedly.** The speed cannot fall below zero, so at a stop negative speed errors vanish but positive ones keep the estimate creeping forward. | **A standstill signal**, given as an oracle (not phone-only): speed and distance are held while the car stands, and the forward offset is measured at each stop. | Realistic 5 km stop-and-go: 385 → 103 m. Used this simply, the restart must be detected in well under 0.5 s, or the gain is lost ([standstill oracle](standstill_oracle.md)). |
+| **A late announcement is worse than an early one**, and a precise one is only possible when the position is good. | **Uncertainty-aware announcement:** fire when the estimate plus min(2σ, 300 m) reaches the announcement point; "exit in 300 m" if σ ≤ 30 m, otherwise a hedged instruction. | Free flow, announcements more than 3 s late: up to 50 % → 0 % of runs ([announcement policy](announcement_policy.md)). |
+
+### The estimators carried into the results
+
+Development produced eleven estimators; six of them carry the story through the results:
+
+| Estimator | What it uses | Role |
+|---|---|---|
+| Route + last GPS speed | GPS speed held constant along the route | naive baseline |
+| Route + IMU | calibrated IMU speed along the route | the starting point of the improvements |
+| Kalman filter | the filter with distance, speed and forward offset | phone-only, independent of the tunnel's shape |
+| Kalman filter + map curves | the same, plus heading fixes against the map | best phone-only, in curved tunnels |
+| Route + car speed (reference) | the car's speed reading instead of the IMU | what car data would give |
+| Route + IMU + standstill (oracle) | a perfect stop signal | what a standstill detector would give |
