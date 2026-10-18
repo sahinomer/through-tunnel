@@ -401,3 +401,49 @@ are therefore more reliable than the absolute numbers.
 * Traffic is imposed on a single car as speed zones and stops, not emerging from other vehicles.
 * The full list of what is and is not simulated, with the expected effect of each, is in
   [limitations](limitations.md).
+
+## 7. Future work
+
+The results point to one conclusion: inside the tunnel, only new information stops the error from
+growing. Most of the future work is therefore about other sources of that information, plus making the
+current approach more robust and checking it against reality.
+
+### Other sources of information
+
+* **Vibration and engine sound.** A standing car with the engine idling sounds and vibrates differently
+  from a rolling one, and road and drivetrain frequencies change with speed and gear. A phone could use
+  its accelerometer and microphone to detect stops, and possibly to estimate speed. Published work in
+  this direction exists but needs a proper literature review first; a model would have to be built and
+  validated on recordings from many cars, phones and holders. The standstill oracle sets the target:
+  detected stops are worth a lot, but only if the restart is caught in well under half a second.
+  Microphone permission, privacy and battery use are practical questions of their own.
+* **The car's speed.** Connected-car platforms and OBD adapters can provide it where the phone is
+  connected to the car. The reference estimator shows it is worth about an order of magnitude, which
+  makes it the strongest single option wherever it is available.
+* **Grade changes as position fixes.** Curves on the map already fix the position; changes in road grade
+  could do the same, by comparing the pitch rate measured by the gyroscope with the map's grade profile.
+  This would help in straight tunnels that dip or climb, such as underwater crossings.
+* **The barometer.** Air pressure tracks altitude and could replace the map grade, but ventilation and
+  the pressure waves pushed by traffic disturb it inside tunnels; this needs research.
+* **Infrastructure.** Some tunnels have GNSS repeaters or Bluetooth beacons that give position fixes
+  inside. Where they exist, they solve the problem directly.
+
+### A more robust version of the current approach
+
+* **Map errors in the simulator,** to test how much the curve fixes and the grade correction depend on
+  an exact map.
+* **Calibration over the whole drive** instead of only the approach, together with detecting a phone
+  that has moved in its holder.
+* **Yaw state and map curves in one filter.** The combination was built but tied with the map-curve
+  filter under realistic conditions; it only helps when the phone's forward direction is clearly wrong.
+* **An honest uncertainty in stop-and-go,** so the announcement does not have to be hedged so early.
+* **A proper recovery after the exit:** blending back onto GPS instead of jumping, and coping with poor
+  first fixes.
+
+### Checking against reality
+
+The study rests on simulated sensors, GPS and maps. Recordings from real phones in real tunnels would
+show how far those models hold: the sensor noise and drift, the location fixes the operating system
+actually delivers near a portal, and how accurately maps describe roads inside tunnels. The estimators
+read only sensor streams and the map, in the form a phone log would provide, so they can run on such
+recordings unchanged.
