@@ -29,6 +29,7 @@ Error at the tunnel exit on the 5 km benchmark tunnel (median of 20 runs):
 | Estimator | Free flow | Stop-and-go |
 |---|---|---|
 | Route + IMU, before the improvements | 231 m | 482 m |
+| Route + IMU, final (portal freeze, calibration fixes) | 103 m | 385 m |
 | Kalman filter | 80 m | 241 m |
 | **Kalman filter + map curves** (best phone-only) | **12 m** | **30 m** |
 | Route + car speed (reference) | 6 m | 7 m |
