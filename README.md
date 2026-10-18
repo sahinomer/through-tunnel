@@ -1,25 +1,23 @@
 # ThroughTunnel
 
-A vehicle and smartphone-sensor simulator for **GPS-denied positioning research**. A car drives a real
-road (OpenStreetMap) treated as a tunnel; the simulator produces physically consistent ground truth and
-what the accelerometer and gyroscope of a phone mounted in the car would measure.
+Case study: keeping a phone's position through a GPS outage in a road tunnel. A car drives a real road
+(OpenStreetMap) or a synthetic one; the simulator produces physically consistent ground truth and what
+a phone mounted in the car records (accelerometer, gyroscope, GPS fixes). Position estimators receive
+only those phone observations and the route map, and are evaluated against the hidden truth, including
+the timing of the exit announcement.
 
-**Status: end-to-end pipeline working.**
-* **Simulation:** A–D scenarios (approach with GPS → simulated tunnel → recovery), vehicle, phone IMU
-  (rate, mounting, noise, bias) and phone GPS.
-* **Positioning:** five position estimators fed causally with only the phone observations and the
-  route map.
-* **Evaluation:** against the hidden ground truth, incl. exit-announcement timing and Monte-Carlo
-  reports.
-* **Results:** first numbers in [docs/results.md](docs/results.md); caveats such as the flat road
-  apply. Remaining work: [docs/roadmap.md](docs/roadmap.md).
+**Status: complete.** The write-up is **[docs/report.md](docs/report.md)**: the problem and its
+interpretation, the simulator, the approach, the evaluation, results, limitations and future work.
 
 Documentation:
-* [docs/design.md](docs/design.md): simulator design as implemented.
+* [docs/report.md](docs/report.md): the write-up (start here).
+* [docs/benchmark/README.md](docs/benchmark/README.md): the benchmarks, their configurations and the milestone results.
+* [docs/limitations.md](docs/limitations.md): what is and is not simulated, with the expected effect of each.
 * [docs/decisions.md](docs/decisions.md): decision log.
-* [docs/roadmap.md](docs/roadmap.md): status, tasks, open decisions.
+* [docs/design.md](docs/design.md): simulator design as implemented.
 * [docs/positioning_design.md](docs/positioning_design.md): positioning architecture and estimators.
-* [docs/results.md](docs/results.md): initial positioning results.
+* [docs/estimator_plan.md](docs/estimator_plan.md): the estimator work step by step; each step links its study.
+* [docs/results.md](docs/results.md): the first positioning results (2026-10-12, historical).
 
 ![Simulator UI](docs/img/ui.png)
 
@@ -30,7 +28,7 @@ Requires [uv](https://docs.astral.sh/uv/) (Python 3.14 is pinned by the project)
 ```bash
 uv sync                      # create the environment
 uv run throughtunnel         # start the UI at http://127.0.0.1:8080 (opens a browser)
-uv run pytest                # validation test suite (~5 s, no network needed)
+uv run pytest                # validation test suite (348 tests, about 6 min, no network needed)
 ```
 
 Options: `uv run throughtunnel --port 8090 --host 0.0.0.0 --no-browser`.
@@ -123,7 +121,7 @@ Options: `uv run throughtunnel --port 8090 --host 0.0.0.0 --no-browser`.
    parameter (phone mounting, IMU rate and errors included) and the seeds. *Load scenario* replays it
    bit-for-bit, offline.
 
-![Phone IMU tab](docs/img/imu.png)
+![Synthetic demo route and the Phone IMU tab: the lateral acceleration (y) follows the curves](docs/img/imu.png)
 
 ### Programmatic use
 
@@ -149,19 +147,26 @@ for ev in compare_estimators(result).evaluations:
     print(ev.label, ev.summary["exit_total_m"], ev.announcement_time_error_s)  # + = late, NaN = missed
 ```
 
-Monte-Carlo comparison of all estimators on the presets (as in docs/results.md):
+The benchmarks behind the report write tables, raw per-run results and the configuration to `--out`
+(the full runs take about 30–40 minutes each):
 
 ```bash
-uv run python -m throughtunnel.evaluation.report --seeds 20 --vary-drive
-uv run python -m throughtunnel.evaluation.calibration_study --seeds 10   # docs/calibration_error.md
-uv run python -m throughtunnel.evaluation.factor_study --seeds 20         # docs/factor_study.md (+ figures)
-uv run python -m throughtunnel.evaluation.slope_study --seeds 20          # docs/slope_study.md (+ figures)
-uv run python -m throughtunnel.evaluation.traffic_study --seeds 20        # docs/traffic_study.md (+ figures)
-uv run python -m throughtunnel.evaluation.realism_check --seeds 10        # docs/realism_check/tables.md
-uv run python -m throughtunnel.evaluation.map_grade_study --seeds 20      # docs/map_grade_study.md (+ figures)
-uv run python -m throughtunnel.evaluation.benchmark --seeds 20 --out docs/benchmark/baseline   # the baseline (D43)
-uv run python -m throughtunnel.evaluation.benchmark --quick --out out/dev --compare docs/benchmark/baseline
-uv run python -m throughtunnel.evaluation.error_sources --seeds 20 --out docs/benchmark/error_sources  # D45
+uv run python -m throughtunnel.evaluation.benchmark --seeds 20 --out out/benchmark --compare docs/benchmark/milestone_step5/benchmark
+uv run python -m throughtunnel.evaluation.error_sources --seeds 20 --out out/error_sources --compare docs/benchmark/milestone_step5/error_sources
+uv run python -m throughtunnel.evaluation.benchmark --dev --out out/dev --compare docs/benchmark/milestone_step5/benchmark   # development subset, ~6 min
+uv run python -m throughtunnel.evaluation.report_figures --out docs/img     # report figure, from the saved runs
+```
+
+The earlier studies, each reproducing the tables of its document:
+
+```bash
+uv run python -m throughtunnel.evaluation.report --seeds 20 --vary-drive    # docs/results.md
+uv run python -m throughtunnel.evaluation.calibration_study --seeds 10     # docs/calibration_error.md
+uv run python -m throughtunnel.evaluation.factor_study --seeds 20          # docs/factor_study.md (+ figures)
+uv run python -m throughtunnel.evaluation.slope_study --seeds 20           # docs/slope_study.md (+ figures)
+uv run python -m throughtunnel.evaluation.traffic_study --seeds 20         # docs/traffic_study.md (+ figures)
+uv run python -m throughtunnel.evaluation.realism_check --seeds 10         # docs/realism_check/tables.md
+uv run python -m throughtunnel.evaluation.map_grade_study --seeds 20       # docs/map_grade_study.md (+ figures)
 ```
 
 The figures need matplotlib, a dev dependency (installed by `uv sync`). The simulator does not need it.
@@ -195,7 +200,7 @@ curvature, roll, pitch`, plus the vectors `acc_enu`, `acc_body` and `omega_body`
 frame is local ENU and the body frame is ISO 8855 (x forward, y left, z up). Positive yaw rate and
 positive lateral acceleration mean a left turn. See [docs/design.md](docs/design.md#3-coordinate-frames-and-conventions).
 
-The ground truth is the simulator's hidden reality. Positioning algorithms (later milestones) will only
+The ground truth is the simulator's hidden reality. Positioning algorithms only
 receive sensor observations and explicitly allowed side information.
 
 ## Phone IMU (`ImuStream`)
@@ -224,43 +229,28 @@ receive sensor observations and explicitly allowed side information.
   never changes another, and the same seed reproduces the same run. The sensor seed defaults to the
   scenario seed.
 
-## Main assumptions (details and limitations in the design doc)
+## Assumptions and limitations
 
-Flat, level road (no grade, roll or pitch); single lane on the OSM centreline; no side-slip; no
-suspension dynamics; the driver never stops; the phone is rigidly mounted. The whole selected route is
-currently treated as GPS-denied (to be replaced by A–D sections, roadmap P2). The road is smoothed so
-the path has continuous curvature, and the deviation from the map polyline is bounded and reported.
-These assumptions isolate error sources for the first positioning experiments. They are not a
-complete model of real driving. Road grade can now be set (*Road profile*, default flat).
-Stop-and-go traffic and map errors are on the roadmap.
+The assumptions (route and tunnel known from the map, phone fixed in a holder, the phone's location
+fixes as GPS, single-lane tunnels) are set out in section 1 of the [report](docs/report.md). What is not
+simulated, with the expected effect of each, is in [docs/limitations.md](docs/limitations.md). Road
+grade, traffic, IMU bias drift and GPS degradation before the portal are optional and can be switched on
+in the UI.
 
-## Roadmap
+## Development history
 
-- **M1: vehicle simulation** (done).
-- **M2: smartphone sensors** (done). Ideal accelerometer and gyroscope, phone mounting, IMU plots.
-- **M3: sensor imperfections** (done). Separate IMU rate, white noise and constant bias with
-  toggles/sliders, ideal vs. measured, independent seeded streams.
-- **Positioning phase 1** (done). A–D scenarios, phone GPS, causal estimator framework, five
-  estimators, evaluation, Monte-Carlo report, UI overlays.
-- **Road grade** (done, 2026-10-13). Editable elevation profile, 3-D vehicle kinematics, and a
-  study of its effect ([docs/slope_study.md](docs/slope_study.md)). A grade change in the tunnel
-  breaks the IMU speed (0.4–1 km per 1 %); the heading survives.
-- **Traffic** (done, 2026-10-13). Portal slowdown, speed limit, stop-and-go, exit queue and congested
-  flow with real stops, and a study ([docs/traffic_study.md](docs/traffic_study.md)).
-- **Simulator scope frozen** (D38) after two optional realism effects (IMU bias drift, GPS degradation
-  before the portal). What is not simulated is listed with its expected effect in
-  [docs/limitations.md](docs/limitations.md).
-- **Map grade for the estimators** (done, 2026-10-15, D39). Optional exact road grade from the map;
-  sloped tunnels return to the flat-road accuracy in free flow, and stop-and-go on a climb drops from
-  kilometres to 52–228 m median ([docs/map_grade_study.md](docs/map_grade_study.md)).
-- **Vehicle speed sensor and final simulator freeze** (done, 2026-10-15, D41). The car's speed reading
-  with a fixed scale error, as reference information for one dedicated estimator only.
-- **Benchmarks and baselines** (done, 2026-10-15, D43–D45): 48 scenarios and an error-source benchmark,
-  with saved configurations ([docs/benchmark/README.md](docs/benchmark/README.md)).
-- **Next:** the estimator work planned in [docs/estimator_plan.md](docs/estimator_plan.md) (problems,
-  candidate solutions, proposed order; to be discussed). Earlier notes: an estimator that handles
-  standstills and time-driven drift; map errors; a
-  probabilistic estimator with covariance; then the write-up. Tracked in [docs/roadmap.md](docs/roadmap.md).
+- **Simulator** (2026-10-12 to 2026-10-13): vehicle on real or synthetic roads, phone IMU with mounting
+  and errors, phone GPS, A–D scenarios, the causal estimator framework and the UI.
+- **Realism** (2026-10-13 to 2026-10-15): road grade, traffic, IMU bias drift, GPS degradation before the
+  portal and the car's speed reading as a reference; then the simulator was frozen.
+- **Benchmarks** (2026-10-15): 48 scenarios and an error-source benchmark, with saved configurations and
+  baselines ([docs/benchmark/README.md](docs/benchmark/README.md)).
+- **Estimators** (2026-10-16 to 2026-10-17): portal freeze, calibration fixes, standstill oracle,
+  route-constrained Kalman filters (offset, yaw, map curves) and the uncertainty-aware announcement, one
+  step at a time against the benchmarks ([docs/estimator_plan.md](docs/estimator_plan.md)).
+- **UI polish and write-up** (2026-10-18).
+
+Every decision is recorded in [docs/decisions.md](docs/decisions.md).
 
 ## Data and services
 
