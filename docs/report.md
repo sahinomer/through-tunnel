@@ -137,7 +137,7 @@ One control sets all sensor errors together, at four levels:
 
 ### The app
 
-<!-- Screenshot to be refreshed: docs/img/ui.jpg predates the current estimators and controls. -->
+![The app: Seattle SR 99 tunnel in stop-and-go traffic, four estimators, positioning errors and summary table](img/ui.png)
 
 The browser app plays a drive back with the true car and every estimator on the map, and lets the
 mounting, sensor errors, grade, traffic and announcement distance be changed live, with error plots and

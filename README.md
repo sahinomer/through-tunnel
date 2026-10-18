@@ -21,7 +21,7 @@ Documentation:
 * [docs/positioning_design.md](docs/positioning_design.md): positioning architecture and estimators.
 * [docs/results.md](docs/results.md): initial positioning results.
 
-![Simulator UI](docs/img/ui.jpg)
+![Simulator UI](docs/img/ui.png)
 
 ## Quick start
 
@@ -123,7 +123,7 @@ Options: `uv run throughtunnel --port 8090 --host 0.0.0.0 --no-browser`.
    parameter (phone mounting, IMU rate and errors included) and the seeds. *Load scenario* replays it
    bit-for-bit, offline.
 
-![Phone IMU tab](docs/img/imu.jpg)
+![Phone IMU tab](docs/img/imu.png)
 
 ### Programmatic use
 
