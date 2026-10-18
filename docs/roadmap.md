@@ -575,3 +575,27 @@ Places where AI-generated work had to be corrected, found by measurement, tests 
   end of the outage (a median over a changing subset of runs). Both were found by looking at the
   rendered figures and fixed. A suspected 2× discrepancy for gyroscope noise was a noisy 20-run
   median; the spread matched theory.
+* Cleanup and estimator phases (2026-10-15 to 2026-10-17):
+  * Map grade (D39): the first version differentiated map heights over map distance and produced false
+    grade dips where the driven path cuts a polyline corner, which biased the calibration. Found in
+    validation; the map now carries the grade itself.
+  * The first benchmark failure definition (D43) was one-sided: only an estimate running ahead could
+    fail, and a missed announcement never occurs in practice. Found when the user asked for a clearer
+    explanation of the failure states; replaced by the symmetric definition (D44).
+  * Step naming: letters were used both for steps and for solution IDs. Caught by the user; steps now use
+    dotted numbers.
+  * The handover formula ½·b·t² + δv·t was first stated generally; it holds in free flow only, because the
+    v ≥ 0 clamp breaks it in stop-and-go (correction in benchmark/README.md).
+  * Calibration fix F2 (D48): the first version gave the first sample after a start or gap no time
+    weight. Caught in the development run (worse error-free floor) and fixed before the evaluation.
+  * Kalman filter (D51), three problems found in validation before the evaluation: the calibration's
+    fix-to-fix jumps under the filter (0.85 mg rms), correlated GPS position errors corrupting the offset
+    state, and a speed gate that locked the filter out. Also a diagnostic mistake of the assistant: an
+    injected pitch error kept the default yaw and roll errors, which made the offset look only 78 %
+    converged.
+  * The yaw filter (D52) was first reported as neutral under realistic conditions. It fails on the
+    Eisenhower preset, which the development subsets did not contain; found in step 6.2, diagnosed as
+    priors meant for a converged calibration (D54), and Eisenhower was added to the subsets.
+  * Map curves (D55), two problems found in validation before the evaluation: a run-away trigger
+    (measurements every 25 m of *estimated* travel, so one update triggered the next) and a steady drift
+    on the nearly straight Eisenhower tunnel (fixed by the 2 km radius threshold).
