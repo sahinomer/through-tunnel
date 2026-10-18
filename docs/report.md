@@ -343,18 +343,17 @@ simulated either, so a clean recovery under real conditions is not demonstrated 
 
 ## 6. Limitations
 
-All results come from simulation. No real drive was recorded, and the sensor and traffic parameters are
-plausible assumptions, not values measured on a phone in a real tunnel. The simulator was checked for
-internal consistency, not against field data. The comparisons between methods, made on identical data,
-are therefore more reliable than the absolute numbers.
+All results come from simulation: the parameters are plausible assumptions, not measurements in a real
+tunnel, and the simulator was checked for internal consistency, not against field data. The
+comparisons between methods, made on identical data, are therefore more reliable than the absolute
+numbers.
 
 ### What probably makes the results optimistic
 
-* **An exact map.** The route, its grade and its curves inside the tunnel are taken as correct. The only
+* **An exact map.** The route, its grade and its curves inside the tunnel are taken as correct; the only
   mismatch simulated is the smoothing of the road (0.1–0.4° of heading). A curve drawn a few metres off
-  shifts the curve fixes by as much, and 0.1 % of error in the map grade leaks into the speed (about
-  70–100 m at the exit of the preset tunnels). How accurately maps draw roads inside tunnels is unknown
-  here.
+  shifts the curve fixes by as much, and 0.1 % of grade error costs about 70–100 m at the exit of the
+  preset tunnels.
 * **Curved benchmark tunnels.** Every synthetic tunnel has two S-curves, which favours the map curves.
   Some long tunnels are nearly straight, like Eisenhower, where the benefit is much smaller.
 * **No vibration.** Engine and road vibration are not simulated, so the IMU cannot tell a stopped car
@@ -372,15 +371,13 @@ are therefore more reliable than the absolute numbers.
 ### What probably makes them pessimistic
 
 * **Short approaches.** Every simulated drive starts only 67–106 s before the tunnel, so the calibration
-  has 42–86 s of GPS to learn from. Real drives usually have minutes, and the shortest approach
-  (Eisenhower) gave the worst start. This holds as long as the phone stays in its holder and the sensor
-  bias does not drift away from the calibration.
+  has 42–86 s of GPS to learn from; real drives usually have minutes. This holds as long as the phone
+  stays in its holder and the sensor bias does not drift away from the calibration.
 * **No help from the tunnel itself.** Some tunnels have GNSS repeaters or Bluetooth beacons that give
   position fixes inside; none are assumed here.
 
 ### Experiments
 
-* 20 runs per scenario: medians are solid, tails (90th percentiles) indicative only.
 * Traffic is imposed on a single car as speed zones and stops, not emerging from other vehicles.
 * The full list of what is and is not simulated, with the expected effect of each, is in
   [limitations](limitations.md).
