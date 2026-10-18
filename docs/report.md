@@ -250,41 +250,40 @@ Flat road, synthetic tunnels with two S-curves each:
 | Route + car speed (reference) | 4 m | 5 m | 5 m | 5 m | 7 m |
 
 * **Without information inside the tunnel, the error grows with the time spent in it.** The Kalman
-  filter stays within about 10 m up to 1 km and reaches 80 m at 5 km in free flow. Stop-and-go nearly
-  triples the time without GPS: 241 m at 5 km, with a gross error in 13 of 20 runs.
+  filter stays within about 10 m up to 1 km and reaches 80 m at 5 km in free flow; stop-and-go nearly
+  triples the time without GPS: 241 m, with a gross error in 13 of 20 runs.
 * **The improvements halved the phone-only error where it was largest:** at 5 km from 231 m to 80 m in
   free flow and from 482 m to 241 m in stop-and-go, before any map curves.
-* **Curves inside the tunnel change the picture.** With heading fixes against the map the error stays
-  at 2–17 m up to 3 km and 12–30 m at 5 km, even in stop-and-go. Every synthetic tunnel has two
-  S-curves by construction, so this table shows the method at its best.
+* **Curves inside the tunnel change the picture:** 2–17 m up to 3 km and 12–30 m at 5 km, even in
+  stop-and-go. Every synthetic tunnel has two S-curves by construction, so this shows the method at its
+  best.
 * **Car speed is worth about an order of magnitude:** 4–7 m for every length and traffic case.
 
 ### Real tunnel geometry
 
-The two real tunnels differ in the one property that matters most for map curves: the Seattle SR 99
-tunnel curves, the Eisenhower tunnel is nearly straight (about 18° of turning over 2.7 km).
+The Seattle SR 99 tunnel curves; the Eisenhower tunnel is nearly straight (about 18° of turning over
+2.7 km), which matters most for the map curves.
 
-| Flat road, free flow / stop-and-go | Eisenhower (2.7 km) | Seattle SR 99 (3.0 km) | Synthetic demo (2.0 km) |
-|---|---|---|---|
-| Kalman filter | 43 m / 133 m ✗7 | 37 m / 132 m ✗8 | 17 m / 58 m ✗3 |
-| **Kalman filter + map curves** | **22 m / 20 m ✗8** | **10 m / 21 m** | **4 m / 7 m** |
-| Route + IMU + standstill (oracle) | 33 m / 24 m | 46 m / 26 m | 21 m / 16 m |
-| Route + car speed (reference) | 7 m / 7 m | 8 m / 7 m | 4 m / 5 m |
+| Flat road, free flow / stop-and-go | Eisenhower (2.7 km) | Seattle SR 99 (3.0 km) |
+|---|---|---|
+| Kalman filter | 43 m / 133 m ✗7 | 37 m / 132 m ✗8 |
+| **Kalman filter + map curves** | **22 m / 20 m ✗8** | **10 m / 21 m** |
+| Route + IMU + standstill (oracle) | 33 m / 24 m | 46 m / 26 m |
+| Route + car speed (reference) | 7 m / 7 m | 8 m / 7 m |
 
-In the curved Seattle tunnel the map curves solve stop-and-go: 21 m, no gross errors. In the nearly
-straight Eisenhower tunnel the median also drops, but 8 of 20 stop-and-go runs still fail. There the
-curves give too little to work with, and only information about the stops (oracle: 24 m, no gross
-errors) or the car's speed would help.
+In Seattle the map curves solve stop-and-go: 21 m, no gross errors. In Eisenhower the median also
+drops, but 8 of 20 stop-and-go runs still fail: the curves give too little to work with, and only
+information about the stops (oracle: 24 m, no gross errors) or the car's speed would help.
 
 ### Sloped roads
 
-Map grade is essential for every IMU method. Over all scenarios on sloped and flat roads without it,
-even the best phone-only estimator has a gross error in 62 % of the runs (349 m median); with it, 3 %.
-In free flow with map grade, a +3 % climb or an underwater tunnel is as accurate as a flat road (5 m
-median with map curves over all geometries). In stop-and-go some underwater runs still run away: the
-5 km underwater tunnel ends at 78 m with 5 of 20 gross errors. The likely cause is that the grade is
-looked up at the *estimated* position, so a position error at a grade change feeds back into the speed;
-this was not confirmed.
+* **Map grade is essential for every IMU method.** Over all scenarios without it, even the best
+  phone-only estimator has a gross error in 62 % of the runs (349 m median); with it, 3 %.
+* **With map grade, slopes cost nothing in free flow:** a +3 % climb or an underwater tunnel is as
+  accurate as a flat road (5 m median with map curves).
+* **Underwater tunnels in stop-and-go still have runaway runs:** 78 m with 5 of 20 gross errors at
+  5 km. Probably the grade is looked up at the *estimated* position, so a position error at a grade
+  change feeds back into the speed; this was not confirmed.
 
 ### What drives the error
 
@@ -301,49 +300,46 @@ and what is left:
 | Hard (realistic + tilted mount + orientation error) | 2610 m / 3277 m | 2760 m / 3390 m | 361 m / ≥ 782 m | 45 m / 42 m |
 
 * **Before the improvements, the state at GPS loss decided the error:** disturbed fixes before the
-  entrance and any residual tilt. The portal freeze and the calibration fixes removed the first (Route
-  + IMU, final); only the Kalman filter made a tilt error harmless.
+  entrance and any residual tilt. The portal freeze and the calibration fixes removed the first; only
+  the Kalman filter made a tilt error harmless.
 * **What limits the Kalman filter now** is the speed handed over at GPS loss and the accelerometer bias
-  drifting inside the tunnel. Neither can be corrected without new information in the tunnel.
+  drifting inside the tunnel; neither can be corrected without new information in the tunnel.
 * **Map curves bound both**, as long as the tunnel curves.
-* **A yaw error stays a weak spot.** The filter with map curves has no yaw state; with a 2° error it
-  still ends at 49 m in free flow, and in the Hard condition 11 of 20 stop-and-go runs fail.
+* **A yaw error stays a weak spot:** the filter with map curves has no yaw state, ends at 49 m with a
+  2° error in free flow, and fails in 11 of 20 stop-and-go runs in the Hard condition.
 
 ### The exit announcement
 
-The announcement follows the position. Over all 48 scenarios it comes within ±3 s in 89 % of the runs
-with map curves, 67 % with the Kalman filter and 99 % with the car's speed, and most bad announcements
-belong to runs with a gross position error. The uncertainty-aware variant uses the filter's σ to err on
-the early side and to choose between a precise and a hedged instruction. With the Kalman filter, late
-announcements in free flow (more than 3 s) drop from up to 50 % of the runs to none, except on the
-Eisenhower tunnel (20 %). The price is earliness in stop-and-go, where σ is several times too large and
-the hedged instruction comes 1–1.5 minutes early ([announcement policy](announcement_policy.md),
-[uncertainty study](uncertainty_study.md)).
+* **The announcement follows the position:** within ±3 s in 89 % of all runs with map curves, 67 %
+  with the Kalman filter and 99 % with the car's speed; most bad announcements belong to runs with a
+  gross position error.
+* **The uncertainty-aware variant** uses the filter's σ to err on the early side and to choose between
+  a precise and a hedged instruction. With the Kalman filter, late announcements in free flow (more than
+  3 s) drop from up to 50 % of the runs to none, except on Eisenhower (20 %). The price is earliness in
+  stop-and-go, where σ is several times too large and the hedged instruction comes 1–1.5 minutes early
+  ([announcement policy](announcement_policy.md), [uncertainty study](uncertainty_study.md)).
 
 ### Recovery after the exit
 
 Recovery was not developed further; the work focused on the estimate inside the tunnel. When GPS
 returns, 3–5 s after the exit, the route estimators simply reset their distance to the first fix, so the
-position jumps back onto GPS and the size of the jump is the error at the exit. Poor first fixes after
-reacquisition are not simulated either, so a clean recovery under real conditions is not demonstrated
-here.
+position jumps back onto GPS by the error at the exit. Poor first fixes after reacquisition are not
+simulated either, so a clean recovery under real conditions is not demonstrated here.
 
 ### Where it breaks
 
-* **Nearly straight tunnels in stop-and-go:** no curves to correct the position, and a long time
-  without GPS (Eisenhower: 8 of 20 runs fail).
+* **Nearly straight tunnels in stop-and-go:** no curves to correct the position and a long time without
+  GPS (Eisenhower: 8 of 20 runs fail).
 * **Long tunnels without curves:** the filter's error grows roughly with the square of the time in the
-  tunnel (80 m at 5 km in free flow, 241 m in stop-and-go).
+  tunnel.
 * **A wrong forward direction of the phone** that the calibration did not catch (yaw error, Hard
   condition).
-* **Underwater tunnels in stop-and-go:** occasional runaway runs, probably through the map-grade
-  lookup.
-* **Short approaches:** on the Eisenhower drive the calibration is ready only 42 s before GPS is lost,
-  and its first solutions are far off. Starting the filters with a wider uncertainty fixed most of it
-  (43 m instead of 75 m in free flow), but a short approach remains the weakest start
-  ([calibration start study](calibration_start_study.md)).
-* **The map:** every result above assumes an exact map, and the curve fixes trust the map's heading
-  inside the tunnel metre by metre (section 6).
+* **Underwater tunnels in stop-and-go:** occasional runaway runs.
+* **Short approaches:** on the Eisenhower drive the calibration is ready only 42 s before GPS is lost.
+  A wider starting uncertainty in the filters fixed most of it (43 m instead of 75 m in free flow), but
+  a short approach remains the weakest start ([calibration start study](calibration_start_study.md)).
+* **The map:** every result assumes an exact map, and the curve fixes trust the map's heading inside
+  the tunnel metre by metre (section 6).
 
 ## 6. Limitations
 
