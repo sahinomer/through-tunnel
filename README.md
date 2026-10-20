@@ -21,6 +21,12 @@ Documentation:
 
 ![Simulator UI](docs/img/ui.png)
 
+**Demo video:** [docs/img/demo.mp4](docs/img/demo.mp4) (55 s, played back at 10×). The Eisenhower tunnel
+with an underwater grade profile, stop-and-go traffic and the Realistic sensor errors: the true car and
+four estimators (Route + IMU, Kalman filter, Kalman filter + map curves, car-speed reference) on the map.
+It shows one typical run; how often the estimators fail in this setting is in section 5 of the
+[report](docs/report.md).
+
 ## Quick start
 
 Requires [uv](https://docs.astral.sh/uv/) (Python 3.14 is pinned by the project).
