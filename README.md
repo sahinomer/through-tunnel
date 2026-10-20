@@ -27,6 +27,8 @@ four estimators (Route + IMU, Kalman filter, Kalman filter + map curves, car-spe
 It shows one typical run; how often the estimators fail in this setting is in section 5 of the
 [report](docs/report.md).
 
+https://github.com/user-attachments/assets/eb143d8c-e9bb-446b-b7e1-c0ef3bfe0f4e
+
 ## Quick start
 
 Requires [uv](https://docs.astral.sh/uv/) (Python 3.14 is pinned by the project).
